@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { toApiError, type ApiErrorPayload } from "@/lib/api/api-error"
+import { logError } from "@/lib/logger"
+import { getRequestId } from "@/lib/tracing"
 
 export type ApiSuccessResponse<T> = {
   success: true
@@ -47,6 +49,13 @@ export function createdResponse<T>(
 
 export function errorResponse(error: unknown) {
   const apiError = toApiError(error)
+  const requestId = getRequestId()
+
+  logError(error, {
+    requestId,
+    code: apiError.code,
+    statusCode: apiError.statusCode,
+  })
 
   return NextResponse.json<ApiFailureResponse>(
     {
@@ -54,11 +63,15 @@ export function errorResponse(error: unknown) {
       error: {
         code: apiError.code,
         message: apiError.message,
+        requestId,
         ...(apiError.details ? { details: apiError.details } : {}),
       },
     },
     {
       status: apiError.statusCode,
+      headers: {
+        "x-request-id": requestId,
+      },
     }
   )
 }

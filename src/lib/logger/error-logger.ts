@@ -31,6 +31,8 @@ export function logError(error: unknown, metadata: Record<string, unknown> = {})
   logger.error({
     event: "application.error",
     message: "Application error occurred.",
+    requestId:
+      typeof metadata.requestId === "string" ? metadata.requestId : undefined,
     error: serializeError(error),
     metadata,
   })

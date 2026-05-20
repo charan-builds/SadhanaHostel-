@@ -1,0 +1,122 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - backend-dev
+      - frontend-dev
+  push:
+    branches:
+      - main
+      - backend-dev
+
+jobs:
+  backend:
+    name: Lint, typecheck, tests, migrations
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      LOG_LEVEL: error
+      RATE_LIMIT_ENABLED: "true"
+      STORAGE_SIGNED_URL_TTL_SECONDS: "3600"
+      CASHFREE_ENV: sandbox
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Coverage
+        run: npm run test:coverage
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Prepare Supabase compatibility schemas
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          create role anon;
+          create role authenticated;
+          create role service_role;
+          create role supabase_admin;
+          create role supabase_auth_admin;
+
+          create schema if not exists auth;
+          create table if not exists auth.users (
+            id uuid primary key,
+            email text,
+            phone text,
+            raw_user_meta_data jsonb default '{}'::jsonb
+          );
+
+          create or replace function auth.uid()
+          returns uuid
+          language sql
+          stable
+          as $$
+            select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+          $$;
+
+          create schema if not exists storage;
+          create table if not exists storage.buckets (
+            id text primary key,
+            name text not null,
+            public boolean not null default false,
+            file_size_limit bigint,
+            allowed_mime_types text[]
+          );
+          create table if not exists storage.objects (
+            id uuid primary key default gen_random_uuid(),
+            bucket_id text not null,
+            name text not null,
+            owner uuid,
+            created_at timestamptz default now(),
+            updated_at timestamptz default now(),
+            metadata jsonb default '{}'::jsonb
+          );
+          SQL
+
+      - name: Validate Supabase migrations
+        run: |
+          for file in supabase/migrations/*.sql; do
+            echo "Applying $file"
+            psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+          done

@@ -2,6 +2,7 @@ import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
+import { logPaymentEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -74,7 +75,7 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
-    return this.paymentsRepository.create({
+    const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       resident_id: values.residentId,
@@ -92,6 +93,22 @@ export class PaymentsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    logPaymentEvent({
+      action: "created",
+      paymentId: payment.id,
+      residentId: payment.resident_id,
+      organizationId: payment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: payment.amount,
+      status: payment.status,
+      details: {
+        method: payment.method,
+        manual: true,
+      },
+    })
+
+    return payment
   }
 
   async createUpiPayment(input: unknown) {
@@ -117,7 +134,7 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
-    return this.paymentsRepository.create({
+    const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       resident_id: values.residentId,
@@ -135,6 +152,22 @@ export class PaymentsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    logPaymentEvent({
+      action: "created",
+      paymentId: payment.id,
+      residentId: payment.resident_id,
+      organizationId: payment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: payment.amount,
+      status: payment.status,
+      details: {
+        method: payment.method,
+        provider: payment.provider,
+      },
+    })
+
+    return payment
   }
 
   async getPayment(paymentId: string, organizationId: string) {
@@ -181,15 +214,37 @@ export class PaymentsService {
 
     const existingPayment = assertFound(payment, "Payment not found.")
 
+    logPaymentEvent({
+      action: "verification_attempted",
+      paymentId: existingPayment.id,
+      residentId: existingPayment.resident_id,
+      organizationId: existingPayment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: existingPayment.amount,
+      status: existingPayment.status,
+    })
+
     if (existingPayment.status === "verified") {
       throw conflict("Payment is already verified.")
     }
 
-    return this.paymentsRepository.verify(
+    const verifiedPayment = await this.paymentsRepository.verify(
       values.paymentId,
       values.organizationId,
       context.authUser.id
     )
+
+    logPaymentEvent({
+      action: "verified",
+      paymentId: verifiedPayment.id,
+      residentId: verifiedPayment.resident_id,
+      organizationId: verifiedPayment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: verifiedPayment.amount,
+      status: verifiedPayment.status,
+    })
+
+    return verifiedPayment
   }
 
   async generateMonthlyFee(input: unknown) {

@@ -25,7 +25,9 @@ describe("API response helpers", () => {
       error: {
         code: "FORBIDDEN",
         message: "No access.",
+        requestId: expect.any(String),
       },
     })
+    expect(response.headers.get("x-request-id")).toEqual(body.error.requestId)
   })
 })

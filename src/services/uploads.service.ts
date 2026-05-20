@@ -2,6 +2,7 @@ import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
+import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -148,6 +149,21 @@ export class UploadsService {
         input.bucketName,
         storagePath
       )
+
+      logAuditEvent({
+        action: "upload.created",
+        actorUserId: context.authUser.id,
+        organizationId: input.organizationId,
+        targetTable: "documents",
+        targetId: document.id,
+        outcome: "success",
+        details: {
+          bucketName: input.bucketName,
+          documentType: input.documentType,
+          residentId: input.residentId,
+          paymentId: input.paymentId,
+        },
+      })
 
       return {
         document,

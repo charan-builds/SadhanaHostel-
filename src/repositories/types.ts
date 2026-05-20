@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 
+import { logError } from "@/lib/logger"
 import type { Database } from "@/types/database"
 
 export type AppSupabaseClient = SupabaseClient<Database>
@@ -61,7 +62,19 @@ export function throwRepositoryError(
   error: PostgrestError | null,
   fallbackMessage = "Database operation failed."
 ): never {
-  throw new RepositoryError(error?.message ?? fallbackMessage, error?.code, error)
+  const repositoryError = new RepositoryError(
+    error?.message ?? fallbackMessage,
+    error?.code,
+    error
+  )
+
+  logError(repositoryError, {
+    event: "repository.error",
+    code: repositoryError.code,
+    fallbackMessage,
+  })
+
+  throw repositoryError
 }
 
 export function sanitizeSearchTerm(search?: string | null) {

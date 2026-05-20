@@ -2,6 +2,7 @@ import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
+import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { LeavesRepository } from "@/repositories/leaves.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -112,7 +113,7 @@ export class LeavesService {
       throw conflict("Rejection reason is required when rejecting leave.")
     }
 
-    return this.leavesRepository.update(values.leaveRequestId, values.organizationId, {
+    const updatedLeave = await this.leavesRepository.update(values.leaveRequestId, values.organizationId, {
       status: values.status,
       rejection_reason: values.status === "rejected" ? values.rejectionReason : null,
       reviewed_at: new Date().toISOString(),
@@ -122,5 +123,19 @@ export class LeavesService {
         parent_notification_pending: true,
       },
     })
+
+    logAuditEvent({
+      action: "leave.reviewed",
+      actorUserId: context.authUser.id,
+      organizationId: values.organizationId,
+      targetTable: "leave_requests",
+      targetId: values.leaveRequestId,
+      outcome: "success",
+      details: {
+        status: values.status,
+      },
+    })
+
+    return updatedLeave
   }
 }

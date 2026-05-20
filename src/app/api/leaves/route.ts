@@ -3,7 +3,9 @@ import {
   errorResponse,
   getQueryParams,
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
+  withApiRoute,
 } from "@/lib/api"
 import { LeavesService } from "@/services/leaves.service"
 
@@ -21,12 +23,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  try {
-    const service = await LeavesService.create()
-    const leaveRequest = await service.createLeave(await parseJsonBody(request))
+  return withApiRoute(
+    request,
+    {
+      route: "leaves.create",
+      rateLimit: RATE_LIMIT_POLICIES.leaveSubmit,
+    },
+    async () => {
+      const service = await LeavesService.create()
+      const leaveRequest = await service.createLeave(await parseJsonBody(request))
 
-    return createdResponse(leaveRequest, "Leave request submitted.")
-  } catch (error) {
-    return errorResponse(error)
-  }
+      return createdResponse(leaveRequest, "Leave request submitted.")
+    }
+  )
 }
