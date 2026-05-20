@@ -6,10 +6,16 @@ export const currentResident: MockResident = {
   name: "Ramesh Kumar",
   residentType: "student",
   phone: "9876543210",
+  whatsappNumber: "9876543210",
+  aadhaarNumber: "123456789012",
+  parentName: "Kumaraswamy",
+  parentPhone: "9876501234",
+  emergencyContact: "9876501234",
   roomNumber: "S-204",
   feeAmount: HOSTEL_FEES.student,
   paymentStatus: "paid",
   joiningDate: "2025-06-12",
+  allocationDate: "2025-06-12",
   status: "active",
 }
 

@@ -62,11 +62,18 @@ export type MockResident = {
   name: string
   residentType: ResidentType
   phone: string
+  whatsappNumber?: string
+  aadhaarNumber?: string
+  parentName?: string
+  parentPhone?: string
+  emergencyContact?: string
   roomNumber: string
   feeAmount: number
   paymentStatus: PaymentStatus
   joiningDate: string
+  allocationDate?: string
   status: ResidentStatus
+  notes?: string
 }
 
 export type MockPayment = {
