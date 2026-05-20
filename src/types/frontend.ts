@@ -38,11 +38,22 @@ export type AdminMetric = {
   trend?: string
 }
 
-export type PaymentStatus = "paid" | "pending" | "overdue" | "partial"
+export type PaymentStatus =
+  | "paid"
+  | "pending"
+  | "partial"
+  | "verification_pending"
+  | "rejected"
+  | "failed"
+  | "overdue"
 
-export type LeaveStatus = "pending" | "approved" | "rejected" | "returned"
+export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled" | "returned"
 
-export type ResidentStatus = "active" | "pending" | "inactive"
+export type ResidentStatus = "active" | "inactive" | "left" | "suspended" | "pending"
+
+export type RoomStatus = "available" | "full" | "maintenance" | "inactive"
+
+export type FrontendStatus = PaymentStatus | LeaveStatus | ResidentStatus | RoomStatus
 
 export type ResidentType = "student" | "employee"
 

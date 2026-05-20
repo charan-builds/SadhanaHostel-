@@ -1,25 +1,13 @@
-import { PublicSectionPage } from "@/components/shared/public-section-page"
+import type { Metadata } from "next"
+
+import { AboutPageContent } from "@/components/public/about-page-content"
+import { hostelConfig } from "@/constants/hostel"
+
+export const metadata: Metadata = {
+  title: `About ${hostelConfig.name}`,
+  description: `${hostelConfig.name} offers safe, clean accommodation for students and employees in Pulivendula near Loyola Polytechnic College.`,
+}
 
 export default function AboutPage() {
-  return (
-    <PublicSectionPage
-      eyebrow="About"
-      title="A focused hostel experience with disciplined operations."
-      description="The public website starts lean, but its structure is ready for dynamic CMS content and multi-hostel expansion."
-      items={[
-        {
-          title: "Managed Living",
-          description: "Resident records, room status, payments, and communication live in one system.",
-        },
-        {
-          title: "Transparent Operations",
-          description: "Admin workflows are designed around traceable data and future audit needs.",
-        },
-        {
-          title: "Growth Ready",
-          description: "The platform can evolve from one hostel to many branches without a rewrite.",
-        },
-      ]}
-    />
-  )
+  return <AboutPageContent />
 }
