@@ -87,6 +87,7 @@ export const pendingLeaves: MockLeaveRequest[] = [
     toDate: "2026-05-26",
     reason: "Family function",
     status: "pending",
+    travelMode: "Bus",
   },
   {
     id: "leave-002",
@@ -95,6 +96,7 @@ export const pendingLeaves: MockLeaveRequest[] = [
     toDate: "2026-06-01",
     reason: "Personal work",
     status: "pending",
+    travelMode: "Bike",
   },
 ]
 

@@ -87,6 +87,7 @@ export type MockLeaveRequest = {
   toDate: string
   reason: string
   status: LeaveStatus
+  travelMode?: string
 }
 
 export type MockNotice = {
