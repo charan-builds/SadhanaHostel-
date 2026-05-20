@@ -57,6 +57,8 @@ export type FrontendStatus = PaymentStatus | LeaveStatus | ResidentStatus | Room
 
 export type ResidentType = "student" | "employee"
 
+export type RoomType = "student" | "employee" | "mixed"
+
 export type MockResident = {
   id: string
   name: string
@@ -104,4 +106,28 @@ export type MockNotice = {
   publishedAt: string
   audience: "all" | "students" | "employees"
   pinned?: boolean
+}
+
+export type MockRoom = {
+  id: string
+  roomNumber: string
+  floorNumber: string
+  roomType: RoomType
+  capacity: number
+  occupiedCount: number
+  monthlyFee: number
+  hasAttachedBathroom: boolean
+  status: RoomStatus
+  currentResidentIds: string[]
+  notes?: string
+}
+
+export type MockRoomAllocation = {
+  id: string
+  roomId: string
+  residentId: string
+  residentName: string
+  allocatedDate: string
+  vacatedDate?: string
+  status: "active" | "vacated"
 }

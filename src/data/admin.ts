@@ -5,6 +5,8 @@ import type {
   MockNotice,
   MockPayment,
   MockResident,
+  MockRoom,
+  MockRoomAllocation,
 } from "@/types/frontend"
 
 export const adminDashboardMetrics: AdminMetric[] = [
@@ -118,26 +120,114 @@ export const pendingFeeResidents = mockResidents.filter(
   (resident) => resident.paymentStatus !== "paid",
 )
 
-export const mockRooms = [
+export const mockRooms: MockRoom[] = [
   {
     id: "room-s-204",
     roomNumber: "S-204",
-    floor: "Second Floor",
-    residentType: "student",
+    floorNumber: "Second Floor",
+    roomType: "student",
     capacity: 4,
-    occupied: 3,
+    occupiedCount: 3,
     monthlyFee: HOSTEL_FEES.student,
+    hasAttachedBathroom: false,
+    status: "available",
+    currentResidentIds: ["resident-ramesh"],
+    notes: "Study-friendly student room with one bed currently available.",
   },
   {
     id: "room-e-102",
     roomNumber: "E-102",
-    floor: "First Floor",
-    residentType: "employee",
+    floorNumber: "First Floor",
+    roomType: "employee",
     capacity: 2,
-    occupied: 1,
+    occupiedCount: 1,
     monthlyFee: HOSTEL_FEES.employee,
+    hasAttachedBathroom: true,
+    status: "available",
+    currentResidentIds: ["resident-suresh"],
+    notes: "Employee room with attached bathroom and convenient vehicle access.",
   },
-] as const
+  {
+    id: "room-s-101",
+    roomNumber: "S-101",
+    floorNumber: "First Floor",
+    roomType: "student",
+    capacity: 4,
+    occupiedCount: 4,
+    monthlyFee: HOSTEL_FEES.student,
+    hasAttachedBathroom: false,
+    status: "full",
+    currentResidentIds: [],
+    notes: "Full student room reserved for long-term residents.",
+  },
+  {
+    id: "room-e-201",
+    roomNumber: "E-201",
+    floorNumber: "Second Floor",
+    roomType: "employee",
+    capacity: 2,
+    occupiedCount: 0,
+    monthlyFee: HOSTEL_FEES.employee,
+    hasAttachedBathroom: true,
+    status: "available",
+    currentResidentIds: [],
+    notes: "Ready for employee allocation with attached bathroom facilities.",
+  },
+  {
+    id: "room-m-301",
+    roomNumber: "M-301",
+    floorNumber: "Third Floor",
+    roomType: "mixed",
+    capacity: 3,
+    occupiedCount: 0,
+    monthlyFee: HOSTEL_FEES.student,
+    hasAttachedBathroom: true,
+    status: "maintenance",
+    currentResidentIds: [],
+    notes: "Under cleaning and maintenance before reopening for allocation.",
+  },
+  {
+    id: "room-s-305",
+    roomNumber: "S-305",
+    floorNumber: "Third Floor",
+    roomType: "student",
+    capacity: 4,
+    occupiedCount: 0,
+    monthlyFee: HOSTEL_FEES.student,
+    hasAttachedBathroom: false,
+    status: "inactive",
+    currentResidentIds: [],
+    notes: "Kept inactive until the next student intake cycle.",
+  },
+]
+
+export const mockRoomAllocations: MockRoomAllocation[] = [
+  {
+    id: "allocation-001",
+    roomId: "room-s-204",
+    residentId: "resident-ramesh",
+    residentName: "Ramesh Kumar",
+    allocatedDate: "2025-06-12",
+    status: "active",
+  },
+  {
+    id: "allocation-002",
+    roomId: "room-e-102",
+    residentId: "resident-suresh",
+    residentName: "Suresh Naik",
+    allocatedDate: "2025-09-01",
+    status: "active",
+  },
+  {
+    id: "allocation-003",
+    roomId: "room-s-204",
+    residentId: "resident-old-001",
+    residentName: "Mahesh Reddy",
+    allocatedDate: "2025-01-08",
+    vacatedDate: "2025-05-30",
+    status: "vacated",
+  },
+]
 
 export const mockNotices: MockNotice[] = [
   {

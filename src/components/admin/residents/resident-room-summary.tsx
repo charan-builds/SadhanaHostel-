@@ -1,22 +1,16 @@
 import { Building2 } from "lucide-react"
 
-import type { MockResident } from "@/types/frontend"
-
-type RoomSummary = {
-  roomNumber: string
-  floor: string
-  residentType: string
-  capacity: number
-  occupied: number
-}
+import type { MockResident, MockRoom } from "@/types/frontend"
 
 type ResidentRoomSummaryProps = {
   resident: MockResident
-  room?: RoomSummary
+  room?: MockRoom
 }
 
 export function ResidentRoomSummary({ resident, room }: ResidentRoomSummaryProps) {
-  const occupancy = room ? `${room.occupied}/${room.capacity} occupied` : "Occupancy not available"
+  const occupancy = room
+    ? `${room.occupiedCount}/${room.capacity} occupied`
+    : "Occupancy not available"
 
   return (
     <section className="rounded-xl border bg-background p-5 shadow-sm">
@@ -33,11 +27,11 @@ export function ResidentRoomSummary({ resident, room }: ResidentRoomSummaryProps
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Type</p>
-          <p className="mt-1 text-sm font-medium capitalize">{room?.residentType ?? resident.residentType}</p>
+          <p className="mt-1 text-sm font-medium capitalize">{room?.roomType ?? resident.residentType}</p>
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Floor</p>
-          <p className="mt-1 text-sm font-medium">{room?.floor ?? "Not assigned"}</p>
+          <p className="mt-1 text-sm font-medium">{room?.floorNumber ?? "Not assigned"}</p>
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Occupancy</p>

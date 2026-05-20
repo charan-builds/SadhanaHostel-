@@ -69,7 +69,7 @@ const pendingFees = recentPayments
   .filter((payment) => payment.status !== "paid")
   .reduce((total, payment) => total + payment.amount, 0)
 const totalRooms = mockRooms.length
-const occupiedBeds = mockRooms.reduce((total, room) => total + room.occupied, 0)
+const occupiedBeds = mockRooms.reduce((total, room) => total + room.occupiedCount, 0)
 const totalBeds = mockRooms.reduce((total, room) => total + room.capacity, 0)
 const availableBeds = totalBeds - occupiedBeds
 const occupancyPercent = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0
