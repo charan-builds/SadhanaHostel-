@@ -1,25 +1,21 @@
-import { z } from "zod"
-
-const supabaseEnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-})
+import { getPublicEnv } from "@/config/env"
 
 export function hasSupabaseConfig() {
-  return supabaseEnvSchema.safeParse(process.env).success
+  try {
+    getPublicEnv()
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function getSupabaseConfig() {
-  const parsed = supabaseEnvSchema.safeParse(process.env)
-
-  if (!parsed.success) {
-    throw new Error(
-      "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local."
-    )
-  }
+  const env = getPublicEnv()
 
   return {
-    url: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
-    anonKey: parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    url: env.NEXT_PUBLIC_SUPABASE_URL,
+    anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   }
 }
+
+export const getSupabasePublicConfig = getSupabaseConfig

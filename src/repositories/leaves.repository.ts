@@ -1,0 +1,113 @@
+import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
+
+import {
+  createPaginationMeta,
+  normalizePagination,
+  throwRepositoryError,
+  type AppSupabaseClient,
+  type PaginatedResult,
+  type PaginationParams,
+} from "./types"
+
+export type LeaveRequestRow = Tables<"leave_requests">
+export type LeaveStatus = Database["public"]["Enums"]["leave_status_enum"]
+
+export type ListLeavesFilters = PaginationParams & {
+  organizationId: string
+  hostelId?: string
+  residentId?: string
+  status?: LeaveStatus
+}
+
+export class LeavesRepository {
+  constructor(private readonly db: AppSupabaseClient) {}
+
+  async list(filters: ListLeavesFilters): Promise<PaginatedResult<LeaveRequestRow>> {
+    const { page, pageSize, from, to } = normalizePagination(filters)
+
+    let query = this.db
+      .from("leave_requests")
+      .select("*", { count: "exact" })
+      .eq("organization_id", filters.organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+
+    if (filters.hostelId) {
+      query = query.eq("hostel_id", filters.hostelId)
+    }
+
+    if (filters.residentId) {
+      query = query.eq("resident_id", filters.residentId)
+    }
+
+    if (filters.status) {
+      query = query.eq("status", filters.status)
+    }
+
+    const { data, error, count } = await query.range(from, to)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to list leave requests.")
+    }
+
+    return {
+      data: data ?? [],
+      meta: createPaginationMeta(count, page, pageSize),
+    }
+  }
+
+  async getById(leaveRequestId: string, organizationId?: string) {
+    let query = this.db
+      .from("leave_requests")
+      .select("*")
+      .eq("id", leaveRequestId)
+      .is("deleted_at", null)
+
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId)
+    }
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load leave request.")
+    }
+
+    return data
+  }
+
+  async create(values: TablesInsert<"leave_requests">) {
+    const { data, error } = await this.db
+      .from("leave_requests")
+      .insert(values)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to create leave request.")
+    }
+
+    return data
+  }
+
+  async update(
+    leaveRequestId: string,
+    organizationId: string,
+    values: TablesUpdate<"leave_requests">
+  ) {
+    const { data, error } = await this.db
+      .from("leave_requests")
+      .update(values)
+      .eq("id", leaveRequestId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to update leave request.")
+    }
+
+    return data
+  }
+}
