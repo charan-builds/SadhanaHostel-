@@ -13,6 +13,7 @@ import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
 
 import { EmailProvider } from "./email.provider"
+import { InAppProvider } from "./in-app.provider"
 import { SmsProvider } from "./sms.provider"
 import type {
   NotificationMessage,
@@ -42,7 +43,7 @@ export class NotificationService {
       email: new EmailProvider(),
       sms: new SmsProvider(),
       whatsapp: new WhatsappProvider(),
-      in_app: new EmailProvider(),
+      in_app: new InAppProvider(),
     }
   }
 

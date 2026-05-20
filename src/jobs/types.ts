@@ -1,10 +1,15 @@
+import type { AppSupabaseClient } from "@/repositories/types"
+
 export type JobStatus = "completed" | "skipped" | "failed"
 
 export type JobContext = {
   runId: string
+  db: AppSupabaseClient
   requestedBy?: string | null
   organizationId?: string | null
   startedAt: string
+  attemptNumber: number
+  idempotencyKey: string
 }
 
 export type JobResult = {

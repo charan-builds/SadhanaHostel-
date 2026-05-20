@@ -1,5 +1,6 @@
 import "server-only"
 
+import { getServerEnv } from "@/config/env"
 import { logger } from "@/lib/logger"
 import { maskEmail, sanitizeNotificationText } from "@/lib/security"
 
@@ -14,6 +15,8 @@ export class EmailProvider implements NotificationProvider {
   readonly providerName = "internal-email-log"
 
   async send(input: NotificationSendInput): Promise<NotificationSendResult> {
+    const sendEnabled = getServerEnv().NOTIFICATIONS_SEND_ENABLED
+
     if (!input.recipient.email) {
       return {
         status: "failed",
@@ -34,11 +37,11 @@ export class EmailProvider implements NotificationProvider {
     })
 
     return {
-      status: process.env.NOTIFICATIONS_SEND_ENABLED === "true" ? "sent" : "queued",
+      status: sendEnabled ? "sent" : "queued",
       provider: this.providerName,
       providerMessageId: null,
       responsePayload: {
-        mode: process.env.NOTIFICATIONS_SEND_ENABLED === "true" ? "sent" : "queued",
+        mode: sendEnabled ? "sent" : "queued",
       },
     }
   }

@@ -1,9 +1,10 @@
 import { z } from "zod"
 
-const booleanEnvSchema = z
-  .enum(["true", "false"])
-  .default("true")
-  .transform((value) => value === "true")
+const booleanEnvSchema = (defaultValue: "true" | "false" = "true") =>
+  z
+    .enum(["true", "false"])
+    .default(defaultValue)
+    .transform((value) => value === "true")
 
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]).default("info")
 
@@ -16,7 +17,8 @@ const publicEnvSchema = z.object({
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   LOG_LEVEL: logLevelSchema,
-  RATE_LIMIT_ENABLED: booleanEnvSchema,
+  RATE_LIMIT_ENABLED: booleanEnvSchema("true"),
+  NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),
   STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
   CASHFREE_APP_ID: z.string().optional(),
   CASHFREE_SECRET_KEY: z.string().optional(),

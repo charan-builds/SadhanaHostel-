@@ -3,6 +3,7 @@ import "server-only"
 import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
+import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -163,6 +164,11 @@ export class UploadsService {
           residentId: input.residentId,
           paymentId: input.paymentId,
         },
+      })
+      incrementMetric("uploads.created", 1, {
+        organizationId: input.organizationId,
+        bucketName: input.bucketName,
+        documentType: input.documentType,
       })
 
       return {

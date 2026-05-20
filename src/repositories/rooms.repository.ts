@@ -166,6 +166,28 @@ export class RoomsRepository {
     return data
   }
 
+  async getActiveAllocationForResidentInHostel(
+    residentId: string,
+    organizationId: string,
+    hostelId: string
+  ) {
+    const { data, error } = await this.db
+      .from("room_allocations")
+      .select("*")
+      .eq("resident_id", residentId)
+      .eq("organization_id", organizationId)
+      .eq("hostel_id", hostelId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident room allocation.")
+    }
+
+    return data
+  }
+
   async createAllocation(values: TablesInsert<"room_allocations">) {
     const { data, error } = await this.db
       .from("room_allocations")

@@ -12,6 +12,7 @@ import {
   runWithRequestContext,
 } from "@/lib/tracing"
 import { logRequestEnd, logRequestStart } from "@/lib/logger"
+import { incrementMetric, recordTimingMetric } from "@/lib/metrics"
 
 type ApiRouteOptions = {
   route: string
@@ -45,9 +46,15 @@ export async function withApiRoute(
         method: request.method,
         path: url.pathname,
         ip: getClientIp(request),
+        requestSizeBytes: Number(request.headers.get("content-length") ?? 0) || null,
       })
 
       try {
+        incrementMetric("api.requests", 1, {
+          route: options.route,
+          method: request.method,
+        })
+
         if (options.rateLimit) {
           assertRateLimit(request, options.rateLimit, options.rateLimitScope)
         }
@@ -63,11 +70,21 @@ export async function withApiRoute(
           status: response.status,
           durationMs: Date.now() - startedAt,
         })
+        recordTimingMetric("api.latency", Date.now() - startedAt, {
+          route: options.route,
+          method: request.method,
+          status: response.status,
+        })
 
         return response
       } catch (error) {
         const response = errorResponse(error)
         response.headers.set("x-request-id", requestId)
+        incrementMetric("api.errors", 1, {
+          route: options.route,
+          method: request.method,
+          status: response.status,
+        })
 
         logRequestEnd({
           requestId,
@@ -76,6 +93,11 @@ export async function withApiRoute(
           path: url.pathname,
           status: response.status,
           durationMs: Date.now() - startedAt,
+        })
+        recordTimingMetric("api.latency", Date.now() - startedAt, {
+          route: options.route,
+          method: request.method,
+          status: response.status,
         })
 
         return response

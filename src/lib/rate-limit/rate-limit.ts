@@ -1,6 +1,7 @@
 import { getServerEnv } from "@/config/env"
 import { RateLimitError } from "@/lib/errors"
 import { logger } from "@/lib/logger"
+import { incrementMetric } from "@/lib/metrics"
 
 export type RateLimitPolicy = {
   name: string
@@ -111,6 +112,10 @@ export function assertRateLimit(
     }
 
     const retryAfterSeconds = Math.ceil((bucket.resetAt - now) / 1000)
+
+    incrementMetric("rate_limit.hits", 1, {
+      policy: policy.name,
+    })
 
     throw new RateLimitError("Too many requests. Please try again later.", {
       policy: policy.name,

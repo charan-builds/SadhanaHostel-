@@ -178,4 +178,22 @@ export class InvoicesRepository {
 
     return data
   }
+
+  async listCancelledOlderThan(organizationId: string, olderThanIso: string, limit = 100) {
+    const { data, error } = await this.db
+      .from("invoices")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "cancelled")
+      .lte("cancelled_at", olderThanIso)
+      .is("deleted_at", null)
+      .order("cancelled_at", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load cancelled invoices.")
+    }
+
+    return data ?? []
+  }
 }

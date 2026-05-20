@@ -192,6 +192,45 @@ export class PaymentsRepository {
     return data
   }
 
+  async findFeeRecordByResidentPeriod(
+    organizationId: string,
+    residentId: string,
+    periodMonth: string
+  ) {
+    const { data, error } = await this.db
+      .from("monthly_fee_records")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("resident_id", residentId)
+      .eq("period_month", periodMonth)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load monthly fee record.")
+    }
+
+    return data
+  }
+
+  async listDueFeeRecords(organizationId: string, dueBeforeDate: string, limit = 100) {
+    const { data, error } = await this.db
+      .from("monthly_fee_records")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .in("status", ["pending", "partial", "overdue"])
+      .lte("due_date", dueBeforeDate)
+      .is("deleted_at", null)
+      .order("due_date", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load due fee records.")
+    }
+
+    return data ?? []
+  }
+
   async updateFeeRecord(
     feeRecordId: string,
     organizationId: string,

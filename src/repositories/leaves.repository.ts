@@ -110,4 +110,22 @@ export class LeavesRepository {
 
     return data
   }
+
+  async listPendingParentNotifications(organizationId: string, limit = 100) {
+    const { data, error } = await this.db
+      .from("leave_requests")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .in("status", ["approved", "rejected"])
+      .contains("metadata", { parent_notification_pending: true })
+      .is("deleted_at", null)
+      .order("reviewed_at", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load leave notification queue.")
+    }
+
+    return data ?? []
+  }
 }

@@ -3,6 +3,7 @@ import "server-only"
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logPaymentEvent } from "@/lib/logger"
+import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -107,6 +108,11 @@ export class PaymentsService {
         manual: true,
       },
     })
+    incrementMetric("payments.created", 1, {
+      organizationId: payment.organization_id,
+      method: payment.method,
+      status: payment.status,
+    })
 
     return payment
   }
@@ -165,6 +171,11 @@ export class PaymentsService {
         method: payment.method,
         provider: payment.provider,
       },
+    })
+    incrementMetric("payments.created", 1, {
+      organizationId: payment.organization_id,
+      method: payment.method,
+      status: payment.status,
     })
 
     return payment
@@ -242,6 +253,10 @@ export class PaymentsService {
       actorUserId: context.authUser.id,
       amount: verifiedPayment.amount,
       status: verifiedPayment.status,
+    })
+    incrementMetric("payments.verified", 1, {
+      organizationId: verifiedPayment.organization_id,
+      method: verifiedPayment.method,
     })
 
     return verifiedPayment

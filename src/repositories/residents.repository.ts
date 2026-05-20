@@ -176,4 +176,26 @@ export class ResidentsRepository {
 
     return data
   }
+
+  async listActiveForBilling(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("residents")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load residents for billing.")
+    }
+
+    return data ?? []
+  }
 }

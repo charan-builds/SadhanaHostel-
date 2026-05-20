@@ -6,6 +6,7 @@ export function logRequestStart(metadata: {
   method: string
   path: string
   ip?: string | null
+  requestSizeBytes?: number | null
 }) {
   logger.info({
     event: "api.request.started",
@@ -16,6 +17,7 @@ export function logRequestStart(metadata: {
     path: metadata.path,
     metadata: {
       ip: metadata.ip,
+      requestSizeBytes: metadata.requestSizeBytes,
     },
   })
 }

@@ -11,7 +11,11 @@ export class InvoiceStorageService {
   constructor(private readonly db: AppSupabaseClient) {}
 
   async uploadInvoicePdf(storagePath: string, pdf: GeneratedInvoicePdf) {
-    const blob = new Blob([pdf.bytes], {
+    const arrayBuffer = pdf.bytes.buffer.slice(
+      pdf.bytes.byteOffset,
+      pdf.bytes.byteOffset + pdf.bytes.byteLength
+    ) as ArrayBuffer
+    const blob = new Blob([arrayBuffer], {
       type: pdf.contentType,
     })
     const { data, error } = await this.db.storage

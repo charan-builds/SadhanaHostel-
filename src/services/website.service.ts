@@ -1,6 +1,11 @@
 import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
+import {
+  buildTenantCacheKey,
+  getOrSetCache,
+  invalidateCacheByTag,
+} from "@/lib/cache"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { WebsiteRepository } from "@/repositories/website.repository"
@@ -34,10 +39,23 @@ export class WebsiteService {
   async listSettings(input: unknown) {
     const values = websiteSettingsListSchema.parse(input)
 
-    return this.websiteRepository.listSettings({
-      ...values,
-      status: values.status ?? "published",
-    })
+    return getOrSetCache(
+      buildTenantCacheKey({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        scope: "cms",
+        identifier: `settings:${values.sectionKey ?? "all"}:${values.status ?? "published"}`,
+      }),
+      {
+        ttlMs: 60_000,
+        tags: [`tenant:${values.organizationId}:cms`],
+      },
+      () =>
+        this.websiteRepository.listSettings({
+          ...values,
+          status: values.status ?? "published",
+        })
+    )
   }
 
   async updateSetting(input: unknown) {
@@ -47,7 +65,7 @@ export class WebsiteService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.websiteRepository.updateSetting(values.settingId, values.organizationId, {
+    const setting = await this.websiteRepository.updateSetting(values.settingId, values.organizationId, {
       title: values.title,
       content: values.content as Json | undefined,
       status: values.status,
@@ -57,15 +75,32 @@ export class WebsiteService {
       published_by: publishedAt ? context.authUser.id : undefined,
       updated_by: context.authUser.id,
     })
+
+    invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+
+    return setting
   }
 
   async listFacilities(input: unknown) {
     const values = facilitiesListSchema.parse(input)
 
-    return this.websiteRepository.listFacilities({
-      ...values,
-      status: values.status ?? "published",
-    })
+    return getOrSetCache(
+      buildTenantCacheKey({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        scope: "cms",
+        identifier: `facilities:${values.highlightedOnly ? "highlighted" : "all"}:${values.status ?? "published"}`,
+      }),
+      {
+        ttlMs: 60_000,
+        tags: [`tenant:${values.organizationId}:cms`],
+      },
+      () =>
+        this.websiteRepository.listFacilities({
+          ...values,
+          status: values.status ?? "published",
+        })
+    )
   }
 
   async createFacility(input: unknown) {
@@ -75,7 +110,7 @@ export class WebsiteService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.websiteRepository.createFacility({
+    const facility = await this.websiteRepository.createFacility({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       name: values.name,
@@ -90,6 +125,10 @@ export class WebsiteService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+
+    return facility
   }
 
   async listGallery(input: unknown) {

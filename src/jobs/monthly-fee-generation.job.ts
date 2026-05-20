@@ -1,3 +1,7 @@
+import { PaymentsRepository } from "@/repositories/payments.repository"
+import { ResidentsRepository } from "@/repositories/residents.repository"
+import { RoomsRepository } from "@/repositories/rooms.repository"
+
 import type { JobDefinition, OrganizationJobPayload } from "./types"
 
 export type MonthlyFeeGenerationPayload = OrganizationJobPayload & {
@@ -15,19 +19,73 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
       payload.hostelId ?? "all-hostels",
       payload.periodMonth,
     ].join(":"),
-  async run(payload) {
+  async run(payload, context) {
+    const residentsRepository = new ResidentsRepository(context.db)
+    const roomsRepository = new RoomsRepository(context.db)
+    const paymentsRepository = new PaymentsRepository(context.db)
+    const residents = await residentsRepository.listActiveForBilling(
+      payload.organizationId,
+      payload.hostelId
+    )
+    let processed = 0
+    let skipped = 0
+
+    for (const resident of residents) {
+      const existing = await paymentsRepository.findFeeRecordByResidentPeriod(
+        payload.organizationId,
+        resident.id,
+        payload.periodMonth
+      )
+
+      if (existing) {
+        skipped += 1
+        continue
+      }
+
+      const allocation = await roomsRepository.getActiveAllocationForResidentInHostel(
+        resident.id,
+        payload.organizationId,
+        resident.hostel_id
+      )
+      const baseAmount = allocation?.monthly_fee_amount ?? resident.monthly_fee_amount
+      const dueDate = buildDueDate(payload.periodMonth)
+
+      await paymentsRepository.createFeeRecord({
+        organization_id: payload.organizationId,
+        hostel_id: resident.hostel_id,
+        resident_id: resident.id,
+        room_allocation_id: allocation?.id,
+        period_month: payload.periodMonth,
+        due_date: dueDate,
+        base_amount: baseAmount,
+        total_amount: baseAmount,
+        balance_amount: baseAmount,
+        status: baseAmount === 0 ? "paid" : "pending",
+        metadata: {
+          job_run_id: context.runId,
+          idempotency_key: context.idempotencyKey,
+        },
+      })
+
+      processed += 1
+    }
+
     return {
-      status: "skipped",
-      processed: 0,
-      skipped: 0,
+      status: "completed",
+      processed,
+      skipped,
       failed: 0,
-      message:
-        "Monthly fee generation is scaffolded. Wire this job to fee repositories after billing rules are finalized.",
+      message: "Monthly fee records generated.",
       metadata: {
         organizationId: payload.organizationId,
         hostelId: payload.hostelId,
         periodMonth: payload.periodMonth,
+        residentCount: residents.length,
       },
     }
   },
+}
+
+function buildDueDate(periodMonth: string) {
+  return `${periodMonth}-10`
 }

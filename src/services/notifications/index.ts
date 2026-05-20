@@ -1,4 +1,5 @@
 export * from "./email.provider"
+export * from "./in-app.provider"
 export * from "./notification.service"
 export * from "./sms.provider"
 export * from "./types"

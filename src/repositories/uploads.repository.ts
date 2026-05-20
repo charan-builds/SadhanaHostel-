@@ -1,4 +1,4 @@
-import type { Tables, TablesInsert } from "@/types/database"
+import type { Tables, TablesInsert, TablesUpdate } from "@/types/database"
 
 import { RepositoryError, throwRepositoryError, type AppSupabaseClient } from "./types"
 
@@ -55,5 +55,44 @@ export class UploadsRepository {
     if (error) {
       throw new RepositoryError(error.message, "STORAGE_DELETE_FAILED", error)
     }
+  }
+
+  async listStalePendingDocuments(organizationId: string, olderThanIso: string, limit = 100) {
+    const { data, error } = await this.db
+      .from("documents")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "pending")
+      .lte("created_at", olderThanIso)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load stale documents.")
+    }
+
+    return data ?? []
+  }
+
+  async updateDocument(
+    documentId: string,
+    organizationId: string,
+    values: TablesUpdate<"documents">
+  ) {
+    const { data, error } = await this.db
+      .from("documents")
+      .update(values)
+      .eq("id", documentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to update document metadata.")
+    }
+
+    return data
   }
 }

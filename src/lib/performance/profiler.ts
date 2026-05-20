@@ -51,3 +51,19 @@ export function recordProfile(options: ProfileOptions, durationMs: number) {
     })
   }
 }
+
+export function measureRepositoryOperation<T>(
+  name: string,
+  callback: () => Promise<T>,
+  tags: MetricTags = {}
+) {
+  return measureAsync(
+    {
+      name,
+      kind: "repository",
+      slowMs: 300,
+      tags,
+    },
+    callback
+  )
+}
