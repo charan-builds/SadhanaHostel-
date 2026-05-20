@@ -14,16 +14,19 @@ import {
 } from "@/validations/leave.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { RealtimeService } from "./realtime"
 
 export class LeavesService {
   private readonly authService: AuthService
   private readonly leavesRepository: LeavesRepository
   private readonly residentsRepository: ResidentsRepository
+  private readonly realtimeService: RealtimeService
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.leavesRepository = new LeavesRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.realtimeService = new RealtimeService(db)
   }
 
   static async create() {
@@ -134,6 +137,15 @@ export class LeavesService {
       details: {
         status: values.status,
       },
+    })
+
+    await this.realtimeService.leaveStatusChanged({
+      organizationId: updatedLeave.organization_id,
+      hostelId: updatedLeave.hostel_id,
+      actorUserId: context.authUser.id,
+      leaveRequestId: updatedLeave.id,
+      residentId: updatedLeave.resident_id,
+      status: updatedLeave.status,
     })
 
     return updatedLeave

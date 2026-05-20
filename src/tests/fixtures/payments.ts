@@ -16,6 +16,8 @@ export function paymentFixture(
     resident_id: RESIDENT_ID,
     monthly_fee_record_id: null,
     invoice_id: null,
+    idempotency_key: null,
+    lock_version: 0,
     amount: 6500,
     method: "upi",
     status: "pending",

@@ -79,6 +79,122 @@ export const openApiDocument = {
         },
       },
     },
+    "/analytics/advanced": {
+      get: {
+        tags: ["Analytics"],
+        summary: "Load advanced analytics trends",
+        parameters: [
+          {
+            name: "organizationId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "fromDate",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "toDate",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "date-time" },
+          },
+        ],
+        responses: {
+          "200": { description: "Advanced analytics response" },
+        },
+      },
+    },
+    "/audit/{category}": {
+      get: {
+        tags: ["Audit"],
+        summary: "Load tenant-scoped audit logs",
+        parameters: [
+          {
+            name: "category",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              enum: ["activity", "payments", "residents", "security", "logins"],
+            },
+          },
+          {
+            name: "organizationId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": { description: "Paginated audit log response" },
+        },
+      },
+    },
+    "/reports/{type}": {
+      get: {
+        tags: ["Reports"],
+        summary: "Export a tenant report as CSV or Excel-compatible XML",
+        parameters: [
+          {
+            name: "type",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              enum: ["payments", "residents", "occupancy", "leaves"],
+            },
+          },
+          {
+            name: "organizationId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "format",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["csv", "xlsx"] },
+          },
+        ],
+        responses: {
+          "200": { description: "Report stream" },
+        },
+      },
+    },
+    "/search": {
+      get: {
+        tags: ["Search"],
+        summary: "Run tenant-scoped full-text search",
+        parameters: [
+          {
+            name: "organizationId",
+            in: "query",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "query",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "types",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "residents,payments" },
+          },
+        ],
+        responses: {
+          "200": { description: "Search result response" },
+        },
+      },
+    },
     "/invoices/generate": {
       post: {
         tags: ["Invoices"],

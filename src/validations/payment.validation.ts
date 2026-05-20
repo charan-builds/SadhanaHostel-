@@ -28,6 +28,7 @@ export const createPaymentSchema = z.object({
   amount: moneySchema,
   method: z.literal("upi").default("upi"),
   transactionId: z.string().trim().max(120).optional(),
+  idempotencyKey: z.string().trim().min(8).max(256).optional(),
   manualReference: z.string().trim().max(120).optional(),
   notes: z.string().trim().max(1000).optional(),
   isAdvance: z.boolean().default(false),
@@ -37,6 +38,7 @@ export const createPaymentSchema = z.object({
 export const verifyPaymentSchema = z.object({
   paymentId: uuidSchema,
   organizationId: uuidSchema,
+  idempotencyKey: z.string().trim().min(8).max(256).optional(),
 })
 
 export const generateMonthlyFeeSchema = z.object({

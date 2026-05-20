@@ -1567,10 +1567,12 @@ export type Database = {
           failure_reason: string | null
           hostel_id: string
           id: string
+          idempotency_key: string | null
           invoice_id: string | null
           is_active: boolean
           is_advance: boolean
           is_partial: boolean
+          lock_version: number
           manual_reference: string | null
           metadata: Json
           method: Database["public"]["Enums"]["payment_method_enum"]
@@ -1600,10 +1602,12 @@ export type Database = {
           failure_reason?: string | null
           hostel_id: string
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_active?: boolean
           is_advance?: boolean
           is_partial?: boolean
+          lock_version?: number
           manual_reference?: string | null
           metadata?: Json
           method: Database["public"]["Enums"]["payment_method_enum"]
@@ -1633,10 +1637,12 @@ export type Database = {
           failure_reason?: string | null
           hostel_id?: string
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_active?: boolean
           is_advance?: boolean
           is_partial?: boolean
+          lock_version?: number
           manual_reference?: string | null
           metadata?: Json
           method?: Database["public"]["Enums"]["payment_method_enum"]
@@ -3042,4 +3048,3 @@ export const Constants = {
     },
   },
 } as const
-

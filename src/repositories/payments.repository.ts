@@ -1,3 +1,5 @@
+import type { PostgrestError } from "@supabase/supabase-js"
+
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
 
 import {
@@ -116,23 +118,42 @@ export class PaymentsRepository {
     return data
   }
 
-  async verify(paymentId: string, organizationId: string, verifierUserId: string) {
+  async findByIdempotencyKey(organizationId: string, idempotencyKey: string) {
     const { data, error } = await this.db
       .from("payments")
-      .update({
-        status: "verified",
-        verified_at: new Date().toISOString(),
-        verified_by: verifierUserId,
-        updated_by: verifierUserId,
-      })
-      .eq("id", paymentId)
-      .eq("organization_id", organizationId)
-      .is("deleted_at", null)
       .select("*")
-      .single()
+      .eq("organization_id", organizationId)
+      .eq("idempotency_key", idempotencyKey)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load idempotent payment.")
+    }
+
+    return data
+  }
+
+  async verify(
+    paymentId: string,
+    organizationId: string,
+    verifierUserId: string,
+    idempotencyKey?: string
+  ) {
+    const rpc = this.db as unknown as VerifyPaymentRpcClient
+    const { data, error } = await rpc.rpc("verify_payment_atomic", {
+      p_payment_id: paymentId,
+      p_organization_id: organizationId,
+      p_verifier_user_id: verifierUserId,
+      p_idempotency_key: idempotencyKey ?? null,
+    })
 
     if (error) {
       throwRepositoryError(error, "Unable to verify payment.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to verify payment.")
     }
 
     return data
@@ -263,4 +284,16 @@ export class PaymentsRepository {
       residentId,
     })
   }
+}
+
+type VerifyPaymentRpcClient = {
+  rpc(
+    fn: "verify_payment_atomic",
+    args: {
+      p_payment_id: string
+      p_organization_id: string
+      p_verifier_user_id: string
+      p_idempotency_key: string | null
+    }
+  ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
 }

@@ -2,7 +2,7 @@ import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
-import { logPaymentEvent } from "@/lib/logger"
+import { logError, logPaymentEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
@@ -16,16 +16,22 @@ import {
 } from "@/validations/payment.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { NotificationService } from "./notifications"
+import { RealtimeService } from "./realtime"
 
 export class PaymentsService {
   private readonly authService: AuthService
   private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
+  private readonly notificationService: NotificationService
+  private readonly realtimeService: RealtimeService
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.notificationService = new NotificationService(db)
+    this.realtimeService = new RealtimeService(db)
   }
 
   static async create() {
@@ -76,6 +82,17 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
+    if (values.idempotencyKey) {
+      const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
+        values.organizationId,
+        values.idempotencyKey
+      )
+
+      if (existingPayment) {
+        return existingPayment
+      }
+    }
+
     const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
@@ -86,10 +103,16 @@ export class PaymentsService {
       method: values.method,
       status: "pending",
       transaction_id: values.transactionId,
+      idempotency_key: values.idempotencyKey,
       manual_reference: values.manualReference,
       notes: values.notes,
       is_advance: values.isAdvance,
       is_partial: values.isPartial,
+      metadata: values.idempotencyKey
+        ? {
+            idempotency_key: values.idempotencyKey,
+          }
+        : {},
       received_by: context.authUser.id,
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
@@ -140,6 +163,17 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
+    if (values.idempotencyKey) {
+      const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
+        values.organizationId,
+        values.idempotencyKey
+      )
+
+      if (existingPayment) {
+        return existingPayment
+      }
+    }
+
     const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
@@ -150,11 +184,17 @@ export class PaymentsService {
       method: "upi",
       status: "pending",
       transaction_id: values.transactionId,
+      idempotency_key: values.idempotencyKey,
       manual_reference: values.manualReference,
       notes: values.notes,
       is_advance: values.isAdvance,
       is_partial: values.isPartial,
       provider: "upi",
+      metadata: values.idempotencyKey
+        ? {
+            idempotency_key: values.idempotencyKey,
+          }
+        : {},
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
@@ -242,7 +282,8 @@ export class PaymentsService {
     const verifiedPayment = await this.paymentsRepository.verify(
       values.paymentId,
       values.organizationId,
-      context.authUser.id
+      context.authUser.id,
+      values.idempotencyKey
     )
 
     logPaymentEvent({
@@ -258,6 +299,8 @@ export class PaymentsService {
       organizationId: verifiedPayment.organization_id,
       method: verifiedPayment.method,
     })
+
+    await this.publishPaymentVerificationEvents(verifiedPayment, context.authUser.id)
 
     return verifiedPayment
   }
@@ -298,5 +341,69 @@ export class PaymentsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+  }
+
+  private async publishPaymentVerificationEvents(
+    payment: Awaited<ReturnType<PaymentsRepository["verify"]>>,
+    actorUserId: string
+  ) {
+    await this.realtimeService.paymentStatusChanged({
+      organizationId: payment.organization_id,
+      hostelId: payment.hostel_id,
+      actorUserId,
+      paymentId: payment.id,
+      residentId: payment.resident_id,
+      status: payment.status,
+    })
+
+    const resident = await this.residentsRepository.getById(
+      payment.resident_id,
+      payment.organization_id
+    )
+
+    if (!resident?.email) {
+      return
+    }
+
+    try {
+      const notification = await this.notificationService.queue({
+        organizationId: payment.organization_id,
+        hostelId: payment.hostel_id,
+        channel: "email",
+        recipient: {
+          residentId: resident.id,
+          userId: resident.user_id,
+          email: resident.email,
+          phone: resident.phone,
+        },
+        actorUserId,
+        message: {
+          title: "Your hostel payment has been verified",
+          body: `We received and verified your payment of INR ${payment.amount}.`,
+          templateKey: "payment_receipt",
+          payload: {
+            payment_id: payment.id,
+            amount: payment.amount,
+            transaction_id: payment.transaction_id,
+          },
+        },
+      })
+
+      await this.notificationService.send({
+        notification,
+        recipient: {
+          residentId: resident.id,
+          userId: resident.user_id,
+          email: resident.email,
+          phone: resident.phone,
+        },
+      })
+    } catch (error) {
+      logError(error, {
+        event: "payment.receipt_email_failed",
+        paymentId: payment.id,
+        organizationId: payment.organization_id,
+      })
+    }
   }
 }

@@ -18,12 +18,23 @@ function createServiceHarness() {
     getById: vi.fn(),
     verify: vi.fn(),
   }
-  const residentsRepository = {}
+  const residentsRepository = {
+    getById: vi.fn().mockResolvedValue(null),
+  }
+  const realtimeService = {
+    paymentStatusChanged: vi.fn().mockResolvedValue(null),
+  }
+  const notificationService = {
+    queue: vi.fn(),
+    send: vi.fn(),
+  }
 
   Object.assign(service, {
     authService,
     paymentsRepository,
     residentsRepository,
+    realtimeService,
+    notificationService,
   })
 
   return {
@@ -70,7 +81,8 @@ describe("PaymentsService", () => {
     expect(harness.paymentsRepository.verify).toHaveBeenCalledWith(
       PAYMENT_ID,
       TEST_ORGANIZATION_ID,
-      adminAuthContext().authUser.id
+      adminAuthContext().authUser.id,
+      undefined
     )
   })
 })

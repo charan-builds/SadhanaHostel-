@@ -22,6 +22,7 @@ import type {
   NotificationSendInput,
 } from "./types"
 import { WhatsappProvider } from "./whatsapp.provider"
+import { RealtimeService } from "../realtime"
 
 export type QueueNotificationInput = {
   organizationId: string
@@ -36,9 +37,11 @@ export type QueueNotificationInput = {
 export class NotificationService {
   private readonly notificationsRepository: NotificationsRepository
   private readonly providers: Record<NotificationChannel, NotificationProvider>
+  private readonly realtimeService: RealtimeService
 
   constructor(private readonly db: AppSupabaseClient) {
     this.notificationsRepository = new NotificationsRepository(db)
+    this.realtimeService = new RealtimeService(db)
     this.providers = {
       email: new EmailProvider(),
       sms: new SmsProvider(),
@@ -74,6 +77,14 @@ export class NotificationService {
     incrementMetric("notifications.queued", 1, {
       channel,
       organizationId: input.organizationId,
+    })
+
+    await this.realtimeService.notificationCreated({
+      organizationId: notification.organization_id,
+      hostelId: notification.hostel_id,
+      notificationId: notification.id,
+      recipientUserId: notification.recipient_user_id,
+      residentId: notification.resident_id,
     })
 
     return notification
