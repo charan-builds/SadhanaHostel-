@@ -46,6 +46,11 @@ export const RATE_LIMIT_POLICIES = {
     limit: 10,
     windowMs: 60_000,
   },
+  search: {
+    name: "search.read",
+    limit: 60,
+    windowMs: 60_000,
+  },
 } satisfies Record<string, RateLimitPolicy>
 
 const buckets = new Map<string, RateLimitBucket>()

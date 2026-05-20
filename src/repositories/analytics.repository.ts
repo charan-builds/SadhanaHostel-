@@ -165,4 +165,139 @@ export class AnalyticsRepository {
 
     return (data ?? []) as RecentLeave[]
   }
+
+  async listPaymentsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("payments")
+      .select("amount,status,method,created_at,verified_at")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load payment trends.")
+    }
+
+    return data ?? []
+  }
+
+  async listFeeRecordsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("monthly_fee_records")
+      .select("period_month,total_amount,paid_amount,balance_amount,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("period_month", fromDate)
+      .lte("period_month", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load fee trends.")
+    }
+
+    return data ?? []
+  }
+
+  async listRoomAllocationsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("room_allocations")
+      .select("allocated_from,allocated_to,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .lte("allocated_from", toDate)
+      .or(`allocated_to.is.null,allocated_to.gte.${fromDate}`)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load occupancy trends.")
+    }
+
+    return data ?? []
+  }
+
+  async listLeavesInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("leave_requests")
+      .select("created_at,status,resident_id")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load leave analytics.")
+    }
+
+    return data ?? []
+  }
+
+  async listResidentsCreatedInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("residents")
+      .select("created_at,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident growth analytics.")
+    }
+
+    return data ?? []
+  }
 }

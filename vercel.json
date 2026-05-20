@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-fee-generation",
+      "schedule": "30 0 1 * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/invoice-cleanup",
+      "schedule": "0 3 * * 0"
+    },
+    {
+      "path": "/api/cron/stale-upload-cleanup",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/scheduled-notices",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

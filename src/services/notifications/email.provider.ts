@@ -1,8 +1,8 @@
 import "server-only"
 
-import { getServerEnv } from "@/config/env"
 import { logger } from "@/lib/logger"
 import { maskEmail, sanitizeNotificationText } from "@/lib/security"
+import { EmailQueueService } from "@/services/email"
 
 import type {
   NotificationProvider,
@@ -12,11 +12,10 @@ import type {
 
 export class EmailProvider implements NotificationProvider {
   readonly channel = "email" as const
-  readonly providerName = "internal-email-log"
+  readonly providerName = "resend"
+  private readonly emailQueue = new EmailQueueService()
 
   async send(input: NotificationSendInput): Promise<NotificationSendResult> {
-    const sendEnabled = getServerEnv().NOTIFICATIONS_SEND_ENABLED
-
     if (!input.recipient.email) {
       return {
         status: "failed",
@@ -36,13 +35,23 @@ export class EmailProvider implements NotificationProvider {
       },
     })
 
+    const result = await this.emailQueue.sendTemplate({
+      to: input.recipient.email,
+      title: input.notification.title,
+      body: input.notification.body,
+      templateKey: input.notification.template_key,
+      payload: input.notification.payload,
+      organizationId: input.notification.organization_id,
+      notificationId: input.notification.id,
+      idempotencyKey: `notification:${input.notification.id}`,
+    })
+
     return {
-      status: sendEnabled ? "sent" : "queued",
+      status: result.status,
       provider: this.providerName,
-      providerMessageId: null,
-      responsePayload: {
-        mode: sendEnabled ? "sent" : "queued",
-      },
+      providerMessageId: result.providerMessageId,
+      responsePayload: result.responsePayload,
+      errorMessage: result.errorMessage,
     }
   }
 }

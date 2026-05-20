@@ -7,6 +7,7 @@ export const runJobSchema = z.object({
     "leave_notification",
     "stale_upload_cleanup",
     "invoice_cleanup",
+    "scheduled_notices",
   ]),
   organizationId: z.uuid(),
   payload: z.record(z.string(), z.unknown()),

@@ -87,5 +87,5 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
 }
 
 function buildDueDate(periodMonth: string) {
-  return `${periodMonth}-10`
+  return `${periodMonth.slice(0, 7)}-10`
 }

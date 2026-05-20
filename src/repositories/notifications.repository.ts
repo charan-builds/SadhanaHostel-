@@ -123,4 +123,36 @@ export class NotificationsRepository {
 
     return data
   }
+
+  async findByNoticeRecipient(input: {
+    organizationId: string
+    noticeId: string
+    residentId?: string | null
+    recipientUserId?: string | null
+  }) {
+    let query = this.db
+      .from("notifications")
+      .select("*")
+      .eq("organization_id", input.organizationId)
+      .eq("notice_id", input.noticeId)
+      .is("deleted_at", null)
+
+    if (input.residentId) {
+      query = query.eq("resident_id", input.residentId)
+    } else {
+      query = query.is("resident_id", null)
+    }
+
+    if (input.recipientUserId) {
+      query = query.eq("recipient_user_id", input.recipientUserId)
+    }
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load notice notification.")
+    }
+
+    return data
+  }
 }

@@ -2,6 +2,7 @@ import { invoiceCleanupJob } from "./invoice-cleanup.job"
 import { leaveNotificationJob } from "./leave-notification.job"
 import { monthlyFeeGenerationJob } from "./monthly-fee-generation.job"
 import { paymentReminderJob } from "./payment-reminder.job"
+import { scheduledNoticesJob } from "./scheduled-notices.job"
 import { staleUploadCleanupJob } from "./stale-upload-cleanup.job"
 
 export const jobRegistry = {
@@ -10,6 +11,7 @@ export const jobRegistry = {
   [leaveNotificationJob.name]: leaveNotificationJob,
   [staleUploadCleanupJob.name]: staleUploadCleanupJob,
   [invoiceCleanupJob.name]: invoiceCleanupJob,
+  [scheduledNoticesJob.name]: scheduledNoticesJob,
 } as const
 
 export type RegisteredJobName = keyof typeof jobRegistry

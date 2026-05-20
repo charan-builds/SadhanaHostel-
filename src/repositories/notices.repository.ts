@@ -119,4 +119,24 @@ export class NoticesRepository {
 
     return data
   }
+
+  async listPublishedForFanout(organizationId: string, runAt: string, limit = 100) {
+    const { data, error } = await this.db
+      .from("notices")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "published")
+      .eq("is_active", true)
+      .lte("published_at", runAt)
+      .or(`expires_at.is.null,expires_at.gt.${runAt}`)
+      .is("deleted_at", null)
+      .order("published_at", { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load published notices for fan-out.")
+    }
+
+    return data ?? []
+  }
 }
