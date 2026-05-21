@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/test-results
 /scripts/load-testing/last-summary.json
 /scripts/load-testing/last-summary.md
 
@@ -39,6 +40,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# Supabase local linking metadata
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo

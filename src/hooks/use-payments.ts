@@ -7,8 +7,10 @@ import { paymentsSdk } from "@/sdk"
 import type {
   CreatePaymentInput,
   PaymentListInput,
+  SubmitUpiPaymentInput,
   VerifyPaymentInput,
 } from "@/validations/payment.validation"
+import type { UploadOptions } from "@/sdk"
 
 export function usePayments(params: PaymentListInput) {
   return useQuery({
@@ -34,6 +36,34 @@ export function useCreateUpiPayment() {
     onSuccess: (payment) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.payments.all({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useSubmitUpiPaymentWithProof(options?: UploadOptions) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      input,
+      file,
+    }: {
+      input: SubmitUpiPaymentInput
+      file: File
+    }) => paymentsSdk.submitUpiWithProof(input, file, options),
+    onSuccess: (payment) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.all({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.analytics.dashboard({
           organizationId: payment.organization_id,
           hostelId: payment.hostel_id,
         }),

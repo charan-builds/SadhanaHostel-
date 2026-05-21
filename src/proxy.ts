@@ -34,6 +34,10 @@ export async function proxy(request: NextRequest) {
 }
 
 function isProtectedPath(pathname: string) {
+  if (pathname === "/admin/login" || pathname === "/resident/login") {
+    return false
+  }
+
   return (
     pathname === ADMIN_ROUTE_PREFIX ||
     pathname.startsWith(`${ADMIN_ROUTE_PREFIX}/`) ||

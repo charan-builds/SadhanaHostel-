@@ -24,7 +24,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useCurrentResident, useCreateUpiPayment, useInvoiceDownloadUrl, usePaymentProofUpload, usePayments } from "@/hooks"
+import {
+  useCurrentResident,
+  useInvoiceDownloadUrl,
+  usePayments,
+  useSubmitUpiPaymentWithProof,
+} from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import { formatCurrency, formatDateTime } from "@/lib/format"
@@ -53,11 +58,13 @@ export function ResidentPaymentsClient() {
     page: 1,
     pageSize: 50,
   })
-  const createPayment = useCreateUpiPayment()
   const downloadInvoice = useInvoiceDownloadUrl()
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
-  const proofUpload = usePaymentProofUpload({ onProgress: setUploadProgress })
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() =>
+    crypto.randomUUID()
+  )
+  const submitUpiPayment = useSubmitUpiPaymentWithProof({ onProgress: setUploadProgress })
   useRealtimePayments({ enabled: Boolean(organizationId) })
 
   const {
@@ -108,25 +115,18 @@ export function ResidentPaymentsClient() {
     }
 
     try {
-      const payment = await createPayment.mutateAsync({
-        organizationId,
-        hostelId: resident.data.hostel_id,
-        residentId: resident.data.id,
-        amount: values.amount,
-        method: "upi",
-        transactionId: values.transactionId,
-        notes: values.notes || undefined,
-        isPartial: values.isPartial,
-        isAdvance: values.isAdvance,
-        idempotencyKey: crypto.randomUUID(),
-      })
-
-      await proofUpload.mutateAsync({
+      await submitUpiPayment.mutateAsync({
         input: {
           organizationId,
           hostelId: resident.data.hostel_id,
           residentId: resident.data.id,
-          paymentId: payment.id,
+          amount: values.amount,
+          method: "upi",
+          transactionId: values.transactionId,
+          notes: values.notes || undefined,
+          isPartial: values.isPartial,
+          isAdvance: values.isAdvance,
+          idempotencyKey: paymentIdempotencyKey,
         },
         file: proofFile,
       })
@@ -135,6 +135,7 @@ export function ResidentPaymentsClient() {
       reset()
       setProofFile(null)
       setUploadProgress(null)
+      setPaymentIdempotencyKey(crypto.randomUUID())
       toast.success("Payment submitted for admin verification.")
     } catch (error) {
       setError("root", {
@@ -217,7 +218,7 @@ export function ResidentPaymentsClient() {
             </div>
           </div>
 
-          {proofUpload.isPending ? (
+          {submitUpiPayment.isPending ? (
             <div className="mt-4">
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${uploadProgress?.percent ?? 10}%` }} />
@@ -229,9 +230,9 @@ export function ResidentPaymentsClient() {
           <Button
             type="submit"
             className="mt-5 w-full"
-            disabled={isSubmitting || createPayment.isPending || proofUpload.isPending}
+            disabled={isSubmitting || submitUpiPayment.isPending}
           >
-            {isSubmitting || createPayment.isPending || proofUpload.isPending ? (
+            {isSubmitting || submitUpiPayment.isPending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <UploadCloud className="size-4" aria-hidden="true" />

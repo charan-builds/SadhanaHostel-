@@ -3,13 +3,14 @@
 import Link from "next/link"
 import type { Route } from "next"
 import { usePathname } from "next/navigation"
-import { MessageCircle, Phone } from "lucide-react"
+import { BedDouble, MessageCircle, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
 import { PublicMobileMenu } from "@/components/public/public-mobile-menu"
+import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
@@ -60,6 +61,12 @@ export function PublicNavbar() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <Button asChild variant="ghost" size="sm" className="hidden xl:inline-flex">
+            <Link href={"/contact" as Route}>
+              <BedDouble className="size-4" aria-hidden="true" />
+              Check vacancy
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm" className="hidden md:inline-flex">
             <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
               <Phone className="size-4" aria-hidden="true" />
@@ -77,6 +84,7 @@ export function PublicNavbar() {
               WhatsApp
             </a>
           </Button>
+          <PublicAuthActions className="hidden md:inline-flex" />
           <PublicMobileMenu currentPathname={pathname} />
         </div>
       </div>

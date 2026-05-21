@@ -1,7 +1,12 @@
 import { logger } from "./logger"
 
 export function logPaymentEvent(metadata: {
-  action: "created" | "verification_attempted" | "verified" | "failed"
+  action:
+    | "created"
+    | "submitted_with_proof"
+    | "verification_attempted"
+    | "verified"
+    | "failed"
   paymentId?: string
   residentId?: string
   organizationId?: string

@@ -6,6 +6,8 @@ const hasSentryBuildCredentials = Boolean(
     process.env.SENTRY_PROJECT &&
     process.env.SENTRY_AUTH_TOKEN
 )
+const shouldUploadSentrySourceMaps =
+  process.env.SENTRY_UPLOAD_SOURCE_MAPS === "true" && hasSentryBuildCredentials
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
@@ -20,20 +22,20 @@ export default withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   telemetry: false,
-  widenClientFileUpload: hasSentryBuildCredentials,
+  widenClientFileUpload: shouldUploadSentrySourceMaps,
   sourcemaps: {
-    disable: !hasSentryBuildCredentials,
+    disable: !shouldUploadSentrySourceMaps,
     deleteSourcemapsAfterUpload: true,
   },
   release: {
-    create: hasSentryBuildCredentials,
-    finalize: hasSentryBuildCredentials,
+    create: shouldUploadSentrySourceMaps,
+    finalize: shouldUploadSentrySourceMaps,
     deploy: process.env.SENTRY_ENVIRONMENT
       ? { env: process.env.SENTRY_ENVIRONMENT }
       : undefined,
   },
   webpack: {
-    automaticVercelMonitors: hasSentryBuildCredentials,
+    automaticVercelMonitors: shouldUploadSentrySourceMaps,
     treeshake: {
       removeDebugLogging: true,
       excludeReplayIframe: true,

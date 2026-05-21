@@ -93,6 +93,7 @@ export const publicInquirySchema = createLeadSchema
     organizationId: uuidSchema.optional(),
     hostelId: uuidSchema.optional(),
     source: z.enum(["website", "whatsapp", "phone"]).default("website"),
+    company: z.string().trim().max(0).optional(),
   })
 
 export const updateLeadSchema = createLeadSchema

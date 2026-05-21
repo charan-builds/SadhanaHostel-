@@ -116,6 +116,22 @@ export class AdmissionsService {
   async createPublicInquiry(input: unknown) {
     const values = publicInquirySchema.parse(input)
     const tenant = await this.resolveTenant(values.organizationId, values.hostelId)
+    const recentDuplicate = await this.admissionsRepository.findRecentLeadByPhone(
+      tenant.organizationId,
+      tenant.hostelId,
+      values.phone,
+      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    )
+
+    if (recentDuplicate) {
+      return {
+        id: recentDuplicate.id,
+        status: recentDuplicate.status,
+        createdAt: recentDuplicate.created_at,
+        deduplicated: true,
+      }
+    }
+
     const lead = await this.admissionsRepository.createLead({
       organization_id: tenant.organizationId,
       hostel_id: tenant.hostelId,
@@ -146,6 +162,7 @@ export class AdmissionsService {
       id: lead.id,
       status: lead.status,
       createdAt: lead.created_at,
+      deduplicated: false,
     }
   }
 
@@ -458,12 +475,6 @@ export class AdmissionsService {
         organizationId: resolvedOrganizationId,
         hostelId: resolvedHostelId || undefined,
       }
-    }
-
-    const fallbackTenant = await this.admissionsRepository.getDefaultTenant()
-
-    if (fallbackTenant) {
-      return fallbackTenant
     }
 
     throw badRequest("Organization context is required for admissions.")

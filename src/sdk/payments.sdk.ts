@@ -3,10 +3,12 @@ import type { Tables } from "@/types/database"
 import type {
   CreatePaymentInput,
   PaymentListInput,
+  SubmitUpiPaymentInput,
   VerifyPaymentInput,
 } from "@/validations/payment.validation"
 
 import type { PaginatedResult } from "./types"
+import { uploadFile, type UploadOptions } from "./uploads.sdk"
 
 export const paymentsSdk = {
   list(params: PaymentListInput) {
@@ -34,6 +36,19 @@ export const paymentsSdk = {
       "/api/payments/create",
       input,
       { retry: 0 }
+    )
+  },
+
+  submitUpiWithProof(
+    input: SubmitUpiPaymentInput,
+    proofFile: File,
+    options?: UploadOptions
+  ) {
+    return uploadFile<Tables<"payments">>(
+      "/api/payments/submit-upi",
+      input,
+      proofFile,
+      options
     )
   },
 

@@ -325,6 +325,34 @@ export class AdmissionsRepository {
     return data as LeadRow
   }
 
+  async findRecentLeadByPhone(
+    organizationId: string,
+    hostelId: string | undefined,
+    phone: string,
+    sinceIso: string
+  ) {
+    let query = this.admissionDb()
+      .from("leads")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("phone", phone)
+      .gte("created_at", sinceIso)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 0)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to check recent inquiry.")
+    }
+
+    return (data ?? [])[0] as LeadRow | undefined
+  }
+
   async updateLead(leadId: string, organizationId: string, values: UpdateLeadValues) {
     const { data, error } = await this.admissionDb()
       .from("leads")

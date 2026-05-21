@@ -118,6 +118,70 @@ export class PaymentsRepository {
     return data
   }
 
+  async createResidentUpiDraft(values: {
+    organizationId: string
+    hostelId: string
+    residentId: string
+    monthlyFeeRecordId?: string | null
+    amount: number
+    transactionId: string
+    idempotencyKey: string
+    notes?: string | null
+    isAdvance?: boolean
+    isPartial?: boolean
+    actorUserId: string
+  }) {
+    const rpc = this.db as unknown as PaymentDraftRpcClient
+    const { data, error } = await rpc.rpc("create_resident_upi_payment_draft", {
+      p_organization_id: values.organizationId,
+      p_hostel_id: values.hostelId,
+      p_resident_id: values.residentId,
+      p_monthly_fee_record_id: values.monthlyFeeRecordId ?? null,
+      p_amount: values.amount,
+      p_transaction_id: values.transactionId,
+      p_idempotency_key: values.idempotencyKey,
+      p_notes: values.notes ?? null,
+      p_is_advance: values.isAdvance ?? false,
+      p_is_partial: values.isPartial ?? false,
+      p_actor_user_id: values.actorUserId,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to create UPI payment draft.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to create UPI payment draft.")
+    }
+
+    return data
+  }
+
+  async finalizeSubmission(
+    paymentId: string,
+    organizationId: string,
+    proofDocumentId: string,
+    actorUserId: string
+  ) {
+    const rpc = this.db as unknown as PaymentFinalizeRpcClient
+    const { data, error } = await rpc.rpc("finalize_payment_submission", {
+      p_payment_id: paymentId,
+      p_organization_id: organizationId,
+      p_proof_document_id: proofDocumentId,
+      p_actor_user_id: actorUserId,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to finalize payment submission.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to finalize payment submission.")
+    }
+
+    return data
+  }
+
   async findByIdempotencyKey(organizationId: string, idempotencyKey: string) {
     const { data, error } = await this.db
       .from("payments")
@@ -294,6 +358,37 @@ type VerifyPaymentRpcClient = {
       p_organization_id: string
       p_verifier_user_id: string
       p_idempotency_key: string | null
+    }
+  ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
+}
+
+type PaymentDraftRpcClient = {
+  rpc(
+    fn: "create_resident_upi_payment_draft",
+    args: {
+      p_organization_id: string
+      p_hostel_id: string
+      p_resident_id: string
+      p_monthly_fee_record_id: string | null
+      p_amount: number
+      p_transaction_id: string
+      p_idempotency_key: string
+      p_notes: string | null
+      p_is_advance: boolean
+      p_is_partial: boolean
+      p_actor_user_id: string
+    }
+  ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
+}
+
+type PaymentFinalizeRpcClient = {
+  rpc(
+    fn: "finalize_payment_submission",
+    args: {
+      p_payment_id: string
+      p_organization_id: string
+      p_proof_document_id: string
+      p_actor_user_id: string
     }
   ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
 }

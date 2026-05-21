@@ -9,6 +9,11 @@ export type CacheSetOptions = {
   tags?: string[]
 }
 
+type RedisConfig = {
+  url: string
+  token: string
+}
+
 const cacheStore = new Map<string, CacheEntry<unknown>>()
 
 export function buildTenantCacheKey(parts: {
@@ -56,6 +61,25 @@ export async function getOrSetCache<T>(
   options: CacheSetOptions,
   loader: () => Promise<T>
 ) {
+  const redisConfig = getRedisConfig()
+
+  if (redisConfig) {
+    try {
+      const cached = await getRedisCache<T>(redisConfig, key)
+
+      if (cached !== null) {
+        return cached
+      }
+
+      const loaded = await loader()
+      await setRedisCache(redisConfig, key, loaded, options)
+
+      return loaded
+    } catch {
+      // Keep production availability if the distributed cache is unavailable.
+    }
+  }
+
   const cached = getCache<T>(key)
 
   if (cached !== null) {
@@ -89,4 +113,71 @@ export function invalidateTenantCache(organizationId: string) {
 
 export function clearCache() {
   cacheStore.clear()
+}
+
+function getRedisConfig(): RedisConfig | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim()
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
+
+  if (!url || !token) {
+    return null
+  }
+
+  return { url, token }
+}
+
+async function getRedisCache<T>(config: RedisConfig, key: string) {
+  const raw = await runRedisCommand<string | null>(config, ["GET", key])
+
+  if (!raw) {
+    return null
+  }
+
+  const parsed = JSON.parse(raw) as { value: T }
+
+  return parsed.value
+}
+
+async function setRedisCache<T>(
+  config: RedisConfig,
+  key: string,
+  value: T,
+  options: CacheSetOptions
+) {
+  await runRedisCommand<string>(config, [
+    "SET",
+    key,
+    JSON.stringify({ value }),
+    "PX",
+    options.ttlMs,
+  ])
+
+  return value
+}
+
+async function runRedisCommand<T>(
+  config: RedisConfig,
+  command: Array<string | number>
+): Promise<T> {
+  const response = await fetch(config.url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(command),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Redis cache command failed with HTTP ${response.status}.`)
+  }
+
+  const payload = (await response.json()) as { result?: T; error?: string }
+
+  if (payload.error) {
+    throw new Error(payload.error)
+  }
+
+  return payload.result as T
 }

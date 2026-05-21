@@ -8,6 +8,12 @@ const booleanEnvSchema = (defaultValue: "true" | "false" = "true") =>
 
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]).default("info")
 
+const emptyStringToUndefined = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? undefined : value
+
+const optionalEnvString = (schema: z.ZodString = z.string()) =>
+  z.preprocess(emptyStringToUndefined, schema.optional())
+
 const PLACEHOLDER_ENV_MARKERS = [
   "your-project-ref",
   "your-staging-project-ref",
@@ -42,13 +48,15 @@ const serverEnvSchema = publicEnvSchema.extend({
   LOG_LEVEL: logLevelSchema,
   RATE_LIMIT_ENABLED: booleanEnvSchema("true"),
   NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),
-  CRON_SECRET: z.string().min(16).optional(),
-  RESEND_API_KEY: z.string().min(1).optional(),
+  CRON_SECRET: optionalEnvString(z.string().min(16)),
+  RESEND_API_KEY: optionalEnvString(z.string().min(1)),
   EMAIL_FROM: z.string().min(3).default("Sadhana Boys Hostel <onboarding@resend.dev>"),
-  EMAIL_REPLY_TO: z.string().email().optional(),
+  EMAIL_REPLY_TO: optionalEnvString(z.string().email()),
+  UPSTASH_REDIS_REST_URL: optionalEnvString(z.string().url()),
+  UPSTASH_REDIS_REST_TOKEN: optionalEnvString(z.string().min(1)),
   STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
-  CASHFREE_APP_ID: z.string().optional(),
-  CASHFREE_SECRET_KEY: z.string().optional(),
+  CASHFREE_APP_ID: optionalEnvString(),
+  CASHFREE_SECRET_KEY: optionalEnvString(),
   CASHFREE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
 })
 
@@ -61,8 +69,16 @@ function formatEnvErrors(error: z.ZodError) {
     .join("; ")
 }
 
+function readPublicEnv() {
+  return {
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  }
+}
+
 export function getPublicEnv(): PublicEnv {
-  const parsed = publicEnvSchema.safeParse(process.env)
+  const parsed = publicEnvSchema.safeParse(readPublicEnv())
 
   if (!parsed.success) {
     throw new Error(`Invalid public environment configuration: ${formatEnvErrors(parsed.error)}`)

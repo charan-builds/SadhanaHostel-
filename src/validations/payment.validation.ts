@@ -35,6 +35,11 @@ export const createPaymentSchema = z.object({
   isPartial: z.boolean().default(false),
 })
 
+export const submitUpiPaymentSchema = createPaymentSchema.extend({
+  transactionId: z.string().trim().min(3).max(120),
+  idempotencyKey: z.string().trim().min(8).max(256),
+})
+
 export const verifyPaymentSchema = z.object({
   paymentId: uuidSchema,
   organizationId: uuidSchema,
@@ -58,5 +63,6 @@ export const generateMonthlyFeeSchema = z.object({
 
 export type PaymentListInput = z.infer<typeof paymentListSchema>
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>
+export type SubmitUpiPaymentInput = z.infer<typeof submitUpiPaymentSchema>
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>
 export type GenerateMonthlyFeeInput = z.infer<typeof generateMonthlyFeeSchema>

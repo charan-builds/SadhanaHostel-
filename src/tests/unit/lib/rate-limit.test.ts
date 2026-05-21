@@ -25,25 +25,25 @@ describe("rate limiting", () => {
     resetRateLimitBuckets()
   })
 
-  it("allows requests until the configured limit is exceeded", () => {
-    expect(() => assertRateLimit(request("10.0.0.1"), policy)).not.toThrow()
-    expect(() => assertRateLimit(request("10.0.0.1"), policy)).not.toThrow()
+  it("allows requests until the configured limit is exceeded", async () => {
+    await expect(assertRateLimit(request("10.0.0.1"), policy)).resolves.toBeUndefined()
+    await expect(assertRateLimit(request("10.0.0.1"), policy)).resolves.toBeUndefined()
 
-    expect(() => assertRateLimit(request("10.0.0.1"), policy)).toThrow(
+    await expect(assertRateLimit(request("10.0.0.1"), policy)).rejects.toThrow(
       "Too many requests. Please try again later."
     )
   })
 
-  it("separates buckets by tenant scope", () => {
-    expect(() =>
+  it("separates buckets by tenant scope", async () => {
+    await expect(
       assertRateLimit(request("10.0.0.1"), policy, {
         organizationId: "org-a",
       })
-    ).not.toThrow()
-    expect(() =>
+    ).resolves.toBeUndefined()
+    await expect(
       assertRateLimit(request("10.0.0.1"), policy, {
         organizationId: "org-b",
       })
-    ).not.toThrow()
+    ).resolves.toBeUndefined()
   })
 })

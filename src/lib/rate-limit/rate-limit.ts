@@ -20,6 +20,11 @@ type RateLimitBucket = {
   resetAt: number
 }
 
+type RedisConfig = {
+  url: string
+  token: string
+}
+
 export const RATE_LIMIT_POLICIES = {
   login: {
     name: "auth.login",
@@ -78,7 +83,7 @@ export function buildRateLimitKey(
   return [policy.name, tenant, actor].join(":")
 }
 
-export function assertRateLimit(
+export async function assertRateLimit(
   request: Request,
   policy: RateLimitPolicy,
   scope: RateLimitScope = {}
@@ -96,10 +101,17 @@ export function assertRateLimit(
   }
 
   try {
+    const key = buildRateLimitKey(request, policy, scope)
+    const redisConfig = getRedisConfig()
+
+    if (redisConfig) {
+      await assertRedisRateLimit(redisConfig, key, policy)
+      return
+    }
+
     pruneExpiredBuckets()
 
     const now = Date.now()
-    const key = buildRateLimitKey(request, policy, scope)
     const bucket = buckets.get(key)
 
     if (!bucket || bucket.resetAt <= now) {
@@ -162,4 +174,84 @@ function pruneExpiredBuckets() {
   })
 
   lastPrunedAt = now
+}
+
+function getRedisConfig(): RedisConfig | null {
+  try {
+    const env = getServerEnv()
+
+    if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+      return {
+        url: env.UPSTASH_REDIS_REST_URL,
+        token: env.UPSTASH_REDIS_REST_TOKEN,
+      }
+    }
+  } catch {
+    const url = process.env.UPSTASH_REDIS_REST_URL?.trim()
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
+
+    if (url && token) {
+      return { url, token }
+    }
+  }
+
+  return null
+}
+
+async function assertRedisRateLimit(
+  config: RedisConfig,
+  key: string,
+  policy: RateLimitPolicy
+) {
+  const count = await runRedisCommand<number>(config, ["INCR", key])
+
+  if (count === 1) {
+    await runRedisCommand<number>(config, ["PEXPIRE", key, policy.windowMs])
+  }
+
+  if (count <= policy.limit) {
+    return
+  }
+
+  const ttlMs = await runRedisCommand<number>(config, ["PTTL", key])
+  const retryAfterSeconds = Math.max(1, Math.ceil(ttlMs / 1000))
+
+  incrementMetric("rate_limit.hits", 1, {
+    policy: policy.name,
+    backend: "upstash",
+  })
+
+  throw new RateLimitError("Too many requests. Please try again later.", {
+    policy: policy.name,
+    limit: policy.limit,
+    windowMs: policy.windowMs,
+    retryAfterSeconds,
+  })
+}
+
+async function runRedisCommand<T>(
+  config: RedisConfig,
+  command: Array<string | number>
+): Promise<T> {
+  const response = await fetch(config.url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(command),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Redis rate-limit command failed with HTTP ${response.status}.`)
+  }
+
+  const payload = (await response.json()) as { result?: T; error?: string }
+
+  if (payload.error) {
+    throw new Error(payload.error)
+  }
+
+  return payload.result as T
 }

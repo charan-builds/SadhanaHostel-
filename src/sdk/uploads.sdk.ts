@@ -64,7 +64,7 @@ export const uploadsSdk = {
   },
 }
 
-async function uploadFile<TData>(
+export async function uploadFile<TData>(
   path: string,
   fields: Record<string, unknown>,
   file: File,

@@ -4,8 +4,8 @@ import Link from "next/link"
 import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, LogIn } from "lucide-react"
-import { useEffect } from "react"
+import { Eye, EyeOff, Loader2, LogIn } from "lucide-react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -14,6 +14,7 @@ import { APIErrorState } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ADMIN_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES } from "@/constants/auth"
 import { authSdk, type SessionOverview } from "@/sdk"
 import { useAuth, resolveHomeRoute } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
@@ -27,10 +28,13 @@ const loginFormSchema = z.object({
 type LoginFormInput = z.input<typeof loginFormSchema>
 type LoginFormValues = z.output<typeof loginFormSchema>
 
-export function LoginForm() {
+type LoginArea = "admin" | "resident"
+
+export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { session, refreshSession, isLoading } = useAuth()
+  const [showPassword, setShowPassword] = useState(false)
   const {
     register,
     handleSubmit,
@@ -46,19 +50,35 @@ export function LoginForm() {
   })
 
   const nextPath = searchParams.get("next")
+  const portalName = expectedArea === "admin" ? "admin" : expectedArea === "resident" ? "resident" : null
 
   useEffect(() => {
     if (!isLoading && session?.authenticated) {
-      router.replace(resolveRedirect(session, nextPath) as Route)
+      if (expectedArea && !isSessionAllowed(session, expectedArea)) {
+        router.replace(AUTH_REDIRECTS.unauthorized as Route)
+        return
+      }
+
+      router.replace(resolveRedirect(session, nextPath, expectedArea) as Route)
     }
-  }, [isLoading, nextPath, router, session])
+  }, [expectedArea, isLoading, nextPath, router, session])
 
   async function onSubmit(values: LoginFormValues) {
     try {
       const nextSession = await authSdk.login(values)
+
+      if (expectedArea && !isSessionAllowed(nextSession, expectedArea)) {
+        await authSdk.logout()
+        await refreshSession()
+        setError("root", {
+          message: `This account does not have ${portalName} portal access.`,
+        })
+        return
+      }
+
       await refreshSession()
       toast.success("Welcome back.")
-      router.replace(resolveRedirect(nextSession, nextPath) as Route)
+      router.replace(resolveRedirect(nextSession, nextPath, expectedArea) as Route)
     } catch (error) {
       const message =
         error instanceof FrontendApiError
@@ -101,14 +121,31 @@ export function LoginForm() {
             Forgot password?
           </Link>
         </div>
-        <Input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          placeholder="Enter your password"
-          aria-invalid={Boolean(errors.password)}
-          {...register("password")}
-        />
+        <div className="relative">
+          <Input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            aria-invalid={Boolean(errors.password)}
+            className="pr-11"
+            {...register("password")}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1/2 size-8 -translate-y-1/2"
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            onClick={() => setShowPassword((value) => !value)}
+          >
+            {showPassword ? (
+              <EyeOff className="size-4" aria-hidden="true" />
+            ) : (
+              <Eye className="size-4" aria-hidden="true" />
+            )}
+          </Button>
+        </div>
         {errors.password ? (
           <p className="text-xs text-destructive">{errors.password.message}</p>
         ) : null}
@@ -135,10 +172,32 @@ export function LoginForm() {
   )
 }
 
-function resolveRedirect(session: SessionOverview | null, nextPath: string | null) {
+function resolveRedirect(
+  session: SessionOverview | null,
+  nextPath: string | null,
+  expectedArea?: LoginArea
+) {
+  if (expectedArea === "admin") {
+    return nextPath?.startsWith("/admin/") || nextPath === "/admin"
+      ? nextPath
+      : AUTH_REDIRECTS.adminHome
+  }
+
+  if (expectedArea === "resident") {
+    return nextPath?.startsWith("/resident/") || nextPath === "/resident"
+      ? nextPath
+      : AUTH_REDIRECTS.residentHome
+  }
+
   if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
     return nextPath
   }
 
   return resolveHomeRoute(session)
+}
+
+function isSessionAllowed(session: SessionOverview, area: LoginArea) {
+  const allowedRoles = area === "admin" ? ADMIN_ROLES : RESIDENT_ROLES
+
+  return session.roles.some((role) => (allowedRoles as readonly string[]).includes(role))
 }

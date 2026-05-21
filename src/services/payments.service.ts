@@ -13,18 +13,23 @@ import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
   paymentListSchema,
+  submitUpiPaymentSchema,
   verifyPaymentSchema,
 } from "@/validations/payment.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { InvoicesService } from "./invoices"
 import { NotificationService } from "./notifications"
 import { RealtimeService } from "./realtime"
+import { UploadsService } from "./uploads.service"
 
 export class PaymentsService {
   private readonly authService: AuthService
   private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
   private readonly uploadsRepository: UploadsRepository
+  private readonly uploadsService: UploadsService
+  private readonly invoicesService: InvoicesService
   private readonly notificationService: NotificationService
   private readonly realtimeService: RealtimeService
 
@@ -33,6 +38,8 @@ export class PaymentsService {
     this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
     this.uploadsRepository = new UploadsRepository(db)
+    this.uploadsService = new UploadsService(db)
+    this.invoicesService = new InvoicesService(db)
     this.notificationService = new NotificationService(db)
     this.realtimeService = new RealtimeService(db)
   }
@@ -143,6 +150,104 @@ export class PaymentsService {
     return payment
   }
 
+  async submitUpiPaymentWithProof(input: unknown, proofFile: File) {
+    const values = submitUpiPaymentSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const resident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+    const isFinanceUser = context.roles.some((role) =>
+      [...ADMIN_ROLES, "staff"].includes(role)
+    )
+
+    if (!isFinanceUser && resident.user_id !== context.authUser.id) {
+      throw forbidden("Residents can only submit payments for their own profile.")
+    }
+
+    if (resident.hostel_id !== values.hostelId) {
+      throw conflict("Payment hostel does not match resident hostel.")
+    }
+
+    let payment = await this.paymentsRepository.createResidentUpiDraft({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      amount: values.amount,
+      transactionId: values.transactionId,
+      idempotencyKey: values.idempotencyKey,
+      notes: values.notes,
+      isAdvance: values.isAdvance,
+      isPartial: values.isPartial,
+      actorUserId: context.authUser.id,
+    })
+
+    const existingProof = await this.uploadsRepository.findLatestPaymentProof(
+      values.organizationId,
+      payment.id
+    )
+
+    if (!existingProof) {
+      const uploaded = await this.uploadsService.uploadPaymentProof(
+        {
+          organizationId: values.organizationId,
+          hostelId: values.hostelId,
+          residentId: values.residentId,
+          paymentId: payment.id,
+        },
+        proofFile
+      )
+
+      payment = await this.paymentsRepository.finalizeSubmission(
+        payment.id,
+        values.organizationId,
+        uploaded.document.id,
+        context.authUser.id
+      )
+    } else if (payment.status === "initiated") {
+      payment = await this.paymentsRepository.finalizeSubmission(
+        payment.id,
+        values.organizationId,
+        existingProof.id,
+        context.authUser.id
+      )
+    }
+
+    logPaymentEvent({
+      action: "submitted_with_proof",
+      paymentId: payment.id,
+      residentId: payment.resident_id,
+      organizationId: payment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: payment.amount,
+      status: payment.status,
+      details: {
+        idempotencyKey: values.idempotencyKey,
+        method: payment.method,
+      },
+    })
+    incrementMetric("payments.submitted_with_proof", 1, {
+      organizationId: payment.organization_id,
+      method: payment.method,
+      status: payment.status,
+    })
+
+    await this.realtimeService.paymentStatusChanged({
+      organizationId: payment.organization_id,
+      hostelId: payment.hostel_id,
+      actorUserId: context.authUser.id,
+      paymentId: payment.id,
+      residentId: payment.resident_id,
+      status: payment.status,
+    })
+
+    return payment
+  }
+
   async createUpiPayment(input: unknown) {
     const values = createPaymentSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -177,29 +282,22 @@ export class PaymentsService {
       }
     }
 
-    const payment = await this.paymentsRepository.create({
-      organization_id: values.organizationId,
-      hostel_id: values.hostelId,
-      resident_id: values.residentId,
-      monthly_fee_record_id: values.monthlyFeeRecordId,
-      invoice_id: values.invoiceId,
+    if (!values.transactionId) {
+      throw conflict("UPI transaction reference is required.")
+    }
+
+    const payment = await this.paymentsRepository.createResidentUpiDraft({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      monthlyFeeRecordId: values.monthlyFeeRecordId,
       amount: values.amount,
-      method: "upi",
-      status: "pending",
-      transaction_id: values.transactionId,
-      idempotency_key: values.idempotencyKey,
-      manual_reference: values.manualReference,
+      transactionId: values.transactionId,
+      idempotencyKey: values.idempotencyKey ?? crypto.randomUUID(),
       notes: values.notes,
-      is_advance: values.isAdvance,
-      is_partial: values.isPartial,
-      provider: "upi",
-      metadata: values.idempotencyKey
-        ? {
-            idempotency_key: values.idempotencyKey,
-          }
-        : {},
-      created_by: context.authUser.id,
-      updated_by: context.authUser.id,
+      isAdvance: values.isAdvance,
+      isPartial: values.isPartial,
+      actorUserId: context.authUser.id,
     })
 
     logPaymentEvent({
@@ -282,6 +380,10 @@ export class PaymentsService {
       throw conflict("Payment is already verified.")
     }
 
+    if (existingPayment.status === "initiated") {
+      throw conflict("Payment proof submission is not finalized yet.")
+    }
+
     const proof = await this.uploadsRepository.findLatestPaymentProof(
       values.organizationId,
       values.paymentId
@@ -295,12 +397,32 @@ export class PaymentsService {
       throw conflict("Payment proof ownership does not match this payment.")
     }
 
-    const verifiedPayment = await this.paymentsRepository.verify(
+    let verifiedPayment = await this.paymentsRepository.verify(
       values.paymentId,
       values.organizationId,
       context.authUser.id,
       values.idempotencyKey
     )
+
+    if (verifiedPayment.monthly_fee_record_id) {
+      try {
+        await this.invoicesService.generateMonthlyFeeInvoice({
+          organizationId: values.organizationId,
+          monthlyFeeRecordId: verifiedPayment.monthly_fee_record_id,
+        })
+        verifiedPayment =
+          (await this.paymentsRepository.getById(
+            verifiedPayment.id,
+            verifiedPayment.organization_id
+          )) ?? verifiedPayment
+      } catch (error) {
+        logError(error, {
+          event: "payment.invoice_generation_after_verification_failed",
+          paymentId: verifiedPayment.id,
+          organizationId: verifiedPayment.organization_id,
+        })
+      }
+    }
 
     logPaymentEvent({
       action: "verified",

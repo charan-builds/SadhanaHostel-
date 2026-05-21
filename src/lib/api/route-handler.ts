@@ -56,7 +56,7 @@ export async function withApiRoute(
         })
 
         if (options.rateLimit) {
-          assertRateLimit(request, options.rateLimit, options.rateLimitScope)
+          await assertRateLimit(request, options.rateLimit, options.rateLimitScope)
         }
 
         const response = await handler()

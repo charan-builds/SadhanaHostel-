@@ -38,6 +38,7 @@ export function ContactInquiryForm() {
     const expectedStayDuration = String(formData.get("expectedStayDuration") ?? "") || undefined
     const parentPhone = String(formData.get("parentPhone") ?? "") || undefined
     const message = String(formData.get("message") ?? "")
+    const company = String(formData.get("company") ?? "")
 
     try {
       await submitInquiry.mutateAsync({
@@ -51,6 +52,7 @@ export function ContactInquiryForm() {
         parentPhone,
         notes: message || undefined,
         source: "website",
+        company,
       })
       setSubmitted(true)
       form.reset()
@@ -76,6 +78,11 @@ export function ContactInquiryForm() {
       </div>
 
       <div className="mt-6 grid gap-4">
+        <div className="hidden" aria-hidden="true">
+          <Label htmlFor="company">Company</Label>
+          <Input id="company" name="company" tabIndex={-1} autoComplete="off" />
+        </div>
+
         <div className="grid gap-2">
           <Label htmlFor="name">Name</Label>
           <Input id="name" name="name" placeholder="Your name" autoComplete="name" required />

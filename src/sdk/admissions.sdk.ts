@@ -42,7 +42,7 @@ export const admissionsSdk = {
 
   submitPublicInquiry(input: PublicInquiryInput) {
     return apiClient.post<
-      { id: string; status: LeadRow["status"]; createdAt: string },
+      { id: string; status: LeadRow["status"]; createdAt: string; deduplicated?: boolean },
       PublicInquiryInput
     >("/api/admissions/public-inquiry", input, {
       auth: false,

@@ -23,7 +23,6 @@ import {
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import {
-  useGenerateInvoice,
   usePaymentProofPreview,
   usePayments,
   useVerifyPayment,
@@ -42,7 +41,6 @@ export function AdminPaymentsClient() {
     pageSize: 50,
   })
   const verifyPayment = useVerifyPayment()
-  const generateInvoice = useGenerateInvoice()
   const proofPreview = usePaymentProofPreview()
 
   if (!organizationId) {
@@ -57,21 +55,14 @@ export function AdminPaymentsClient() {
       return
     }
 
-    const verified = await verifyPayment.mutateAsync({
+    await verifyPayment.mutateAsync({
       organizationId,
       paymentId: selectedPayment.id,
       idempotencyKey: `verify-${selectedPayment.id}`,
     })
 
-    if (verified.monthly_fee_record_id && !verified.invoice_id) {
-      await generateInvoice.mutateAsync({
-        organizationId,
-        monthlyFeeRecordId: verified.monthly_fee_record_id,
-      })
-    }
-
     await payments.refetch()
-    toast.success("Payment verified.")
+    toast.success("Payment verified. Linked invoices are generated server-side.")
     setSelectedPayment(null)
   }
 
@@ -101,7 +92,7 @@ export function AdminPaymentsClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Payments"
-        description="Review resident UPI submissions, verify payments, and generate invoices where fee records exist."
+        description="Review resident UPI submissions, verify payments, and let the backend generate linked invoices atomically."
       />
 
       {payments.error ? (
@@ -171,7 +162,7 @@ export function AdminPaymentsClient() {
                       </Button>
                       <Button
                         size="sm"
-                        disabled={payment.status === "verified" || verifyPayment.isPending}
+                        disabled={payment.status !== "pending" || verifyPayment.isPending}
                         onClick={() => setSelectedPayment(payment)}
                       >
                         <CheckCircle2 className="size-3.5" aria-hidden="true" />
@@ -201,7 +192,7 @@ export function AdminPaymentsClient() {
         onConfirm={() => void confirmVerification()}
       />
 
-      {verifyPayment.isPending || generateInvoice.isPending ? (
+      {verifyPayment.isPending ? (
         <div className="fixed bottom-4 right-4 flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm shadow-lg">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           Updating financial records...

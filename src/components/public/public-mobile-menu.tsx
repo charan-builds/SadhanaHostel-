@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { Route } from "next"
-import { Menu, MessageCircle, Navigation, Phone } from "lucide-react"
+import { BedDouble, Menu, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -18,6 +18,7 @@ import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
 import { LanguageSwitcher } from "@/components/public/language-switcher"
+import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 type PublicMobileMenuProps = {
   currentPathname: string
@@ -86,6 +87,13 @@ export function PublicMobileMenu({ currentPathname }: PublicMobileMenuProps) {
           </div>
 
           <div className="grid gap-2">
+            <PublicAuthActions mode="mobile" onNavigate={() => setOpen(false)} />
+            <Button asChild variant="outline" className="justify-start">
+              <Link href={"/contact" as Route} onClick={() => setOpen(false)}>
+                <BedDouble className="size-4" aria-hidden="true" />
+                Check vacancy
+              </Link>
+            </Button>
             <Button asChild className="justify-start">
               <a href={callHref} onClick={() => setOpen(false)}>
                 <Phone className="size-4" aria-hidden="true" />
