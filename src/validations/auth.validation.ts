@@ -4,10 +4,18 @@ import { Constants } from "@/types/database"
 
 import { phoneSchema, uuidSchema } from "./common.validation"
 
-export const loginSchema = z.object({
-  email: z.string().trim().email(),
-  password: z.string().min(8),
-})
+export const loginSchema = z
+  .object({
+    identifier: z.string().trim().min(3).max(160).optional(),
+    email: z.string().trim().email().optional(),
+    phone: phoneSchema.optional(),
+    password: z.string().min(8),
+    rememberSession: z.boolean().optional(),
+  })
+  .refine((value) => Boolean(value.identifier || value.email || value.phone), {
+    message: "Email or phone number is required.",
+    path: ["identifier"],
+  })
 
 export const resetPasswordSchema = z.object({
   email: z.string().trim().email(),

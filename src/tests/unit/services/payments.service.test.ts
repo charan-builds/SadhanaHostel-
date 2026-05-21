@@ -18,6 +18,9 @@ function createServiceHarness() {
     getById: vi.fn(),
     verify: vi.fn(),
   }
+  const uploadsRepository = {
+    findLatestPaymentProof: vi.fn(),
+  }
   const residentsRepository = {
     getById: vi.fn().mockResolvedValue(null),
   }
@@ -32,6 +35,7 @@ function createServiceHarness() {
   Object.assign(service, {
     authService,
     paymentsRepository,
+    uploadsRepository,
     residentsRepository,
     realtimeService,
     notificationService,
@@ -40,6 +44,7 @@ function createServiceHarness() {
   return {
     service,
     paymentsRepository,
+    uploadsRepository,
   }
 }
 
@@ -69,6 +74,9 @@ describe("PaymentsService", () => {
     const verified = paymentFixture({ status: "verified" })
 
     harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue({
+      resident_id: paymentFixture().resident_id,
+    })
     harness.paymentsRepository.verify.mockResolvedValue(verified)
 
     await expect(
@@ -84,5 +92,24 @@ describe("PaymentsService", () => {
       adminAuthContext().authUser.id,
       undefined
     )
+  })
+
+  it("requires payment proof before verification", async () => {
+    const harness = createServiceHarness()
+
+    harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue(null)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "Payment proof is required before verification.",
+    })
+
+    expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
   })
 })

@@ -10,6 +10,7 @@ export const RESIDENT_ROLES = ["resident"] satisfies AppRole[]
 
 export const AUTH_REDIRECTS = {
   login: "/login",
+  onboarding: "/onboarding",
   unauthorized: "/unauthorized",
   adminHome: "/admin/dashboard",
   residentHome: "/resident/dashboard",

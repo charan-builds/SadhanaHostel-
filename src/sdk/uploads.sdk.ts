@@ -1,5 +1,6 @@
 import {
   FrontendApiError,
+  apiClient,
   getCurrentAccessToken,
   type ApiResponse,
 } from "@/lib/api-client"
@@ -8,9 +9,22 @@ import type {
   UploadDocumentInput,
   UploadPaymentProofInput,
   UploadProfilePhotoInput,
+  PaymentProofLookupInput,
 } from "@/validations/upload.validation"
 
 import type { UploadProgress } from "./types"
+
+export type UploadResult = {
+  document: Tables<"documents">
+  signedUrl: string
+}
+
+export type PaymentProofPreview = {
+  document: Tables<"documents">
+  paymentId: string
+  signedUrl: string
+  expiresInSeconds: number
+}
 
 export type UploadOptions = {
   onProgress?: (progress: UploadProgress) => void
@@ -19,11 +33,11 @@ export type UploadOptions = {
 
 export const uploadsSdk = {
   document(input: UploadDocumentInput, file: File, options?: UploadOptions) {
-    return uploadFile<Tables<"documents">>("/api/uploads/document", input, file, options)
+    return uploadFile<UploadResult>("/api/uploads/document", input, file, options)
   },
 
   paymentProof(input: UploadPaymentProofInput, file: File, options?: UploadOptions) {
-    return uploadFile<Tables<"documents">>(
+    return uploadFile<UploadResult>(
       "/api/uploads/payment-proof",
       input,
       file,
@@ -31,8 +45,17 @@ export const uploadsSdk = {
     )
   },
 
+  paymentProofPreview(input: PaymentProofLookupInput) {
+    const { paymentId, ...query } = input
+
+    return apiClient.get<PaymentProofPreview>(
+      `/api/uploads/payment-proof/${paymentId}`,
+      query
+    )
+  },
+
   profilePhoto(input: UploadProfilePhotoInput, file: File, options?: UploadOptions) {
-    return uploadFile<Tables<"documents">>(
+    return uploadFile<UploadResult>(
       "/api/uploads/profile-photo",
       input,
       file,

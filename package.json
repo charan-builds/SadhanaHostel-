@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3002",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -13,11 +13,18 @@
     "test:unit": "vitest run src/tests/unit",
     "test:integration": "vitest run src/tests/integration",
     "test:security": "vitest run src/tests/security",
+    "test:smoke": "playwright test",
     "test:coverage": "vitest run --coverage",
+    "load:k6": "k6 run scripts/load-testing/sadhana-hostel.load.js",
+    "staging:seed": "tsx scripts/staging-seed.ts",
+    "ci:bundle-budget": "tsx scripts/ci/bundle-budget.ts",
+    "ci:deployment-health": "tsx scripts/ci/deployment-health-check.ts",
+    "release:staging:preflight": "tsx scripts/release/staging-preflight.ts",
     "check": "npm run lint && npm run typecheck",
     "recovery:backup-check": "tsx scripts/recovery/backup-check.ts",
     "recovery:migration-verify": "tsx scripts/recovery/migration-verify.ts",
     "recovery:restore-validation": "tsx scripts/recovery/restore-validation.ts",
+    "recovery:drill": "tsx scripts/recovery/disaster-recovery-drill.ts",
     "types:supabase": "supabase gen types typescript --linked > src/types/database.ts"
   },
   "dependencies": {
@@ -45,6 +52,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

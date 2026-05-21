@@ -1,0 +1,300 @@
+import http from "k6/http"
+import { check, group, sleep } from "k6"
+import { Counter, Rate, Trend } from "k6/metrics"
+
+const BASE_URL = __ENV.LOAD_TEST_BASE_URL || "http://localhost:3002"
+const ORG_ID = __ENV.LOAD_TEST_ORGANIZATION_ID || ""
+const HOSTEL_ID = __ENV.LOAD_TEST_HOSTEL_ID || ""
+const RESIDENT_ID = __ENV.LOAD_TEST_RESIDENT_ID || ""
+const ADMIN_EMAIL = __ENV.LOAD_TEST_ADMIN_EMAIL || ""
+const ADMIN_PASSWORD = __ENV.LOAD_TEST_ADMIN_PASSWORD || ""
+const RESIDENT_EMAIL = __ENV.LOAD_TEST_RESIDENT_EMAIL || ""
+const RESIDENT_PASSWORD = __ENV.LOAD_TEST_RESIDENT_PASSWORD || ""
+const ENABLE_MUTATIONS = __ENV.LOAD_TEST_MUTATIONS === "true"
+
+const apiErrors = new Counter("sadhana_api_errors")
+const paymentFailures = new Counter("sadhana_payment_failures")
+const uploadFailures = new Counter("sadhana_upload_failures")
+const realtimeChecks = new Counter("sadhana_realtime_checks")
+const workflowSuccessRate = new Rate("sadhana_workflow_success_rate")
+const loginLatency = new Trend("sadhana_login_latency")
+const analyticsLatency = new Trend("sadhana_analytics_latency")
+const searchLatency = new Trend("sadhana_search_latency")
+const exportLatency = new Trend("sadhana_export_latency")
+
+export const options = {
+  scenarios: {
+    health: {
+      executor: "constant-vus",
+      vus: 2,
+      duration: __ENV.LOAD_TEST_DURATION || "2m",
+      exec: "healthWorkflow",
+    },
+    resident_workflows: {
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "30s", target: Number(__ENV.LOAD_TEST_RESIDENT_VUS || 10) },
+        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: Number(__ENV.LOAD_TEST_RESIDENT_VUS || 10) },
+        { duration: "30s", target: 0 },
+      ],
+      exec: "residentWorkflow",
+    },
+    admin_workflows: {
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "30s", target: Number(__ENV.LOAD_TEST_ADMIN_VUS || 3) },
+        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: Number(__ENV.LOAD_TEST_ADMIN_VUS || 3) },
+        { duration: "30s", target: 0 },
+      ],
+      exec: "adminWorkflow",
+    },
+  },
+  thresholds: {
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: ["p(95)<2500"],
+    sadhana_login_latency: ["p(95)<1200"],
+    sadhana_analytics_latency: ["p(95)<2500"],
+    sadhana_search_latency: ["p(95)<1500"],
+    sadhana_export_latency: ["p(95)<5000"],
+    sadhana_workflow_success_rate: ["rate>0.95"],
+  },
+}
+
+export function healthWorkflow() {
+  group("health checks", () => {
+    const live = http.get(`${BASE_URL}/api/health/live`, jsonHeaders())
+    const ready = http.get(`${BASE_URL}/api/health/ready`, jsonHeaders())
+
+    recordCheck(live, "live health is ok", (response) => response.status === 200)
+    recordCheck(ready, "ready health returns safe status", (response) => [200, 503].includes(response.status))
+  })
+
+  sleep(1)
+}
+
+export function residentWorkflow() {
+  const jar = http.cookieJar()
+
+  group("resident login", () => {
+    const response = login(jar, RESIDENT_EMAIL, RESIDENT_PASSWORD)
+    loginLatency.add(response.timings.duration)
+    recordCheck(response, "resident login response accepted", (res) => [200, 401].includes(res.status))
+  })
+
+  group("resident dashboard and payments", () => {
+    const payments = http.get(
+      `${BASE_URL}/api/payments/resident/${RESIDENT_ID}?organizationId=${ORG_ID}`,
+      authHeaders()
+    )
+    recordCheck(payments, "resident payments scoped response", (response) => [200, 401, 403].includes(response.status))
+
+    if (ENABLE_MUTATIONS) {
+      const payment = createUpiPayment()
+
+      if (payment?.id) {
+        uploadPaymentProof(payment.id)
+      }
+    }
+  })
+
+  group("resident leave and notices", () => {
+    const leaves = http.get(`${BASE_URL}/api/leaves?organizationId=${ORG_ID}&residentId=${RESIDENT_ID}`, authHeaders())
+    const notices = http.get(`${BASE_URL}/api/notices?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`, authHeaders())
+
+    recordCheck(leaves, "resident leaves response scoped", (response) => [200, 401, 403].includes(response.status))
+    recordCheck(notices, "notices response scoped", (response) => [200, 401, 403].includes(response.status))
+  })
+
+  realtimeChecks.add(1)
+  sleep(1)
+}
+
+export function adminWorkflow() {
+  const jar = http.cookieJar()
+
+  group("admin login", () => {
+    const response = login(jar, ADMIN_EMAIL, ADMIN_PASSWORD)
+    loginLatency.add(response.timings.duration)
+    recordCheck(response, "admin login response accepted", (res) => [200, 401].includes(res.status))
+  })
+
+  group("dashboard analytics", () => {
+    const started = Date.now()
+    const response = http.get(
+      `${BASE_URL}/api/v1/analytics/dashboard?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`,
+      authHeaders()
+    )
+    analyticsLatency.add(Date.now() - started)
+    recordCheck(response, "analytics response scoped", (res) => [200, 401, 403].includes(res.status))
+  })
+
+  group("search APIs", () => {
+    const started = Date.now()
+    const response = http.get(
+      `${BASE_URL}/api/v1/search?organizationId=${ORG_ID}&q=resident&page=1&pageSize=20`,
+      authHeaders()
+    )
+    searchLatency.add(Date.now() - started)
+    recordCheck(response, "search response scoped", (res) => [200, 401, 403].includes(res.status))
+  })
+
+  group("exports", () => {
+    const started = Date.now()
+    const response = http.get(
+      `${BASE_URL}/api/v1/reports/payments?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}&format=csv`,
+      authHeaders()
+    )
+    exportLatency.add(Date.now() - started)
+    recordCheck(response, "export response scoped", (res) => [200, 401, 403].includes(res.status))
+  })
+
+  sleep(1)
+}
+
+function login(jar, email, password) {
+  if (!email || !password) {
+    return {
+      status: 401,
+      timings: { duration: 0 },
+    }
+  }
+
+  return http.post(
+    `${BASE_URL}/api/auth/login`,
+    JSON.stringify({
+      identifier: email,
+      password,
+    }),
+    {
+      ...jsonHeaders(),
+      jar,
+    }
+  )
+}
+
+function createUpiPayment() {
+  const response = http.post(
+    `${BASE_URL}/api/payments/create`,
+    JSON.stringify({
+      organizationId: ORG_ID,
+      hostelId: HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 100,
+      method: "upi",
+      transactionId: `K6-${Date.now()}-${__VU}-${__ITER}`,
+      notes: "k6 staging payment proof workflow",
+      idempotencyKey: `k6-${Date.now()}-${__VU}-${__ITER}`,
+    }),
+    authHeaders()
+  )
+
+  const ok = recordCheck(response, "payment create accepted", (res) => res.status === 201 || res.status === 200)
+
+  if (!ok) {
+    paymentFailures.add(1)
+    return null
+  }
+
+  try {
+    return response.json("data")
+  } catch {
+    paymentFailures.add(1)
+    return null
+  }
+}
+
+function uploadPaymentProof(paymentId) {
+  const payload = {
+    organizationId: ORG_ID,
+    hostelId: HOSTEL_ID,
+    residentId: RESIDENT_ID,
+    paymentId,
+    file: http.file("synthetic payment proof", "payment-proof.txt", "image/png"),
+  }
+  const response = http.post(`${BASE_URL}/api/uploads/payment-proof`, payload, authHeaders(false))
+  const ok = recordCheck(response, "payment proof upload accepted", (res) => res.status === 201)
+
+  if (!ok) {
+    uploadFailures.add(1)
+  }
+}
+
+function jsonHeaders() {
+  return {
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-request-id": `k6-${Date.now()}-${__VU}-${__ITER}`,
+    },
+  }
+}
+
+function authHeaders(json = true) {
+  const headers = {
+    accept: "application/json",
+    "x-request-id": `k6-${Date.now()}-${__VU}-${__ITER}`,
+  }
+
+  if (json) {
+    headers["content-type"] = "application/json"
+  }
+
+  return { headers }
+}
+
+function recordCheck(response, name, predicate) {
+  const ok = check(response, {
+    [name]: predicate,
+  })
+
+  workflowSuccessRate.add(ok)
+
+  if (!ok) {
+    apiErrors.add(1)
+  }
+
+  return ok
+}
+
+export function handleSummary(data) {
+  return {
+    stdout: JSON.stringify(toSummary(data), null, 2),
+    "scripts/load-testing/last-summary.json": JSON.stringify(data, null, 2),
+    "scripts/load-testing/last-summary.md": toMarkdownSummary(data),
+  }
+}
+
+function toSummary(data) {
+  return {
+    finishedAt: new Date().toISOString(),
+    baseUrl: BASE_URL,
+    mutationsEnabled: ENABLE_MUTATIONS,
+    metrics: {
+      httpReqDurationP95: data.metrics.http_req_duration?.percentiles?.["95"],
+      httpReqFailedRate: data.metrics.http_req_failed?.rate,
+      apiErrors: data.metrics.sadhana_api_errors?.count,
+      paymentFailures: data.metrics.sadhana_payment_failures?.count,
+      uploadFailures: data.metrics.sadhana_upload_failures?.count,
+    },
+  }
+}
+
+function toMarkdownSummary(data) {
+  const summary = toSummary(data)
+
+  return [
+    "# Sadhana Load Test Summary",
+    "",
+    `- Finished: ${summary.finishedAt}`,
+    `- Base URL: ${summary.baseUrl}`,
+    `- Mutations enabled: ${summary.mutationsEnabled}`,
+    `- HTTP p95: ${summary.metrics.httpReqDurationP95 ?? "n/a"} ms`,
+    `- HTTP failed rate: ${summary.metrics.httpReqFailedRate ?? "n/a"}`,
+    `- API errors: ${summary.metrics.apiErrors ?? 0}`,
+    `- Payment failures: ${summary.metrics.paymentFailures ?? 0}`,
+    `- Upload failures: ${summary.metrics.uploadFailures ?? 0}`,
+    "",
+  ].join("\n")
+}

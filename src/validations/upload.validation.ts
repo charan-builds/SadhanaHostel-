@@ -22,7 +22,7 @@ export const uploadPaymentProofSchema = z.object({
   organizationId: uuidSchema,
   hostelId: uuidSchema,
   residentId: uuidSchema,
-  paymentId: uuidSchema.optional(),
+  paymentId: uuidSchema,
 })
 
 export const uploadProfilePhotoSchema = z.object({
@@ -31,6 +31,13 @@ export const uploadProfilePhotoSchema = z.object({
   residentId: uuidSchema,
 })
 
+export const paymentProofLookupSchema = z.object({
+  organizationId: uuidSchema,
+  paymentId: uuidSchema,
+  expiresInSeconds: z.coerce.number().int().positive().max(3600).default(900),
+})
+
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>
 export type UploadPaymentProofInput = z.infer<typeof uploadPaymentProofSchema>
 export type UploadProfilePhotoInput = z.infer<typeof uploadProfilePhotoSchema>
+export type PaymentProofLookupInput = z.infer<typeof paymentProofLookupSchema>

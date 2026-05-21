@@ -2,8 +2,12 @@ import "server-only"
 
 import {
   invoiceCleanupJob,
+  admissionFollowUpJob,
+  inactiveInquiryCleanupJob,
   monthlyFeeGenerationJob,
+  occupancyRecalculationJob,
   paymentReminderJob,
+  reservationExpiryJob,
   scheduledNoticesJob,
   staleUploadCleanupJob,
   type JobDefinition,
@@ -48,6 +52,49 @@ export const cronRegistry = {
       organizationId: organization.id,
       dueBeforeDate: toDateOnly(now),
       limit: 200,
+    }),
+  },
+  "reservation-expiry": {
+    name: "reservation-expiry",
+    job: reservationExpiryJob,
+    description: "Expire stale admissions reservations and release held beds.",
+    schedule: "*/15 * * * *",
+    maxDurationSeconds: 45,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      limit: 200,
+    }),
+  },
+  "admission-follow-ups": {
+    name: "admission-follow-ups",
+    job: admissionFollowUpJob,
+    description: "Identify due inquiry follow-ups for admissions staff.",
+    schedule: "0 4 * * *",
+    maxDurationSeconds: 45,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      limit: 100,
+    }),
+  },
+  "inactive-inquiry-cleanup": {
+    name: "inactive-inquiry-cleanup",
+    job: inactiveInquiryCleanupJob,
+    description: "Auto-close stale inquiries after a long inactivity window.",
+    schedule: "30 4 * * *",
+    maxDurationSeconds: 45,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      olderThanDays: 90,
+    }),
+  },
+  "occupancy-recalculation": {
+    name: "occupancy-recalculation",
+    job: occupancyRecalculationJob,
+    description: "Recalculate vacancy snapshots for dashboards.",
+    schedule: "*/30 * * * *",
+    maxDurationSeconds: 45,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
     }),
   },
   "invoice-cleanup": {

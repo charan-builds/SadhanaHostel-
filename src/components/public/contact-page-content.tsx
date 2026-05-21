@@ -76,7 +76,7 @@ export function ContactPageContent() {
                 <div className="max-w-sm px-6">
                   <MapPin className="mx-auto size-10 text-blue-700" aria-hidden="true" />
                   <h2 className="mt-4 text-lg font-semibold text-slate-950">
-                    Map placeholder
+                    Open location map
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     Use the Navigate button to open the hostel location.

@@ -9,6 +9,22 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/reservation-expiry",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/occupancy-recalculation",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/admission-follow-ups",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/inactive-inquiry-cleanup",
+      "schedule": "30 4 * * *"
+    },
+    {
       "path": "/api/cron/invoice-cleanup",
       "schedule": "0 3 * * 0"
     },

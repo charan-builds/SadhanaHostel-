@@ -1,3 +1,5 @@
+import type { PostgrestError } from "@supabase/supabase-js"
+
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
 
 import {
@@ -202,6 +204,43 @@ export class RoomsRepository {
     return data
   }
 
+  async allocateRoomAtomic(values: {
+    organizationId: string
+    hostelId: string
+    roomId: string
+    residentId: string
+    bedLabel?: string
+    allocatedFrom: string
+    allocatedTo?: string
+    monthlyFeeAmount?: number
+    reason?: string
+    actorUserId: string
+  }) {
+    const rpc = this.db as unknown as AllocateRoomAtomicRpcClient
+    const { data, error } = await rpc.rpc("allocate_room_atomic", {
+      p_organization_id: values.organizationId,
+      p_hostel_id: values.hostelId,
+      p_room_id: values.roomId,
+      p_resident_id: values.residentId,
+      p_bed_label: values.bedLabel ?? null,
+      p_allocated_from: values.allocatedFrom,
+      p_allocated_to: values.allocatedTo ?? null,
+      p_monthly_fee_amount: values.monthlyFeeAmount ?? null,
+      p_reason: values.reason ?? null,
+      p_actor_user_id: values.actorUserId,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to allocate room.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to allocate room.")
+    }
+
+    return data
+  }
+
   async listAllocations(roomId: string, organizationId: string) {
     const { data, error } = await this.db
       .from("room_allocations")
@@ -217,4 +256,22 @@ export class RoomsRepository {
 
     return data ?? []
   }
+}
+
+type AllocateRoomAtomicRpcClient = {
+  rpc(
+    fn: "allocate_room_atomic",
+    args: {
+      p_organization_id: string
+      p_hostel_id: string
+      p_room_id: string
+      p_resident_id: string
+      p_bed_label: string | null
+      p_allocated_from: string
+      p_allocated_to: string | null
+      p_monthly_fee_amount: number | null
+      p_reason: string | null
+      p_actor_user_id: string
+    }
+  ): Promise<{ data: RoomAllocationRow | null; error: PostgrestError | null }>
 }

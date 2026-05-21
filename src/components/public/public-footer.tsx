@@ -4,7 +4,7 @@ import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
-import { publicNavItems } from "@/data/public"
+import { publicNavItems } from "@/constants/public-content"
 
 const quickLinks = publicNavItems.filter((item) =>
   ["/", "/about", "/rooms", "/facilities", "/gallery"].includes(item.href),

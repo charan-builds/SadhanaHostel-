@@ -15,7 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
-import { publicNavItems } from "@/data/public"
+import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
 import { LanguageSwitcher } from "@/components/public/language-switcher"
 

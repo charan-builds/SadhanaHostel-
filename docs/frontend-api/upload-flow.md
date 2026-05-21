@@ -23,6 +23,7 @@ File input
 | `useDocumentUpload()` | `/api/uploads/document` |
 | `useProfilePhotoUpload()` | `/api/uploads/profile-photo` |
 | `usePaymentProofUpload()` | `/api/uploads/payment-proof` |
+| `usePaymentProofPreview()` | `/api/uploads/payment-proof/:paymentId` |
 
 ## Progress
 
@@ -40,6 +41,8 @@ const upload = useDocumentUpload({
 - Backend remains the source of truth for bucket/path authorization.
 - Do not build storage paths on the client.
 - Do not expose signed URLs beyond the intended workflow.
+- Payment proof uploads must include `paymentId`; generic document uploads may not create unlinked `payment_receipt` records.
+- Admin payment verification is blocked until a linked proof document exists for the same resident and organization.
 
 ## Future Expansion
 

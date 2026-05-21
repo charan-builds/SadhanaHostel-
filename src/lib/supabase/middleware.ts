@@ -1,14 +1,39 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getSupabasePublicConfig } from "@/lib/env"
+import { getSupabasePublicConfig, hasSupabaseConfig } from "@/lib/env"
 import type { Database } from "@/types/database"
 
-export async function updateSession(request: NextRequest) {
+export async function updateSession(
+  request: NextRequest,
+  requestHeaders = new Headers(request.headers)
+) {
+  if (!hasSupabaseConfig()) {
+    if (process.env.NODE_ENV === "production") {
+      getSupabasePublicConfig()
+    }
+
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    })
+
+    response.headers.set("x-sadhana-auth", "supabase-config-missing")
+
+    return {
+      response,
+      supabase: null,
+      user: null,
+    }
+  }
+
   const { url, anonKey } = getSupabasePublicConfig()
 
   let response = NextResponse.next({
-    request,
+    request: {
+      headers: requestHeaders,
+    },
   })
 
   const supabase = createServerClient<Database>(url, anonKey, {
@@ -22,7 +47,9 @@ export async function updateSession(request: NextRequest) {
         })
 
         response = NextResponse.next({
-          request,
+          request: {
+            headers: requestHeaders,
+          },
         })
 
         cookiesToSet.forEach(({ name, value, options }) => {

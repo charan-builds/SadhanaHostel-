@@ -125,9 +125,18 @@ export class AuthService {
 
   async login(input: unknown): Promise<SessionOverview> {
     const values = loginSchema.parse(input)
+    const identifier = values.identifier ?? values.email ?? values.phone ?? ""
+    const passwordCredentials = identifier.includes("@")
+      ? {
+          email: identifier,
+          password: values.password,
+        }
+      : {
+          phone: values.phone ?? identifier,
+          password: values.password,
+        }
     const { error } = await this.db.auth.signInWithPassword({
-      email: values.email,
-      password: values.password,
+      ...passwordCredentials,
     })
 
     if (error) {
@@ -276,7 +285,9 @@ export class AuthService {
       organizationId: context.organizationId,
       hostelIds: context.hostelIds,
       onboardingRequired: !context.organizationId,
-      redirectTo: this.resolveRedirectPath(context.roles),
+      redirectTo: context.organizationId
+        ? this.resolveRedirectPath(context.roles)
+        : AUTH_REDIRECTS.onboarding,
     }
   }
 

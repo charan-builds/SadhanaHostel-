@@ -2,7 +2,7 @@ import { AlertTriangle, MessageCircle, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
-import { termsAndRules } from "@/data/public"
+import { termsAndRules } from "@/constants/public-content"
 
 export function TermsPageContent() {
   return (

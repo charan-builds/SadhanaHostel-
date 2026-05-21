@@ -3,7 +3,6 @@ import "server-only"
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { ResidentsRepository } from "@/repositories/residents.repository"
 import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import {
@@ -18,12 +17,10 @@ import { assertFound, AuthService } from "./auth.service"
 export class RoomsService {
   private readonly authService: AuthService
   private readonly roomsRepository: RoomsRepository
-  private readonly residentsRepository: ResidentsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.roomsRepository = new RoomsRepository(db)
-    this.residentsRepository = new ResidentsRepository(db)
   }
 
   static async create() {
@@ -110,47 +107,51 @@ export class RoomsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    const [room, resident, activeResidentAllocation, roomAllocations] =
-      await Promise.all([
-        this.roomsRepository.getById(values.roomId, values.organizationId),
-        this.residentsRepository.getById(values.residentId, values.organizationId),
-        this.roomsRepository.getActiveAllocationForResident(
-          values.residentId,
-          values.organizationId
-        ),
-        this.roomsRepository.listActiveAllocations(values.roomId, values.organizationId),
-      ])
-
-    const existingRoom = assertFound(room, "Room not found.")
-    const existingResident = assertFound(resident, "Resident not found.")
-
-    if (
-      existingRoom.hostel_id !== values.hostelId ||
-      existingResident.hostel_id !== values.hostelId
-    ) {
-      throw conflict("Room and resident must belong to the same hostel.")
+    try {
+      return await this.roomsRepository.allocateRoomAtomic({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        roomId: values.roomId,
+        residentId: values.residentId,
+        bedLabel: values.bedLabel,
+        allocatedFrom: values.allocatedFrom,
+        allocatedTo: values.allocatedTo,
+        monthlyFeeAmount: values.monthlyFeeAmount,
+        reason: values.reason,
+        actorUserId: context.authUser.id,
+      })
+    } catch (error) {
+      throw mapRoomAllocationError(error)
     }
-
-    if (activeResidentAllocation) {
-      throw conflict("Resident already has an active room allocation.")
-    }
-
-    if (roomAllocations.length >= existingRoom.capacity) {
-      throw conflict("Room is already at full capacity.")
-    }
-
-    return this.roomsRepository.createAllocation({
-      organization_id: values.organizationId,
-      hostel_id: values.hostelId,
-      room_id: values.roomId,
-      resident_id: values.residentId,
-      bed_label: values.bedLabel,
-      allocated_from: values.allocatedFrom,
-      allocated_to: values.allocatedTo,
-      monthly_fee_amount: values.monthlyFeeAmount || existingRoom.base_monthly_fee,
-      reason: values.reason,
-      created_by: context.authUser.id,
-      updated_by: context.authUser.id,
-    })
   }
+}
+
+function mapRoomAllocationError(error: unknown): never {
+  const message = error instanceof Error ? error.message : ""
+
+  if (message.includes("room_capacity_exceeded")) {
+    throw conflict("Room is already at full capacity.")
+  }
+
+  if (message.includes("resident_already_allocated")) {
+    throw conflict("Resident already has an active room allocation.")
+  }
+
+  if (message.includes("room_not_allocatable")) {
+    throw conflict("Room is not available for allocation.")
+  }
+
+  if (message.includes("resident_not_allocatable")) {
+    throw conflict("Resident is not eligible for room allocation.")
+  }
+
+  if (message.includes("room_not_found")) {
+    throw conflict("Room not found.")
+  }
+
+  if (message.includes("resident_not_found")) {
+    throw conflict("Resident not found.")
+  }
+
+  throw error
 }

@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   Bath,
   Bed,
+  Camera,
   Cctv,
   Droplets,
   Info,
@@ -9,24 +10,41 @@ import {
   MessageCircle,
   ParkingCircle,
   Phone,
+  ShieldCheck,
   Sparkles,
+  ThermometerSun,
   Utensils,
+  WashingMachine,
   Wifi,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
-import { facilities } from "@/data/public"
+import { fallbackFacilities } from "@/constants/public-content"
+import type { FacilityItem } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
+  bath: Bath,
   Bath,
+  bed: Bed,
   Bed,
+  camera: Camera,
   Cctv,
+  cctv: Cctv,
+  droplets: Droplets,
   Droplets,
+  "map-pin": MapPin,
   MapPin,
+  "parking-circle": ParkingCircle,
   ParkingCircle,
+  "shield-check": ShieldCheck,
+  sparkles: Sparkles,
   Sparkles,
+  "thermometer-sun": ThermometerSun,
+  utensils: Utensils,
   Utensils,
+  "washing-machine": WashingMachine,
+  wifi: Wifi,
   Wifi,
 }
 
@@ -38,9 +56,13 @@ const extraFacilities = [
   },
 ]
 
-const allFacilities = [...facilities, ...extraFacilities]
+export function FacilitiesPageContent({
+  facilities = fallbackFacilities,
+}: {
+  facilities?: FacilityItem[]
+}) {
+  const allFacilities = [...facilities, ...extraFacilities]
 
-export function FacilitiesPageContent() {
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">

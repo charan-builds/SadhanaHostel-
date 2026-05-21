@@ -26,6 +26,7 @@ export function useRealtimeNotifications(options?: { enabled?: boolean }) {
 
   useRealtimeChannel({
     organizationId,
+    hostelId: defaultHostelId,
     event: "notification.created",
     enabled: options?.enabled,
     onEvent,

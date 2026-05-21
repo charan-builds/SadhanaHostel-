@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Loader2, Save } from "lucide-react"
+import type { ReactNode } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
+import { APIErrorState } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,59 +20,140 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { HOSTEL_FEES } from "@/constants/hostel"
+import { useAuth } from "@/lib/auth"
+import { FrontendApiError } from "@/lib/api-client"
+import { useCreateResident, useUpdateResident } from "@/hooks"
+import type { Tables } from "@/types/database"
 
 const residentFormSchema = z.object({
-  fullName: z.string().min(1, "Full name is required"),
-  phone: z.string().min(1, "Phone number is required"),
-  whatsappNumber: z.string().optional(),
-  residentType: z.enum(["student", "employee"], {
-    error: "Resident type is required",
-  }),
-  aadhaarNumber: z.string().optional(),
-  parentName: z.string().optional(),
-  parentPhone: z.string().optional(),
-  emergencyContact: z.string().optional(),
-  joiningDate: z.string().min(1, "Joining date is required"),
-  roomNumber: z.string().optional(),
-  feeAmount: z.number().positive("Fee amount is required"),
-  notes: z.string().optional(),
+  admissionNumber: z.string().trim().min(1, "Admission number is required."),
+  fullName: z.string().trim().min(2, "Full name is required."),
+  preferredName: z.string().trim().max(80).optional(),
+  residentType: z.enum(["student", "employee", "other"]),
+  gender: z.string().trim().max(40).optional(),
+  dateOfBirth: z.string().optional(),
+  phone: z.string().trim().max(20).optional(),
+  email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
+  parentName: z.string().trim().max(120).optional(),
+  parentPhone: z.string().trim().max(20).optional(),
+  parentEmail: z.string().trim().email("Enter a valid parent email.").optional().or(z.literal("")),
+  emergencyContactName: z.string().trim().max(120).optional(),
+  emergencyContactPhone: z.string().trim().max(20).optional(),
+  permanentAddress: z.string().trim().max(500).optional(),
+  monthlyFeeAmount: z.coerce.number().nonnegative(),
+  securityDepositAmount: z.coerce.number().nonnegative(),
+  notes: z.string().trim().max(1000).optional(),
+  status: z.enum(["draft", "active", "suspended", "checked_out", "archived"]).optional(),
 })
 
-type ResidentFormValues = z.infer<typeof residentFormSchema>
+type ResidentFormInput = z.input<typeof residentFormSchema>
+type ResidentFormValues = z.output<typeof residentFormSchema>
 
-const defaultValues: ResidentFormValues = {
-  fullName: "",
-  phone: "",
-  whatsappNumber: "",
-  residentType: "student",
-  aadhaarNumber: "",
-  parentName: "",
-  parentPhone: "",
-  emergencyContact: "",
-  joiningDate: "",
-  roomNumber: "",
-  feeAmount: HOSTEL_FEES.student,
-  notes: "",
+type ResidentFormProps = {
+  resident?: Tables<"residents">
+  onSaved?: (resident: Tables<"residents">) => void
+  onCancel?: () => void
 }
 
-export function ResidentForm() {
-  const [mockSubmitting, setMockSubmitting] = useState(false)
+export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps) {
+  const { organizationId, session } = useAuth()
+  const hostelId = resident?.hostel_id ?? session?.hostelIds[0] ?? null
+  const createResident = useCreateResident()
+  const updateResident = useUpdateResident()
   const {
     control,
     register,
     handleSubmit,
     setValue,
-    formState: { errors },
-  } = useForm<ResidentFormValues>({
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<ResidentFormInput, unknown, ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
-    defaultValues,
+    defaultValues: {
+      admissionNumber: resident?.admission_number ?? "",
+      fullName: resident?.full_name ?? "",
+      preferredName: resident?.preferred_name ?? "",
+      residentType: resident?.resident_type ?? "student",
+      gender: resident?.gender ?? "",
+      dateOfBirth: resident?.date_of_birth ?? "",
+      phone: resident?.phone ?? "",
+      email: resident?.email ?? "",
+      parentName: resident?.parent_name ?? "",
+      parentPhone: resident?.parent_phone ?? "",
+      parentEmail: resident?.parent_email ?? "",
+      emergencyContactName: resident?.emergency_contact_name ?? "",
+      emergencyContactPhone: resident?.emergency_contact_phone ?? "",
+      permanentAddress: resident?.permanent_address ?? "",
+      monthlyFeeAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
+      securityDepositAmount: resident?.security_deposit_amount ?? 0,
+      notes: resident?.notes ?? "",
+      status: resident?.status ?? "active",
+    },
   })
 
-  async function onSubmit() {
-    setMockSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 700))
-    setMockSubmitting(false)
-    toast.success("Resident saved in mock mode. Backend connection will be added later.")
+  async function onSubmit(values: ResidentFormValues) {
+    if (!organizationId || !hostelId) {
+      setError("root", {
+        message: "Your admin account is not assigned to an organization and hostel.",
+      })
+      return
+    }
+
+    try {
+      const savedResident = resident
+        ? await updateResident.mutateAsync({
+            residentId: resident.id,
+            organizationId,
+            fullName: values.fullName,
+            preferredName: values.preferredName || undefined,
+            residentType: values.residentType,
+            gender: values.gender || undefined,
+            dateOfBirth: values.dateOfBirth || undefined,
+            phone: values.phone || undefined,
+            email: values.email || undefined,
+            parentName: values.parentName || undefined,
+            parentPhone: values.parentPhone || undefined,
+            parentEmail: values.parentEmail || undefined,
+            emergencyContactName: values.emergencyContactName || undefined,
+            emergencyContactPhone: values.emergencyContactPhone || undefined,
+            permanentAddress: values.permanentAddress || undefined,
+            monthlyFeeAmount: values.monthlyFeeAmount,
+            securityDepositAmount: values.securityDepositAmount,
+            notes: values.notes || undefined,
+            status: values.status,
+          })
+        : await createResident.mutateAsync({
+            organizationId,
+            hostelId,
+            admissionNumber: values.admissionNumber,
+            fullName: values.fullName,
+            preferredName: values.preferredName || undefined,
+            residentType: values.residentType,
+            gender: values.gender || undefined,
+            dateOfBirth: values.dateOfBirth || undefined,
+            phone: values.phone || undefined,
+            email: values.email || undefined,
+            parentName: values.parentName || undefined,
+            parentPhone: values.parentPhone || undefined,
+            parentEmail: values.parentEmail || undefined,
+            emergencyContactName: values.emergencyContactName || undefined,
+            emergencyContactPhone: values.emergencyContactPhone || undefined,
+            permanentAddress: values.permanentAddress || undefined,
+            monthlyFeeAmount: values.monthlyFeeAmount,
+            securityDepositAmount: values.securityDepositAmount,
+            notes: values.notes || undefined,
+          })
+
+      toast.success(resident ? "Resident updated." : "Resident created.")
+      onSaved?.(savedResident)
+    } catch (error) {
+      setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Unable to save resident. Please try again.",
+      })
+    }
   }
 
   return (
@@ -79,35 +161,31 @@ export function ResidentForm() {
       <div>
         <h2 className="text-lg font-semibold text-foreground">Resident Information</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Add resident details for the future onboarding workflow. This form is UI-only.
+          Create or update resident profile data through the production API.
         </p>
       </div>
 
+      {errors.root?.message ? (
+        <div className="mt-5">
+          <APIErrorState title="Could not save resident" message={errors.root.message} />
+        </div>
+      ) : null}
+
       <div className="mt-6 grid gap-5 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="fullName">Full name</Label>
-          <Input id="fullName" {...register("fullName")} placeholder="Resident full name" />
-          {errors.fullName ? <p className="text-xs text-red-600">{errors.fullName.message}</p> : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="phone">Phone number</Label>
-          <Input id="phone" type="tel" {...register("phone")} placeholder="Phone number" />
-          {errors.phone ? <p className="text-xs text-red-600">{errors.phone.message}</p> : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="whatsappNumber">WhatsApp number</Label>
+        <Field id="admissionNumber" label="Admission number" error={errors.admissionNumber?.message}>
           <Input
-            id="whatsappNumber"
-            type="tel"
-            {...register("whatsappNumber")}
-            placeholder="WhatsApp number"
+            id="admissionNumber"
+            disabled={Boolean(resident)}
+            {...register("admissionNumber")}
           />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="residentType">Resident type</Label>
+        </Field>
+        <Field id="fullName" label="Full name" error={errors.fullName?.message}>
+          <Input id="fullName" autoComplete="name" {...register("fullName")} />
+        </Field>
+        <Field id="preferredName" label="Preferred name" error={errors.preferredName?.message}>
+          <Input id="preferredName" {...register("preferredName")} />
+        </Field>
+        <Field id="residentType" label="Resident type" error={errors.residentType?.message}>
           <Controller
             control={control}
             name="residentType"
@@ -116,11 +194,13 @@ export function ResidentForm() {
                 value={field.value}
                 onValueChange={(value) => {
                   field.onChange(value)
-                  setValue(
-                    "feeAmount",
-                    value === "employee" ? HOSTEL_FEES.employee : HOSTEL_FEES.student,
-                    { shouldValidate: true },
-                  )
+                  if (value === "student" || value === "employee") {
+                    setValue(
+                      "monthlyFeeAmount",
+                      value === "employee" ? HOSTEL_FEES.employee : HOSTEL_FEES.student,
+                      { shouldValidate: true }
+                    )
+                  }
                 }}
               >
                 <SelectTrigger id="residentType" className="h-9 w-full">
@@ -129,85 +209,81 @@ export function ResidentForm() {
                 <SelectContent>
                   <SelectItem value="student">Student</SelectItem>
                   <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             )}
           />
-          {errors.residentType ? (
-            <p className="text-xs text-red-600">{errors.residentType.message}</p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="aadhaarNumber">Aadhaar number</Label>
-          <Input id="aadhaarNumber" {...register("aadhaarNumber")} placeholder="Aadhaar number" />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="parentName">Parent name</Label>
-          <Input id="parentName" {...register("parentName")} placeholder="Parent name" />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="parentPhone">Parent phone</Label>
-          <Input id="parentPhone" type="tel" {...register("parentPhone")} placeholder="Parent phone" />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="emergencyContact">Emergency contact</Label>
-          <Input
-            id="emergencyContact"
-            type="tel"
-            {...register("emergencyContact")}
-            placeholder="Emergency contact"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="joiningDate">Joining date</Label>
-          <Input id="joiningDate" type="date" {...register("joiningDate")} />
-          {errors.joiningDate ? (
-            <p className="text-xs text-red-600">{errors.joiningDate.message}</p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="roomNumber">Room selection</Label>
-          <Input id="roomNumber" {...register("roomNumber")} placeholder="Example: S-204" />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="feeAmount">Fee amount</Label>
-          <Input id="feeAmount" type="number" {...register("feeAmount", { valueAsNumber: true })} />
-          {errors.feeAmount ? (
-            <p className="text-xs text-red-600">{errors.feeAmount.message}</p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-2 md:col-span-2">
-          <Label htmlFor="notes">Notes</Label>
-          <Textarea
-            id="notes"
-            {...register("notes")}
-            placeholder="Resident notes or onboarding context"
-            className="min-h-28"
-          />
-        </div>
+        </Field>
+        <Field id="phone" label="Phone" error={errors.phone?.message}>
+          <Input id="phone" type="tel" autoComplete="tel" {...register("phone")} />
+        </Field>
+        <Field id="email" label="Email" error={errors.email?.message}>
+          <Input id="email" type="email" autoComplete="email" {...register("email")} />
+        </Field>
+        <Field id="parentName" label="Parent name" error={errors.parentName?.message}>
+          <Input id="parentName" {...register("parentName")} />
+        </Field>
+        <Field id="parentPhone" label="Parent phone" error={errors.parentPhone?.message}>
+          <Input id="parentPhone" type="tel" {...register("parentPhone")} />
+        </Field>
+        <Field id="emergencyContactName" label="Emergency contact name" error={errors.emergencyContactName?.message}>
+          <Input id="emergencyContactName" {...register("emergencyContactName")} />
+        </Field>
+        <Field id="emergencyContactPhone" label="Emergency contact phone" error={errors.emergencyContactPhone?.message}>
+          <Input id="emergencyContactPhone" type="tel" {...register("emergencyContactPhone")} />
+        </Field>
+        <Field id="monthlyFeeAmount" label="Monthly fee" error={errors.monthlyFeeAmount?.message}>
+          <Input id="monthlyFeeAmount" type="number" {...register("monthlyFeeAmount")} />
+        </Field>
+        <Field id="securityDepositAmount" label="Security deposit" error={errors.securityDepositAmount?.message}>
+          <Input id="securityDepositAmount" type="number" {...register("securityDepositAmount")} />
+        </Field>
+        <Field id="permanentAddress" label="Permanent address" error={errors.permanentAddress?.message} className="md:col-span-2">
+          <Textarea id="permanentAddress" className="min-h-24" {...register("permanentAddress")} />
+        </Field>
+        <Field id="notes" label="Notes" error={errors.notes?.message} className="md:col-span-2">
+          <Textarea id="notes" className="min-h-24" {...register("notes")} />
+        </Field>
       </div>
 
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline">
-          Cancel Placeholder
-        </Button>
-        <Button type="submit" disabled={mockSubmitting}>
-          {mockSubmitting ? (
+        {onCancel ? (
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        ) : null}
+        <Button type="submit" disabled={isSubmitting || createResident.isPending || updateResident.isPending}>
+          {isSubmitting || createResident.isPending || updateResident.isPending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           ) : (
             <Save className="size-4" aria-hidden="true" />
           )}
-          Save Resident
+          {resident ? "Update Resident" : "Save Resident"}
         </Button>
       </div>
     </form>
+  )
+}
+
+function Field({
+  id,
+  label,
+  error,
+  className,
+  children,
+}: {
+  id: string
+  label: string
+  error?: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={className ? `grid gap-2 ${className}` : "grid gap-2"}>
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
   )
 }

@@ -58,7 +58,21 @@ export const residentIdMutationSchema = z.object({
   organizationId: uuidSchema,
 })
 
+export const updateOwnResidentProfileSchema = z.object({
+  organizationId: uuidSchema,
+  preferredName: z.string().trim().max(80).optional(),
+  phone: phoneSchema.optional(),
+  email: optionalEmailSchema,
+  parentName: z.string().trim().max(120).optional(),
+  parentPhone: phoneSchema.optional(),
+  parentEmail: optionalEmailSchema,
+  emergencyContactName: z.string().trim().max(120).optional(),
+  emergencyContactPhone: phoneSchema.optional(),
+  permanentAddress: z.string().trim().max(500).optional(),
+})
+
 export type ResidentListInput = z.infer<typeof residentListSchema>
 export type CreateResidentInput = z.infer<typeof createResidentSchema>
 export type UpdateResidentInput = z.infer<typeof updateResidentSchema>
 export type ResidentIdMutationInput = z.infer<typeof residentIdMutationSchema>
+export type UpdateOwnResidentProfileInput = z.infer<typeof updateOwnResidentProfileSchema>

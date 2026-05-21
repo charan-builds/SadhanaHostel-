@@ -9,6 +9,7 @@ import {
   createResidentSchema,
   residentIdMutationSchema,
   residentListSchema,
+  updateOwnResidentProfileSchema,
   updateResidentSchema,
 } from "@/validations/resident.validation"
 
@@ -51,6 +52,24 @@ export class ResidentsService {
     }
 
     return assertFound(resident, "Resident not found.")
+  }
+
+  async getCurrentResident(organizationId?: string) {
+    const context = await this.authService.getCurrentContext()
+    const targetOrganizationId = organizationId ?? context.organizationId
+
+    if (!targetOrganizationId) {
+      throw forbidden("Your account is not assigned to an organization yet.")
+    }
+
+    this.authService.requireOrganizationAccess(context, targetOrganizationId)
+
+    const resident = await this.residentsRepository.getByUserId(
+      context.authUser.id,
+      targetOrganizationId
+    )
+
+    return assertFound(resident, "Resident profile is not linked to this account yet.")
   }
 
   async createResident(input: unknown) {
@@ -108,6 +127,31 @@ export class ResidentsService {
       security_deposit_amount: values.securityDepositAmount,
       notes: values.notes,
       status: values.status,
+      updated_by: context.authUser.id,
+    })
+  }
+
+  async updateCurrentResident(input: unknown) {
+    const values = updateOwnResidentProfileSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const resident = assertFound(
+      await this.residentsRepository.getByUserId(context.authUser.id, values.organizationId),
+      "Resident profile is not linked to this account yet."
+    )
+
+    return this.residentsRepository.update(resident.id, values.organizationId, {
+      preferred_name: values.preferredName,
+      phone: values.phone,
+      email: values.email,
+      parent_name: values.parentName,
+      parent_phone: values.parentPhone,
+      parent_email: values.parentEmail,
+      emergency_contact_name: values.emergencyContactName,
+      emergency_contact_phone: values.emergencyContactPhone,
+      permanent_address: values.permanentAddress,
       updated_by: context.authUser.id,
     })
   }

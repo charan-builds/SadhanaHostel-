@@ -26,6 +26,7 @@ export function useRealtimeLeaves(options?: { enabled?: boolean }) {
 
   useRealtimeChannel({
     organizationId,
+    hostelId: defaultHostelId,
     event: "leave.status_changed",
     enabled: options?.enabled,
     onEvent,

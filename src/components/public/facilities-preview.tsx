@@ -3,31 +3,52 @@ import type { LucideIcon } from "lucide-react"
 import {
   Bath,
   Bed,
+  Camera,
   Cctv,
   Droplets,
   ParkingCircle,
+  ShieldCheck,
   Sparkles,
+  ThermometerSun,
   Utensils,
+  WashingMachine,
   Wifi,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { facilities } from "@/data/public"
+import { fallbackFacilities } from "@/constants/public-content"
+import type { FacilityItem } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
+  bath: Bath,
   Bath,
+  bed: Bed,
   Bed,
+  camera: Camera,
   Cctv,
+  cctv: Cctv,
+  droplets: Droplets,
   Droplets,
+  "parking-circle": ParkingCircle,
   ParkingCircle,
+  "shield-check": ShieldCheck,
+  sparkles: Sparkles,
   Sparkles,
+  "thermometer-sun": ThermometerSun,
+  utensils: Utensils,
   Utensils,
+  "washing-machine": WashingMachine,
+  wifi: Wifi,
   Wifi,
 }
 
-const selectedFacilities = facilities.slice(0, 6)
+export function FacilitiesPreview({
+  facilities = fallbackFacilities,
+}: {
+  facilities?: FacilityItem[]
+}) {
+  const selectedFacilities = facilities.slice(0, 6)
 
-export function FacilitiesPreview() {
   return (
     <section className="bg-slate-50 py-14 sm:py-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">

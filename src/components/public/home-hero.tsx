@@ -2,7 +2,8 @@ import { Building2, CheckCircle2, MapPin, MessageCircle, Navigation, Phone } fro
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
-import { roomTypes } from "@/data/public"
+import { fallbackRoomTypes } from "@/constants/public-content"
+import type { RoomTypeCard } from "@/types/frontend"
 
 const trustBadges = [
   hostelConfig.location.note,
@@ -10,7 +11,15 @@ const trustBadges = [
   "Students and employees welcome",
 ] as const
 
-export function HomeHero() {
+export function HomeHero({
+  heroTitle = hostelConfig.name,
+  heroSubtitle = `Safe, neat, and affordable accommodation for students and working professionals in ${hostelConfig.location.city}.`,
+  roomTypes = fallbackRoomTypes,
+}: {
+  heroTitle?: string | null
+  heroSubtitle?: string | null
+  roomTypes?: RoomTypeCard[]
+}) {
   return (
     <section className="relative overflow-hidden border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_72%)]">
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgba(15,23,42,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)] bg-[size:44px_44px]" />
@@ -23,12 +32,11 @@ export function HomeHero() {
           </p>
 
           <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 text-balance sm:text-5xl lg:text-6xl">
-            {hostelConfig.name}
+            {heroTitle || hostelConfig.name}
           </h1>
 
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
-            Safe, neat, and affordable accommodation for students and working professionals in{" "}
-            {hostelConfig.location.city}.
+            {heroSubtitle}
           </p>
 
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">

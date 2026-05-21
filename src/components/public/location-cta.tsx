@@ -42,7 +42,7 @@ export function LocationCta() {
                 <MapPin className="size-6" aria-hidden="true" />
               </span>
               <h3 className="mt-4 text-lg font-semibold text-slate-950">
-                Map preview placeholder
+                Open location map
               </h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 Use the navigation button to open the exact hostel location.

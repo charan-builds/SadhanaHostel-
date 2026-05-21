@@ -1,4 +1,5 @@
 export * from "./auth.validation"
+export * from "./admission.validation"
 export * from "./common.validation"
 export * from "./leave.validation"
 export * from "./notice.validation"

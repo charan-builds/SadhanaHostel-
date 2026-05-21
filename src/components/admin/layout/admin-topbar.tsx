@@ -1,6 +1,10 @@
 "use client"
 
+import { useMemo, useState } from "react"
+import type { Route } from "next"
+import { useRouter } from "next/navigation"
 import { Bell, LogOut, Search } from "lucide-react"
+import { toast } from "sonner"
 
 import { AdminMobileSidebar } from "@/components/admin/layout/admin-mobile-sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -15,14 +19,43 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-
-const mockAdminUser = {
-  name: "Hostel Admin",
-  role: "Admin",
-  email: "admin@sadhanahostel.com",
-} as const
+import { useAuth } from "@/lib/auth"
+import { humanizeEnum } from "@/lib/format"
+import { authSdk } from "@/sdk"
 
 export function AdminTopbar() {
+  const router = useRouter()
+  const { session, refreshSession } = useAuth()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const profile = session?.profile
+  const displayName = profile?.full_name ?? session?.user?.email ?? "Admin"
+  const displayEmail = profile?.email ?? session?.user?.email ?? "Signed in"
+  const roleLabel = session?.primaryRole ? humanizeEnum(session.primaryRole) : "Admin"
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "A",
+    [displayName]
+  )
+
+  async function logout() {
+    setIsLoggingOut(true)
+
+    try {
+      await authSdk.logout()
+      await refreshSession()
+      router.replace("/login" as Route)
+    } catch {
+      toast.error("Logout failed. Please try again.")
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
     <header className="sticky top-0 z-20 border-b bg-white/90 backdrop-blur-xl">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
@@ -56,30 +89,30 @@ export function AdminTopbar() {
                 aria-label="Open admin profile menu"
               >
                 <Avatar>
-                  <AvatarFallback>HA</AvatarFallback>
+                  <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <span className="hidden text-left md:block">
-                  <span className="block text-sm font-medium leading-4">{mockAdminUser.name}</span>
+                  <span className="block text-sm font-medium leading-4">{displayName}</span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {mockAdminUser.email}
+                    {displayEmail}
                   </span>
                 </span>
                 <Badge variant="secondary" className="hidden md:inline-flex">
-                  {mockAdminUser.role}
+                  {roleLabel}
                 </Badge>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>
-                <span className="block text-sm text-foreground">{mockAdminUser.name}</span>
+                <span className="block text-sm text-foreground">{displayName}</span>
                 <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                  {mockAdminUser.email}
+                  {displayEmail}
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled={isLoggingOut} onClick={() => void logout()}>
                 <LogOut className="size-4" aria-hidden="true" />
-                Logout placeholder
+                {isLoggingOut ? "Logging out..." : "Logout"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

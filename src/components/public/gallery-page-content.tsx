@@ -4,21 +4,28 @@ import { useMemo, useState } from "react"
 import { Building2, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { galleryItems } from "@/data/public"
+import { fallbackGalleryItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
+import type { GalleryItem } from "@/types/frontend"
 
-const categories = ["All", ...galleryItems.map((item) => item.title)] as const
-
-export function GalleryPageContent() {
-  const [activeCategory, setActiveCategory] = useState<(typeof categories)[number]>("All")
+export function GalleryPageContent({
+  galleryItems = fallbackGalleryItems,
+}: {
+  galleryItems?: GalleryItem[]
+}) {
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(galleryItems.map((item) => item.category)))],
+    [galleryItems]
+  )
+  const [activeCategory, setActiveCategory] = useState("All")
 
   const visibleItems = useMemo(() => {
     if (activeCategory === "All") {
       return galleryItems
     }
 
-    return galleryItems.filter((item) => item.title === activeCategory)
-  }, [activeCategory])
+    return galleryItems.filter((item) => item.category === activeCategory)
+  }, [activeCategory, galleryItems])
 
   return (
     <main className="flex flex-1 flex-col bg-white">
@@ -26,11 +33,11 @@ export function GalleryPageContent() {
         <div className="mx-auto max-w-7xl">
           <p className="text-sm font-medium text-blue-700">Gallery</p>
           <h1 className="mt-3 max-w-4xl text-4xl font-semibold text-slate-950 text-balance sm:text-5xl">
-            Hostel spaces, ready for future photo uploads.
+            Hostel spaces and published media.
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            Browse placeholder categories for exterior, courtyard, rooms, bathrooms, dining, and
-            terrace views. The structure is ready for real media later.
+            Browse exterior, room, facility, dining, and common-area photos published by hostel
+            management.
           </p>
         </div>
       </section>

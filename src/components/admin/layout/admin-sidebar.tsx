@@ -5,7 +5,9 @@ import type { Route } from "next"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  BedDouble,
   Building2,
+  CalendarCheck,
   CalendarDays,
   ClipboardList,
   CreditCard,
@@ -13,6 +15,7 @@ import {
   Globe,
   LayoutDashboard,
   Settings,
+  UserRoundPlus,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -29,6 +32,9 @@ export type AdminNavigationItem = {
 
 export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
+  { title: "Reservations", href: "/admin/reservations", icon: CalendarCheck },
+  { title: "Vacancy", href: "/admin/vacancy", icon: BedDouble },
   { title: "Residents", href: "/admin/residents", icon: Users },
   { title: "Rooms", href: "/admin/rooms", icon: Building2 },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },

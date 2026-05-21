@@ -2,11 +2,16 @@ import Link from "next/link"
 import { Building2, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { galleryItems } from "@/data/public"
+import { fallbackGalleryItems } from "@/constants/public-content"
+import type { GalleryItem } from "@/types/frontend"
 
-const previewItems = galleryItems.slice(0, 4)
+export function GalleryPreview({
+  galleryItems = fallbackGalleryItems,
+}: {
+  galleryItems?: GalleryItem[]
+}) {
+  const previewItems = galleryItems.slice(0, 4)
 
-export function GalleryPreview() {
   return (
     <section className="bg-white py-14 sm:py-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">

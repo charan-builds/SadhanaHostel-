@@ -48,6 +48,7 @@ This folder documents the internal REST-style API surface for the Sadhana Boys H
 | Notices | `/api/notices` | Organization scoped |
 | Website CMS | `/api/website` | Public read, admin write |
 | Uploads | `/api/uploads` | Authenticated |
+| Health | `/api/health` | Public deployment checks |
 
 ## Future OpenAPI Plan
 

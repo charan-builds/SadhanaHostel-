@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs"
+
 import { getCurrentAccessToken } from "./auth-token"
 import { buildApiUrl, createRequestId, type QueryParams } from "./request-builder"
 
@@ -114,13 +116,26 @@ async function executeApiFetch<TData, TBody>(
         }
       : payload.error
 
-    throw new FrontendApiError({
+    const apiError = new FrontendApiError({
       code: error.code,
       message: error.message,
       status: response.status,
       requestId: error.requestId ?? responseRequestId,
       details: "details" in error ? error.details : undefined,
     })
+
+    Sentry.captureException(apiError, {
+      tags: {
+        request_id: apiError.requestId,
+        api_path: path,
+        api_status: String(response.status),
+      },
+      extra: {
+        code: apiError.code,
+      },
+    })
+
+    throw apiError
   }
 
   return payload.data

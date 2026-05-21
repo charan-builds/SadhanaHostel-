@@ -32,6 +32,7 @@ export function useRealtimePayments(options?: { enabled?: boolean }) {
 
   useRealtimeChannel({
     organizationId,
+    hostelId: defaultHostelId,
     event: "payment.status_changed",
     enabled: options?.enabled,
     onEvent,

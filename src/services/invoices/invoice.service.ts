@@ -142,20 +142,15 @@ export class InvoicesService {
         },
       },
       async () => {
-        const existingInvoice = await this.invoicesRepository.findByFeeRecord(
+        const invoice = await this.invoicesRepository.createMonthlyFeeInvoiceAtomic(
+          values.organizationId,
           values.monthlyFeeRecordId,
-          values.organizationId
+          context.authUser.id
         )
-
-        if (existingInvoice?.pdf_storage_path) {
-          return existingInvoice
-        }
-
         const invoiceContext = await this.loadMonthlyFeeInvoiceContext(
           values.organizationId,
           values.monthlyFeeRecordId
         )
-        const invoice = existingInvoice ?? (await this.createInvoiceRecord(invoiceContext, context.authUser.id))
         const invoiceWithPdf = await this.ensureInvoicePdf(invoice, invoiceContext, context.authUser.id)
 
         logAuditEvent({
@@ -240,71 +235,6 @@ export class InvoicesService {
       hostel: assertFound(hostel, "Hostel not found."),
       resident: assertFound(resident, "Resident not found."),
     }
-  }
-
-  private async createInvoiceRecord(
-    context: {
-      organization: OrganizationRow
-      hostel: HostelRow
-      resident: ResidentRow
-      feeRecord: MonthlyFeeRecordRow
-    },
-    actorUserId: string
-  ) {
-    const issueMonth = new Date().toISOString().slice(0, 7)
-    const sequence =
-      (await this.invoicesRepository.countIssuedInvoicesForMonth(
-        context.organization.id,
-        issueMonth
-      )) + 1
-    const invoiceNumber = createInvoiceNumber({
-      organizationSlug: context.organization.slug,
-      sequence,
-    })
-    const storagePath = buildInvoiceStoragePath({
-      organizationId: context.organization.id,
-      hostelId: context.hostel.id,
-      residentId: context.resident.id,
-      invoiceNumber,
-    })
-
-    return this.invoicesRepository.create({
-      organization_id: context.organization.id,
-      hostel_id: context.hostel.id,
-      resident_id: context.resident.id,
-      monthly_fee_record_id: context.feeRecord.id,
-      invoice_number: invoiceNumber,
-      issue_date: new Date().toISOString().slice(0, 10),
-      due_date: context.feeRecord.due_date,
-      subtotal_amount:
-        context.feeRecord.base_amount +
-        context.feeRecord.penalty_amount +
-        context.feeRecord.adjustment_amount,
-      discount_amount:
-        context.feeRecord.discount_amount +
-        context.feeRecord.advance_adjustment_amount,
-      tax_amount: 0,
-      total_amount: context.feeRecord.total_amount,
-      paid_amount: context.feeRecord.paid_amount,
-      balance_amount: context.feeRecord.balance_amount,
-      status:
-        context.feeRecord.balance_amount <= 0
-          ? "paid"
-          : context.feeRecord.paid_amount > 0
-            ? "partially_paid"
-            : "issued",
-      pdf_storage_path: storagePath,
-      metadata: createInvoiceMetadata({
-        organizationId: context.organization.id,
-        hostelId: context.hostel.id,
-        residentId: context.resident.id,
-        periodMonth: context.feeRecord.period_month,
-        generatedByUserId: actorUserId,
-        source: "monthly_fee",
-      }),
-      created_by: actorUserId,
-      updated_by: actorUserId,
-    })
   }
 
   private async ensureInvoicePdf(

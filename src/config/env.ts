@@ -8,14 +8,37 @@ const booleanEnvSchema = (defaultValue: "true" | "false" = "true") =>
 
 const logLevelSchema = z.enum(["debug", "info", "warn", "error"]).default("info")
 
+const PLACEHOLDER_ENV_MARKERS = [
+  "your-project-ref",
+  "your-staging-project-ref",
+  "your-supabase-anon-key",
+  "your-staging-supabase-anon-key",
+  "your-supabase-service-role-key",
+  "your-staging-supabase-service-role-key",
+]
+
+export function isPlaceholderEnvValue(value: string) {
+  return PLACEHOLDER_ENV_MARKERS.some((marker) => value.toLowerCase().includes(marker))
+}
+
+const configuredString = (name: string) =>
+  z
+    .string()
+    .min(1)
+    .refine((value) => !isPlaceholderEnvValue(value), {
+      message: `${name} must be configured with a real value, not a placeholder`,
+    })
+
 const publicEnvSchema = z.object({
-  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3002"),
+  NEXT_PUBLIC_SUPABASE_URL: configuredString("NEXT_PUBLIC_SUPABASE_URL").pipe(
+    z.string().url()
+  ),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: configuredString("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
 })
 
 const serverEnvSchema = publicEnvSchema.extend({
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: configuredString("SUPABASE_SERVICE_ROLE_KEY"),
   LOG_LEVEL: logLevelSchema,
   RATE_LIMIT_ENABLED: booleanEnvSchema("true"),
   NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),

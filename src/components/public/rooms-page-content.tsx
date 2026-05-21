@@ -3,11 +3,14 @@ import { BriefcaseBusiness, CheckCircle2, GraduationCap, MessageCircle, Phone } 
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
-import { roomTypes } from "@/data/public"
+import { fallbackRoomTypes } from "@/constants/public-content"
+import type { RoomTypeCard } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
   BriefcaseBusiness,
+  "briefcase-business": BriefcaseBusiness,
   GraduationCap,
+  "graduation-cap": GraduationCap,
 }
 
 const comparisonRows = [
@@ -17,7 +20,11 @@ const comparisonRows = [
   ["Extra facilities", "Daily essentials", "Attached bathroom facilities and cots can be provided"],
 ] as const
 
-export function RoomsPageContent() {
+export function RoomsPageContent({
+  roomTypes = fallbackRoomTypes,
+}: {
+  roomTypes?: RoomTypeCard[]
+}) {
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">

@@ -49,6 +49,26 @@ export class UploadsRepository {
     return data
   }
 
+  async findLatestPaymentProof(organizationId: string, paymentId: string) {
+    const { data, error } = await this.db
+      .from("documents")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("payment_id", paymentId)
+      .eq("document_type", "payment_receipt")
+      .neq("status", "rejected")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load payment proof.")
+    }
+
+    return data
+  }
+
   async removeObject(bucketName: string, storagePath: string) {
     const { error } = await this.db.storage.from(bucketName).remove([storagePath])
 

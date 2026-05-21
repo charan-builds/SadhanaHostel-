@@ -4,6 +4,7 @@ import type {
   CreateResidentInput,
   ResidentIdMutationInput,
   ResidentListInput,
+  UpdateOwnResidentProfileInput,
   UpdateResidentInput,
 } from "@/validations/resident.validation"
 
@@ -23,6 +24,12 @@ export const residentsSdk = {
     })
   },
 
+  me(organizationId: string) {
+    return apiClient.get<Tables<"residents">>("/api/residents/me", {
+      organizationId,
+    })
+  },
+
   create(input: CreateResidentInput) {
     return apiClient.post<Tables<"residents">, CreateResidentInput>(
       "/api/residents",
@@ -36,6 +43,13 @@ export const residentsSdk = {
     return apiClient.patch<Tables<"residents">, Omit<UpdateResidentInput, "residentId">>(
       `/api/residents/${residentId}`,
       body
+    )
+  },
+
+  updateMe(input: UpdateOwnResidentProfileInput) {
+    return apiClient.patch<Tables<"residents">, UpdateOwnResidentProfileInput>(
+      "/api/residents/me",
+      input
     )
   },
 

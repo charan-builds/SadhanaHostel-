@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/scripts/load-testing/last-summary.json
+/scripts/load-testing/last-summary.md
 
 # next.js
 /.next/
@@ -33,6 +35,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.staging.example
 
 # vercel
 .vercel
@@ -40,4 +43,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env.example
+.env.local
+.env.staging
+.env.production
+# Sentry Config File
+.env.sentry-build-plugin

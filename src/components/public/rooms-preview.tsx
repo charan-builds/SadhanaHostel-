@@ -3,14 +3,21 @@ import type { LucideIcon } from "lucide-react"
 import { BriefcaseBusiness, CheckCircle2, GraduationCap } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { roomTypes } from "@/data/public"
+import { fallbackRoomTypes } from "@/constants/public-content"
+import type { RoomTypeCard } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
   BriefcaseBusiness,
+  "briefcase-business": BriefcaseBusiness,
   GraduationCap,
+  "graduation-cap": GraduationCap,
 }
 
-export function RoomsPreview() {
+export function RoomsPreview({
+  roomTypes = fallbackRoomTypes,
+}: {
+  roomTypes?: RoomTypeCard[]
+}) {
   return (
     <section className="bg-white py-14 sm:py-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">

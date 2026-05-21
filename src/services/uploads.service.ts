@@ -5,11 +5,13 @@ import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import type { Database } from "@/types/database"
 import {
+  paymentProofLookupSchema,
   uploadDocumentSchema,
   uploadPaymentProofSchema,
   uploadProfilePhotoSchema,
@@ -33,11 +35,13 @@ type DocumentType = Database["public"]["Enums"]["document_type_enum"]
 
 export class UploadsService {
   private readonly authService: AuthService
+  private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
   private readonly uploadsRepository: UploadsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
+    this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
     this.uploadsRepository = new UploadsRepository(db)
   }
@@ -50,6 +54,10 @@ export class UploadsService {
 
   async uploadDocument(input: unknown, file: File) {
     const values = uploadDocumentSchema.parse(input)
+
+    if (values.documentType === "payment_receipt") {
+      throw badRequest("Payment proof must be uploaded through the payment proof endpoint.")
+    }
 
     return this.uploadResidentFile({
       ...values,
@@ -88,6 +96,57 @@ export class UploadsService {
     })
   }
 
+  async getPaymentProofSignedUrl(input: unknown) {
+    const values = paymentProofLookupSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const payment = assertFound(
+      await this.paymentsRepository.getById(values.paymentId, values.organizationId),
+      "Payment not found."
+    )
+    const proof = assertFound(
+      await this.uploadsRepository.findLatestPaymentProof(
+        values.organizationId,
+        values.paymentId
+      ),
+      "Payment proof not found."
+    )
+    const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+
+    if (!isAdmin) {
+      const resident = await this.residentsRepository.getByUserId(
+        context.authUser.id,
+        values.organizationId
+      )
+
+      if (!resident || resident.id !== payment.resident_id) {
+        throw forbidden("Residents can only access their own payment proof.")
+      }
+    }
+
+    if (
+      proof.resident_id !== payment.resident_id ||
+      proof.organization_id !== payment.organization_id
+    ) {
+      throw forbidden("Payment proof ownership does not match the payment.")
+    }
+
+    const signedUrl = await this.uploadsRepository.createSignedUrl(
+      proof.bucket_name,
+      proof.storage_path,
+      values.expiresInSeconds
+    )
+
+    return {
+      document: proof,
+      paymentId: payment.id,
+      signedUrl,
+      expiresInSeconds: values.expiresInSeconds,
+    }
+  }
+
   private async uploadResidentFile(input: {
     organizationId: string
     hostelId?: string
@@ -114,6 +173,24 @@ export class UploadsService {
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only upload their own files.")
+    }
+
+    if (input.paymentId) {
+      const payment = assertFound(
+        await this.paymentsRepository.getById(input.paymentId, input.organizationId),
+        "Payment not found."
+      )
+
+      if (
+        payment.resident_id !== input.residentId ||
+        payment.hostel_id !== (input.hostelId ?? existingResident.hostel_id)
+      ) {
+        throw forbidden("Payment proof must belong to the same resident and hostel.")
+      }
+
+      if (payment.status === "verified") {
+        throw badRequest("Verified payments cannot accept new proof uploads.")
+      }
     }
 
     const storagePath = this.buildResidentStoragePath(
@@ -145,6 +222,20 @@ export class UploadsService {
         created_by: context.authUser.id,
         updated_by: context.authUser.id,
       })
+
+      if (input.documentType === "aadhaar" || input.documentType === "profile_image") {
+        await this.residentsRepository.update(input.residentId, input.organizationId, {
+          aadhaar_document_id:
+            input.documentType === "aadhaar"
+              ? document.id
+              : existingResident.aadhaar_document_id,
+          profile_image_document_id:
+            input.documentType === "profile_image"
+              ? document.id
+              : existingResident.profile_image_document_id,
+          updated_by: context.authUser.id,
+        })
+      }
 
       const signedUrl = await this.uploadsRepository.createSignedUrl(
         input.bucketName,

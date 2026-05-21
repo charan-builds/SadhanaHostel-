@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { UploadsRepository } from "@/repositories/uploads.repository"
 import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
@@ -23,6 +24,7 @@ export class PaymentsService {
   private readonly authService: AuthService
   private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
+  private readonly uploadsRepository: UploadsRepository
   private readonly notificationService: NotificationService
   private readonly realtimeService: RealtimeService
 
@@ -30,6 +32,7 @@ export class PaymentsService {
     this.authService = new AuthService(db)
     this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.uploadsRepository = new UploadsRepository(db)
     this.notificationService = new NotificationService(db)
     this.realtimeService = new RealtimeService(db)
   }
@@ -277,6 +280,19 @@ export class PaymentsService {
 
     if (existingPayment.status === "verified") {
       throw conflict("Payment is already verified.")
+    }
+
+    const proof = await this.uploadsRepository.findLatestPaymentProof(
+      values.organizationId,
+      values.paymentId
+    )
+
+    if (!proof) {
+      throw conflict("Payment proof is required before verification.")
+    }
+
+    if (proof.resident_id !== existingPayment.resident_id) {
+      throw conflict("Payment proof ownership does not match this payment.")
     }
 
     const verifiedPayment = await this.paymentsRepository.verify(

@@ -145,9 +145,7 @@ alter table public.payments
   add column if not exists search_vector tsvector generated always as (
     setweight(to_tsvector('english', coalesce(transaction_id, '')), 'A') ||
     setweight(to_tsvector('english', coalesce(manual_reference, '')), 'B') ||
-    setweight(to_tsvector('english', coalesce(provider_reference, '')), 'B') ||
-    setweight(to_tsvector('english', coalesce(status::text, '')), 'C') ||
-    setweight(to_tsvector('english', coalesce(method::text, '')), 'C')
+    setweight(to_tsvector('english', coalesce(provider_reference, '')), 'B')
   ) stored;
 
 create index if not exists residents_search_vector_gin_idx

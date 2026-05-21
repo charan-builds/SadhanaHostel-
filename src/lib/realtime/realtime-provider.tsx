@@ -19,7 +19,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     () => ({
       organizationId,
       defaultHostelId,
-      channelName: organizationId ? buildTenantChannelName(organizationId) : null,
+      channelName: organizationId
+        ? buildTenantChannelName(organizationId, defaultHostelId)
+        : null,
     }),
     [defaultHostelId, organizationId]
   )

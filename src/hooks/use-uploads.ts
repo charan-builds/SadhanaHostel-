@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query"
 
 import { uploadsSdk, type UploadProgress } from "@/sdk"
 import type {
+  PaymentProofLookupInput,
   UploadDocumentInput,
   UploadPaymentProofInput,
   UploadProfilePhotoInput,
@@ -24,6 +25,13 @@ export function usePaymentProofUpload(options?: {
   return useMutation({
     mutationFn: ({ input, file }: { input: UploadPaymentProofInput; file: File }) =>
       uploadsSdk.paymentProof(input, file, { onProgress: options?.onProgress }),
+  })
+}
+
+export function usePaymentProofPreview() {
+  return useMutation({
+    mutationFn: (input: PaymentProofLookupInput) =>
+      uploadsSdk.paymentProofPreview(input),
   })
 }
 

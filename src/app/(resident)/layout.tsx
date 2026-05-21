@@ -1,12 +1,18 @@
 import type { ReactNode } from "react"
 
 import { DashboardShell } from "@/components/layout/dashboard-shell"
+import { SessionProviders } from "@/components/providers/app-providers"
 import { residentNavigation } from "@/constants/navigation"
-import { RouteGuard } from "@/lib/auth"
+import { requireProtectedRoute } from "@/lib/auth/server-route-guard"
 
-export default function ResidentLayout({ children }: { children: ReactNode }) {
+export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+
+export default async function ResidentLayout({ children }: { children: ReactNode }) {
+  await requireProtectedRoute("resident")
+
   return (
-    <RouteGuard area="resident">
+    <SessionProviders>
       <DashboardShell
         area="resident"
         title="Resident Portal"
@@ -15,6 +21,6 @@ export default function ResidentLayout({ children }: { children: ReactNode }) {
       >
         {children}
       </DashboardShell>
-    </RouteGuard>
+    </SessionProviders>
   )
 }

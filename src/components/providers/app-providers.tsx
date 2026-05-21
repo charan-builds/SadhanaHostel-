@@ -8,15 +8,22 @@ import { AuthProvider } from "@/lib/auth"
 import { AppQueryProvider } from "@/lib/react-query"
 import { RealtimeProvider } from "@/lib/realtime"
 
+import { SentryContextSync } from "./sentry-context-sync"
+
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AppQueryProvider>
-      <AuthProvider>
-        <RealtimeProvider>
-          <ErrorBoundary>{children}</ErrorBoundary>
-        </RealtimeProvider>
-      </AuthProvider>
+      <ErrorBoundary>{children}</ErrorBoundary>
       <Toaster richColors closeButton />
     </AppQueryProvider>
+  )
+}
+
+export function SessionProviders({ children }: { children: ReactNode }) {
+  return (
+    <AuthProvider>
+      <SentryContextSync />
+      <RealtimeProvider>{children}</RealtimeProvider>
+    </AuthProvider>
   )
 }

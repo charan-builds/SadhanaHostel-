@@ -8,7 +8,6 @@ export default function NewResidentPage() {
       <PageHeader
         title="Add Resident"
         description="Create a new resident profile with room, guardian, fee, and contact details."
-        badge="UI only"
       />
       <ResidentForm />
     </ResponsiveContainer>

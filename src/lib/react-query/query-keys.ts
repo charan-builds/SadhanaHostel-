@@ -34,6 +34,23 @@ export const queryKeys = {
       return [...queryKeys.rooms.all(scope), "detail", roomId] as const
     },
   },
+  admissions: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "admissions"] as const
+    },
+    vacancy(scope: TenantScope) {
+      return [...queryKeys.admissions.all(scope), "vacancy"] as const
+    },
+    leads(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.admissions.all(scope), "leads", filters] as const
+    },
+    reservations(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.admissions.all(scope), "reservations", filters] as const
+    },
+    analytics(scope: TenantScope) {
+      return [...queryKeys.admissions.all(scope), "analytics"] as const
+    },
+  },
   payments: {
     all(scope: TenantScope) {
       return [...queryKeys.tenant(scope), "payments"] as const
@@ -67,6 +84,20 @@ export const queryKeys = {
     },
     advanced(scope: TenantScope, range: Record<string, unknown>) {
       return [...queryKeys.tenant(scope), "analytics", "advanced", range] as const
+    },
+  },
+  website: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "website"] as const
+    },
+    settings(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.website.all(scope), "settings", filters] as const
+    },
+    facilities(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.website.all(scope), "facilities", filters] as const
+    },
+    gallery(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.website.all(scope), "gallery", filters] as const
     },
   },
   search(scope: TenantScope, filters: Record<string, unknown>) {

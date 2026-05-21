@@ -1,6 +1,8 @@
 import {
   Bell,
+  BedDouble,
   Building2,
+  CalendarCheck,
   CalendarDays,
   ClipboardList,
   CreditCard,
@@ -14,8 +16,10 @@ import {
   Settings,
   ShieldCheck,
   User,
+  UserRoundPlus,
   Users,
 } from "lucide-react"
+import type { Route } from "next"
 
 import type { NavItem } from "@/types/navigation"
 
@@ -31,6 +35,9 @@ export const publicNavigation: NavItem[] = [
 
 export const adminNavigation: NavItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Leads", href: "/admin/leads" as Route, icon: UserRoundPlus },
+  { title: "Reservations", href: "/admin/reservations" as Route, icon: CalendarCheck },
+  { title: "Vacancy", href: "/admin/vacancy" as Route, icon: BedDouble },
   { title: "Residents", href: "/admin/residents", icon: Users },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
   { title: "Rooms", href: "/admin/rooms", icon: Building2 },

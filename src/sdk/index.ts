@@ -1,5 +1,7 @@
 export * from "./analytics.sdk"
+export * from "./admissions.sdk"
 export * from "./auth.sdk"
+export * from "./invoices.sdk"
 export * from "./leaves.sdk"
 export * from "./notices.sdk"
 export * from "./payments.sdk"

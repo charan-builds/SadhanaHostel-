@@ -1,42 +1,72 @@
 import type { LucideIcon } from "lucide-react"
-import { Bath, Cctv, Droplets, MapPin, ParkingCircle, Sparkles, Utensils, Wifi } from "lucide-react"
-
-import { facilities } from "@/data/public"
-import { hostelConfig } from "@/constants/hostel"
-
-const iconMap: Record<string, LucideIcon> = {
+import {
   Bath,
+  Camera,
   Cctv,
   Droplets,
   MapPin,
   ParkingCircle,
+  ShieldCheck,
   Sparkles,
   Utensils,
   Wifi,
+} from "lucide-react"
+
+import { hostelConfig } from "@/constants/hostel"
+import { fallbackFacilities } from "@/constants/public-content"
+import type { FacilityItem } from "@/types/frontend"
+
+const iconMap: Record<string, LucideIcon> = {
+  bath: Bath,
+  Bath,
+  camera: Camera,
+  Cctv,
+  cctv: Cctv,
+  droplets: Droplets,
+  Droplets,
+  "map-pin": MapPin,
+  MapPin,
+  "parking-circle": ParkingCircle,
+  ParkingCircle,
+  "shield-check": ShieldCheck,
+  sparkles: Sparkles,
+  Sparkles,
+  utensils: Utensils,
+  Utensils,
+  wifi: Wifi,
+  Wifi,
 }
 
-function facilityByTitle(title: string) {
+function facilityByTitle(facilities: FacilityItem[], title: string) {
   return facilities.find((facility) => facility.title === title)
 }
 
-const highlightItems = [
-  facilityByTitle("Tasty food"),
-  facilityByTitle("WiFi"),
-  facilityByTitle("CCTV cameras"),
-  facilityByTitle("24-hour water"),
-  facilityByTitle("Parking")
-    ? { ...facilityByTitle("Parking")!, title: "Parking for employees" }
+function getHighlightItems(facilities: FacilityItem[]) {
+  return [
+    facilityByTitle(facilities, "Tasty food") ?? facilityByTitle(facilities, "Food"),
+    facilityByTitle(facilities, "WiFi"),
+    facilityByTitle(facilities, "CCTV cameras") ?? facilityByTitle(facilities, "CCTV"),
+    facilityByTitle(facilities, "24-hour water") ?? facilityByTitle(facilities, "Water"),
+    facilityByTitle(facilities, "Parking")
+    ? { ...facilityByTitle(facilities, "Parking")!, title: "Parking for employees" }
     : undefined,
-  facilityByTitle("Hot water for employees"),
-  facilityByTitle("Clean environment"),
-  {
-    title: hostelConfig.location.note,
-    description: "Convenient access for students around Pulivendula.",
-    icon: "MapPin",
-  },
-].filter((item): item is NonNullable<typeof item> => Boolean(item))
+    facilityByTitle(facilities, "Hot water for employees") ?? facilityByTitle(facilities, "Hot Water"),
+    facilityByTitle(facilities, "Clean environment") ?? facilityByTitle(facilities, "Security"),
+    {
+      title: hostelConfig.location.note,
+      description: "Convenient access for students around Pulivendula.",
+      icon: "map-pin",
+    },
+  ].filter((item): item is FacilityItem => Boolean(item))
+}
 
-export function HomeHighlights() {
+export function HomeHighlights({
+  facilities = fallbackFacilities,
+}: {
+  facilities?: FacilityItem[]
+}) {
+  const highlightItems = getHighlightItems(facilities)
+
   return (
     <section className="bg-white py-14 sm:py-16">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">

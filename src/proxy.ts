@@ -1,97 +1,49 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { updateSession } from "@/lib/supabase/middleware"
 import {
-  buildAuthRedirect,
-  getEffectiveRoles,
-  getProtectedRoutePolicy,
-  hasAllowedRole,
-} from "@/middleware/auth"
-
-function redirectWithSessionCookies(
-  request: NextRequest,
-  sessionResponse: NextResponse,
-  redirectUrl: URL
-) {
-  const redirectResponse = NextResponse.redirect(redirectUrl)
-
-  sessionResponse.cookies.getAll().forEach((cookie) => {
-    redirectResponse.cookies.set(cookie)
-  })
-
-  request.cookies.getAll().forEach((cookie) => {
-    if (!redirectResponse.cookies.has(cookie.name)) {
-      redirectResponse.cookies.set(cookie)
-    }
-  })
-
-  return redirectResponse
-}
+  ADMIN_ROUTE_PREFIX,
+  AUTH_REDIRECTS,
+  RESIDENT_ROUTE_PREFIX,
+} from "@/constants/auth"
+import { updateSession } from "@/lib/supabase/middleware"
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl
-  const policy = getProtectedRoutePolicy(pathname)
-  const { response, supabase, user } = await updateSession(request)
+  const requestHeaders = new Headers(request.headers)
+  const pathname = request.nextUrl.pathname
+  const pathWithSearch = `${pathname}${request.nextUrl.search}`
 
-  if (!policy) {
-    return response
-  }
+  requestHeaders.set("x-sadhana-pathname", pathWithSearch)
 
-  if (!user) {
-    return redirectWithSessionCookies(
-      request,
-      response,
-      buildAuthRedirect(request.url, pathname, policy.loginPath, "login_required")
-    )
-  }
+  const { response, user } = await updateSession(request, requestHeaders)
 
-  const { data: profile, error: profileError } = await supabase
-    .from("users")
-    .select("default_role,organization_id,is_active,deleted_at")
-    .eq("id", user.id)
-    .maybeSingle()
+  if (isProtectedPath(pathname) && !user) {
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = AUTH_REDIRECTS.login
+    loginUrl.searchParams.set("next", pathWithSearch)
 
-  if (profileError || !profile || !profile.is_active || profile.deleted_at) {
-    return redirectWithSessionCookies(
-      request,
-      response,
-      buildAuthRedirect(request.url, pathname, policy.loginPath, "inactive_profile")
-    )
-  }
+    const redirectResponse = NextResponse.redirect(loginUrl)
 
-  const { data: roleAssignments, error: rolesError } = await supabase
-    .from("user_roles")
-    .select("role,organization_id,hostel_id,status")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .is("deleted_at", null)
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie)
+    })
 
-  if (rolesError) {
-    return redirectWithSessionCookies(
-      request,
-      response,
-      buildAuthRedirect(request.url, pathname, policy.loginPath, "role_lookup_failed")
-    )
-  }
-
-  const roles = getEffectiveRoles(profile, roleAssignments ?? [])
-
-  if (!hasAllowedRole(roles, policy.allowedRoles)) {
-    return redirectWithSessionCookies(
-      request,
-      response,
-      buildAuthRedirect(
-        request.url,
-        pathname,
-        policy.unauthorizedPath,
-        `${policy.area}_role_required`
-      )
-    )
+    return redirectResponse
   }
 
   return response
 }
 
+function isProtectedPath(pathname: string) {
+  return (
+    pathname === ADMIN_ROUTE_PREFIX ||
+    pathname.startsWith(`${ADMIN_ROUTE_PREFIX}/`) ||
+    pathname === RESIDENT_ROUTE_PREFIX ||
+    pathname.startsWith(`${RESIDENT_ROUTE_PREFIX}/`)
+  )
+}
+
 export const config = {
-  matcher: ["/admin/:path*", "/resident/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 }

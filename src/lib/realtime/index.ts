@@ -1,4 +1,5 @@
 export * from "./realtime-provider"
+export * from "./useRealtimeAdmissions"
 export * from "./useRealtimeLeaves"
 export * from "./useRealtimeNotifications"
 export * from "./useRealtimePayments"

@@ -21,7 +21,7 @@ const trustCards = [
   },
 ] as const
 
-export function AboutPageContent() {
+export function AboutPageContent({ aboutText }: { aboutText?: string | null }) {
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">
@@ -31,9 +31,8 @@ export function AboutPageContent() {
             Safe, clean accommodation for students and working professionals.
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            {hostelConfig.name} provides a practical hostel stay in {hostelConfig.location.city},
-            close to {hostelConfig.location.note.replace("Near ", "")}. The hostel is built around
-            comfort, cleanliness, food, water, WiFi, and a resident-friendly daily routine.
+            {aboutText ||
+              `${hostelConfig.name} provides a practical hostel stay in ${hostelConfig.location.city}, close to ${hostelConfig.location.note.replace("Near ", "")}. The hostel is built around comfort, cleanliness, food, water, WiFi, and a resident-friendly daily routine.`}
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">

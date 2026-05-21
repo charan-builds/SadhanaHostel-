@@ -1293,7 +1293,8 @@ set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
+-- Supabase owns and manages RLS for storage.objects. Do not run ownership-level
+-- ALTER TABLE statements on managed storage tables from project migrations.
 
 drop policy if exists "storage_gallery_public_read" on storage.objects;
 create policy "storage_gallery_public_read"

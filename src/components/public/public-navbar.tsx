@@ -7,7 +7,7 @@ import { MessageCircle, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
-import { publicNavItems } from "@/data/public"
+import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
 import { PublicMobileMenu } from "@/components/public/public-mobile-menu"
 

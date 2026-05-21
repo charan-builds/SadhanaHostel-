@@ -1,3 +1,5 @@
+import type { PostgrestError } from "@supabase/supabase-js"
+
 import type { Tables, TablesInsert, TablesUpdate } from "@/types/database"
 
 import {
@@ -148,6 +150,29 @@ export class InvoicesRepository {
     return data
   }
 
+  async createMonthlyFeeInvoiceAtomic(
+    organizationId: string,
+    monthlyFeeRecordId: string,
+    actorUserId: string
+  ) {
+    const rpc = this.db as unknown as CreateMonthlyFeeInvoiceAtomicRpcClient
+    const { data, error } = await rpc.rpc("create_monthly_fee_invoice_atomic", {
+      p_organization_id: organizationId,
+      p_monthly_fee_record_id: monthlyFeeRecordId,
+      p_actor_user_id: actorUserId,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to create invoice.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to create invoice.")
+    }
+
+    return data
+  }
+
   async update(invoiceId: string, organizationId: string, values: TablesUpdate<"invoices">) {
     const { data, error } = await this.db
       .from("invoices")
@@ -196,4 +221,15 @@ export class InvoicesRepository {
 
     return data ?? []
   }
+}
+
+type CreateMonthlyFeeInvoiceAtomicRpcClient = {
+  rpc(
+    fn: "create_monthly_fee_invoice_atomic",
+    args: {
+      p_organization_id: string
+      p_monthly_fee_record_id: string
+      p_actor_user_id: string
+    }
+  ): Promise<{ data: InvoiceRow | null; error: PostgrestError | null }>
 }
