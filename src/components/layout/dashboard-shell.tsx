@@ -4,6 +4,7 @@ import { Menu } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DashboardUserActions } from "@/components/layout/dashboard-user-actions"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -71,6 +72,10 @@ export function DashboardShell({
               )
             })}
           </nav>
+
+          <div className="mt-auto">
+            <DashboardUserActions />
+          </div>
         </div>
       </aside>
 
@@ -85,6 +90,7 @@ export function DashboardShell({
             </Link>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{areaLabel}</Badge>
+              <DashboardUserActions />
               <Sheet>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="icon" aria-label="Open navigation">

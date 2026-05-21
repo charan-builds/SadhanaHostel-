@@ -25,6 +25,7 @@
     "recovery:migration-verify": "tsx scripts/recovery/migration-verify.ts",
     "recovery:restore-validation": "tsx scripts/recovery/restore-validation.ts",
     "recovery:drill": "tsx scripts/recovery/disaster-recovery-drill.ts",
+    "auth:seed-test-users": "tsx scripts/auth/create-auth-test-users.ts",
     "types:supabase": "supabase gen types typescript --linked > src/types/database.ts"
   },
   "dependencies": {
