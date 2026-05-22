@@ -11,6 +11,12 @@ const ADMIN_PASSWORD = __ENV.LOAD_TEST_ADMIN_PASSWORD || ""
 const RESIDENT_EMAIL = __ENV.LOAD_TEST_RESIDENT_EMAIL || ""
 const RESIDENT_PASSWORD = __ENV.LOAD_TEST_RESIDENT_PASSWORD || ""
 const ENABLE_MUTATIONS = __ENV.LOAD_TEST_MUTATIONS === "true"
+const ACTIVE_SCENARIOS = new Set(
+  (__ENV.LOAD_TEST_SCENARIOS || "health,resident,admin")
+    .split(",")
+    .map((scenario) => scenario.trim())
+    .filter(Boolean)
+)
 
 const apiErrors = new Counter("sadhana_api_errors")
 const paymentFailures = new Counter("sadhana_payment_failures")
@@ -23,43 +29,73 @@ const searchLatency = new Trend("sadhana_search_latency")
 const exportLatency = new Trend("sadhana_export_latency")
 
 export const options = {
-  scenarios: {
-    health: {
+  scenarios: buildScenarios(),
+  thresholds: buildThresholds(),
+}
+
+function buildScenarios() {
+  const scenarios = {}
+
+  if (ACTIVE_SCENARIOS.has("health")) {
+    scenarios.health = {
       executor: "constant-vus",
-      vus: 2,
+      vus: Number(__ENV.LOAD_TEST_HEALTH_VUS || 2),
       duration: __ENV.LOAD_TEST_DURATION || "2m",
       exec: "healthWorkflow",
-    },
-    resident_workflows: {
+    }
+  }
+
+  if (ACTIVE_SCENARIOS.has("resident")) {
+    const residentVus = Number(__ENV.LOAD_TEST_RESIDENT_VUS || 10)
+
+    scenarios.resident_workflows = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "30s", target: Number(__ENV.LOAD_TEST_RESIDENT_VUS || 10) },
-        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: Number(__ENV.LOAD_TEST_RESIDENT_VUS || 10) },
+        { duration: "30s", target: residentVus },
+        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: residentVus },
         { duration: "30s", target: 0 },
       ],
       exec: "residentWorkflow",
-    },
-    admin_workflows: {
+    }
+  }
+
+  if (ACTIVE_SCENARIOS.has("admin")) {
+    const adminVus = Number(__ENV.LOAD_TEST_ADMIN_VUS || 3)
+
+    scenarios.admin_workflows = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "30s", target: Number(__ENV.LOAD_TEST_ADMIN_VUS || 3) },
-        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: Number(__ENV.LOAD_TEST_ADMIN_VUS || 3) },
+        { duration: "30s", target: adminVus },
+        { duration: __ENV.LOAD_TEST_DURATION || "2m", target: adminVus },
         { duration: "30s", target: 0 },
       ],
       exec: "adminWorkflow",
-    },
-  },
-  thresholds: {
+    }
+  }
+
+  return scenarios
+}
+
+function buildThresholds() {
+  const thresholds = {
     http_req_failed: ["rate<0.01"],
     http_req_duration: ["p(95)<2500"],
-    sadhana_login_latency: ["p(95)<1200"],
-    sadhana_analytics_latency: ["p(95)<2500"],
-    sadhana_search_latency: ["p(95)<1500"],
-    sadhana_export_latency: ["p(95)<5000"],
     sadhana_workflow_success_rate: ["rate>0.95"],
-  },
+  }
+
+  if (ACTIVE_SCENARIOS.has("resident") || ACTIVE_SCENARIOS.has("admin")) {
+    thresholds.sadhana_login_latency = ["p(95)<1200"]
+  }
+
+  if (ACTIVE_SCENARIOS.has("admin")) {
+    thresholds.sadhana_analytics_latency = ["p(95)<2500"]
+    thresholds.sadhana_search_latency = ["p(95)<1500"]
+    thresholds.sadhana_export_latency = ["p(95)<5000"]
+  }
+
+  return thresholds
 }
 
 export function healthWorkflow() {

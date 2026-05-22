@@ -12,6 +12,7 @@ import {
   ClipboardList,
   CreditCard,
   GalleryHorizontalEnd,
+  KeyRound,
   Globe,
   LayoutDashboard,
   Settings,
@@ -46,6 +47,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Website CMS", href: "/admin/website", icon: Globe },
   { title: "Gallery", href: "/admin/gallery", icon: GalleryHorizontalEnd },
   { title: "Reports", href: "/admin/reports", icon: BarChart3 },
+  { title: "Staff & Access", href: "/admin/settings/staff-access", icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]
 

@@ -21,6 +21,10 @@ export type RealtimeEventType =
   | "resident.invite_resent"
   | "resident.invite_revoked"
   | "resident.invite_used"
+  | "staff.created"
+  | "staff.role_changed"
+  | "staff.access_revoked"
+  | "staff.password_reset"
 
 export type TenantRealtimeEvent<TPayload extends Json = Json> = {
   type: RealtimeEventType

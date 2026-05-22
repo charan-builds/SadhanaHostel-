@@ -92,12 +92,17 @@ export class AuthService {
       profile = await this.usersRepository.getById(authUser.id)
     }
 
-    const accountStatus = getAccountStatus(profile.metadata)
-
     if (
       !profile ||
       profile.deleted_at ||
-      !profile.is_active ||
+      !profile.is_active
+    ) {
+      throw unauthorized("Your user profile is inactive or missing.")
+    }
+
+    const accountStatus = getAccountStatus(profile.metadata)
+
+    if (
       accountStatus === "suspended" ||
       accountStatus === "locked" ||
       accountStatus === "deleted"

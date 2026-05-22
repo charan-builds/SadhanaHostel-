@@ -11,6 +11,7 @@ import {
   Home,
   Image as ImageIcon,
   Info,
+  KeyRound,
   LayoutDashboard,
   Mail,
   Settings,
@@ -44,6 +45,7 @@ export const adminNavigation: NavItem[] = [
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
   { title: "Website", href: "/admin/website", icon: Globe },
   { title: "Notifications", href: "/admin/notifications", icon: Bell },
+  { title: "Staff & Access", href: "/admin/settings/staff-access" as Route, icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]
 

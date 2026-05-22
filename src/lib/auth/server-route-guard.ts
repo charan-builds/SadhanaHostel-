@@ -6,7 +6,10 @@ import { redirect } from "next/navigation"
 
 import {
   AUTH_REDIRECTS,
+  FINANCE_ROLES,
+  OPERATIONS_ROLES,
   PROTECTED_ROUTE_POLICIES,
+  ADMIN_ROLES,
   type AppRole,
   type ProtectedRouteArea,
 } from "@/constants/auth"
@@ -27,6 +30,17 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
 
   if (!context.roles.some((role) => allowedRoles.includes(role))) {
     redirect(policy.unauthorizedPath)
+  }
+
+  if (area === "admin") {
+    const routeAllowedRoles = getAdminRouteAllowedRoles(requestedPath)
+
+    if (
+      routeAllowedRoles &&
+      !context.roles.some((role) => routeAllowedRoles.includes(role))
+    ) {
+      redirect(policy.unauthorizedPath)
+    }
   }
 
   if (context.organizationId === null) {
@@ -70,6 +84,40 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
   }
 
   return context
+}
+
+function getAdminRouteAllowedRoles(requestedPath: string): readonly AppRole[] | null {
+  const pathname = requestedPath.split("?")[0]
+
+  if (
+    pathname.startsWith("/admin/settings") ||
+    pathname.startsWith("/admin/finance/payment-security") ||
+    pathname.startsWith("/admin/website") ||
+    pathname.startsWith("/admin/gallery")
+  ) {
+    return ADMIN_ROLES
+  }
+
+  if (
+    pathname.startsWith("/admin/payments") ||
+    pathname.startsWith("/admin/reports")
+  ) {
+    return FINANCE_ROLES
+  }
+
+  if (
+    pathname.startsWith("/admin/leads") ||
+    pathname.startsWith("/admin/reservations") ||
+    pathname.startsWith("/admin/vacancy") ||
+    pathname.startsWith("/admin/residents") ||
+    pathname.startsWith("/admin/rooms") ||
+    pathname.startsWith("/admin/leaves") ||
+    pathname.startsWith("/admin/notices")
+  ) {
+    return OPERATIONS_ROLES
+  }
+
+  return null
 }
 
 function isResidentOnboardingAllowedPath(requestedPath: string) {

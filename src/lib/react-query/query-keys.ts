@@ -92,6 +92,14 @@ export const queryKeys = {
     organization: ["platform", "organization"] as const,
     hostels: ["platform", "hostels"] as const,
   },
+  staffAccess: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "staff-access"] as const
+    },
+    list(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.staffAccess.all(scope), "list", filters] as const
+    },
+  },
   leaves: {
     all(scope: TenantScope) {
       return [...queryKeys.tenant(scope), "leaves"] as const

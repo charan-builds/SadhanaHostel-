@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { ADMIN_ROLES, FINANCE_ROLES } from "@/constants/auth"
 import { badRequest, conflict, forbidden } from "@/lib/api/api-error"
 import { logError, logPaymentEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
@@ -78,7 +78,7 @@ export class PaymentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         values.organizationId
@@ -183,7 +183,7 @@ export class PaymentsService {
       "Resident not found."
     )
     const isFinanceUser = context.roles.some((role) =>
-      [...ADMIN_ROLES, "staff"].includes(role)
+      [...FINANCE_ROLES, "staff"].includes(role)
     )
 
     if (!isFinanceUser && resident.user_id !== context.authUser.id) {
@@ -288,7 +288,7 @@ export class PaymentsService {
     )
     const existingResident = assertFound(resident, "Resident not found.")
     const isFinanceUser = context.roles.some((role) =>
-      [...ADMIN_ROLES, "staff"].includes(role)
+      [...FINANCE_ROLES, "staff"].includes(role)
     )
 
     if (!isFinanceUser && existingResident.user_id !== context.authUser.id) {
@@ -360,7 +360,7 @@ export class PaymentsService {
     const payment = await this.paymentsRepository.getById(paymentId, organizationId)
     const existingPayment = assertFound(payment, "Payment not found.")
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         organizationId
@@ -623,7 +623,7 @@ export class PaymentsService {
 
     let residentId = values.residentId
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         values.organizationId
@@ -710,7 +710,7 @@ export class PaymentsService {
 
   async verifyPayment(input: unknown) {
     const values = verifyPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requireRole(FINANCE_ROLES)
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -800,7 +800,7 @@ export class PaymentsService {
 
   async rejectPayment(input: unknown) {
     const values = rejectPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requireRole(FINANCE_ROLES)
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -852,7 +852,7 @@ export class PaymentsService {
 
   async generateMonthlyFee(input: unknown) {
     const values = generateMonthlyFeeSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requireRole(FINANCE_ROLES)
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 

@@ -2,7 +2,7 @@ import { z } from "zod"
 
 import { Constants } from "@/types/database"
 
-import { optionalEmailSchema, paginationSchema, phoneSchema, uuidSchema } from "./common.validation"
+import { paginationSchema, phoneSchema, uuidSchema } from "./common.validation"
 
 export const staffRoles = [
   "owner",
