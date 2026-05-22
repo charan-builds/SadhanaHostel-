@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
+  paymentSettingsSchema,
+  submitUpiPaymentSchema,
   verifyPaymentSchema,
 } from "@/validations/payment.validation"
 
@@ -44,6 +46,76 @@ describe("payment validation", () => {
       organizationId: TEST_ORGANIZATION_ID,
       paymentId: PAYMENT_ID,
     })
+  })
+
+  it("normalizes and validates manual UPI transaction references", () => {
+    const result = submitUpiPaymentSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 6500,
+      transactionId: "upi123456789",
+      idempotencyKey: "payment-idempotency-key",
+    })
+
+    expect(result.transactionId).toBe("UPI123456789")
+  })
+
+  it("rejects unsafe UPI references with spaces", () => {
+    const result = submitUpiPaymentSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 6500,
+      transactionId: "UPI REF 123",
+      idempotencyKey: "payment-idempotency-key",
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it("requires a UPI ID or QR image for active UPI payment settings", () => {
+    const result = paymentSettingsSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      paymentMethod: "upi",
+      accountName: "Sadhana Boys Hostel",
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it("validates finance security settings for manual UPI accounts", () => {
+    const result = paymentSettingsSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      paymentMethod: "upi",
+      accountName: "Sadhana Boys Hostel",
+      upiId: "sadhanahostel@ibl",
+      requireUtr: true,
+      requireScreenshot: true,
+      allowPartialPayment: false,
+      allowAdvancePayment: true,
+      minPaymentAmount: 100,
+      utrRegex: "^[A-Z0-9]{8,64}$",
+      duplicateDetectionStrictness: "strict",
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data?.upiId).toBe("sadhanahostel@ibl")
+    expect(result.data?.allowPartialPayment).toBe(false)
+  })
+
+  it("rejects invalid UPI IDs in payment settings", () => {
+    const result = paymentSettingsSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      paymentMethod: "upi",
+      accountName: "Sadhana Boys Hostel",
+      upiId: "not a upi id",
+    })
+
+    expect(result.success).toBe(false)
   })
 
   it("requires fee month to use the first day of the month", () => {

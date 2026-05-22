@@ -10,8 +10,10 @@ import type {
   FacilitiesListInput,
   GalleryListInput,
   UpdateWebsiteSettingInput,
+  UploadGalleryImageInput,
   WebsiteSettingsListInput,
 } from "@/validations/website.validation"
+import type { UploadOptions } from "@/sdk/uploads.sdk"
 
 export function useWebsiteSettings(params: WebsiteSettingsListInput) {
   return useQuery({
@@ -79,6 +81,30 @@ export function useCreateGalleryItem() {
         queryKey: queryKeys.website.all({
           organizationId: item.organization_id,
           hostelId: item.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useUploadGalleryImage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      input,
+      file,
+      options,
+    }: {
+      input: UploadGalleryImageInput
+      file: File
+      options?: UploadOptions
+    }) => websiteSdk.uploadGalleryImage(input, file, options),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.website.all({
+          organizationId: result.gallery.organization_id,
+          hostelId: result.gallery.hostel_id,
         }),
       })
     },

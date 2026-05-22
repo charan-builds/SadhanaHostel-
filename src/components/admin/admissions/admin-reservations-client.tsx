@@ -44,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   useCancelReservation,
   useConfirmReservation,
+  useCreateResidentInvite,
   useConvertReservation,
   useCreateReservation,
   useCreateReservationPayment,
@@ -444,8 +445,13 @@ function ReservationActionDialog({
   const confirmReservation = useConfirmReservation()
   const cancelReservation = useCancelReservation()
   const convertReservation = useConvertReservation()
+  const createInvite = useCreateResidentInvite()
+  const [activationLink, setActivationLink] = useState<string | null>(null)
   const pending =
-    confirmReservation.isPending || cancelReservation.isPending || convertReservation.isPending
+    confirmReservation.isPending ||
+    cancelReservation.isPending ||
+    convertReservation.isPending ||
+    createInvite.isPending
 
   async function confirm() {
     if (!reservation) {
@@ -476,18 +482,41 @@ function ReservationActionDialog({
       return
     }
 
-    await convertReservation.mutateAsync({
+    const resident = await convertReservation.mutateAsync({
       organizationId,
       reservationId: reservation.id,
       joinedOn: new Date().toISOString().slice(0, 10),
       securityDepositAmount: 0,
     })
-    toast.success("Reservation converted into a resident.")
-    onOpenChange(false)
+    const invite = await createInvite.mutateAsync({
+      organizationId,
+      residentId: resident.id,
+      deliveryChannel: "copy_link",
+      expiresInHours: 72,
+    })
+    setActivationLink(invite.activationLink)
+    toast.success("Reservation converted and resident invite generated.")
+  }
+
+  async function copyLink() {
+    if (!activationLink) {
+      return
+    }
+
+    await navigator.clipboard.writeText(activationLink)
+    toast.success("Invite link copied.")
   }
 
   return (
-    <Dialog open={Boolean(reservation)} onOpenChange={onOpenChange}>
+    <Dialog
+      open={Boolean(reservation)}
+      onOpenChange={(open) => {
+        if (!open) {
+          setActivationLink(null)
+        }
+        onOpenChange(open)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Manage Reservation</DialogTitle>
@@ -506,6 +535,22 @@ function ReservationActionDialog({
               {reservation.reserved_bed_count} bed(s) held until{" "}
               {formatDateTime(reservation.reserved_until)}.
             </p>
+          </div>
+        ) : null}
+
+        {activationLink ? (
+          <div className="rounded-lg border bg-emerald-50 p-4 text-sm text-emerald-950">
+            <p className="font-semibold">Resident invite generated</p>
+            <p className="mt-2 break-all text-xs">{activationLink}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              onClick={() => void copyLink()}
+            >
+              Copy invite link
+            </Button>
           </div>
         ) : null}
 
@@ -532,7 +577,7 @@ function ReservationActionDialog({
               disabled={pending || !reservation || !canConvert(reservation)}
               onClick={() => void convert()}
             >
-              Convert to resident
+              Convert & invite
             </Button>
           </div>
         </DialogFooter>

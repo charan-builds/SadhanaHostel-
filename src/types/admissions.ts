@@ -14,6 +14,7 @@ export type LeadStatus =
   | "interested"
   | "reserved"
   | "confirmed"
+  | "waitlisted"
   | "cancelled"
   | "joined"
 

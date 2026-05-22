@@ -18,6 +18,7 @@ import {
 } from "@/validations/upload.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { isResidentOperationallyVerified } from "./onboarding/resident-onboarding.policy"
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -163,6 +164,7 @@ export class UploadsService {
 
     this.authService.requireOrganizationAccess(context, input.organizationId)
     this.validateFile(input.file, input.allowedMimeTypes, input.maxBytes)
+    const checksum = await this.calculateChecksum(input.file)
 
     const resident = await this.residentsRepository.getById(
       input.residentId,
@@ -173,6 +175,14 @@ export class UploadsService {
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only upload their own files.")
+    }
+
+    if (
+      input.documentType === "payment_receipt" &&
+      !isAdmin &&
+      !isResidentOperationallyVerified(existingResident)
+    ) {
+      throw forbidden("Complete resident onboarding before uploading payment proof.")
     }
 
     if (input.paymentId) {
@@ -193,11 +203,18 @@ export class UploadsService {
       }
     }
 
-    const storagePath = this.buildResidentStoragePath(
-      input.organizationId,
-      input.residentId,
-      input.file.name
-    )
+    const storagePath = input.paymentId
+      ? this.buildPaymentProofStoragePath(
+          input.organizationId,
+          input.residentId,
+          input.paymentId,
+          input.file.name
+        )
+      : this.buildResidentStoragePath(
+          input.organizationId,
+          input.residentId,
+          input.file.name
+        )
 
     await this.uploadsRepository.uploadObject(
       input.bucketName,
@@ -218,12 +235,17 @@ export class UploadsService {
         file_name: input.file.name,
         mime_type: input.file.type,
         file_size_bytes: input.file.size,
+        checksum,
         is_public: input.isPublic ?? false,
         created_by: context.authUser.id,
         updated_by: context.authUser.id,
       })
 
-      if (input.documentType === "aadhaar" || input.documentType === "profile_image") {
+      if (
+        input.documentType === "aadhaar" ||
+        input.documentType === "profile_image" ||
+        input.documentType === "student_id"
+      ) {
         await this.residentsRepository.update(input.residentId, input.organizationId, {
           aadhaar_document_id:
             input.documentType === "aadhaar"
@@ -235,6 +257,13 @@ export class UploadsService {
               : existingResident.profile_image_document_id,
           updated_by: context.authUser.id,
         })
+
+        if (input.documentType === "student_id") {
+          await this.residentsRepository.updateExtended(input.residentId, input.organizationId, {
+            student_id_document_id: document.id,
+            updated_by: context.authUser.id,
+          })
+        }
       }
 
       const signedUrl = await this.uploadsRepository.createSignedUrl(
@@ -291,12 +320,33 @@ export class UploadsService {
     residentId: string,
     fileName: string
   ) {
+    return `${organizationId}/${residentId}/${crypto.randomUUID()}-${this.safeFileName(fileName)}`
+  }
+
+  private buildPaymentProofStoragePath(
+    organizationId: string,
+    residentId: string,
+    paymentId: string,
+    fileName: string
+  ) {
+    return `${organizationId}/${residentId}/${paymentId}/${crypto.randomUUID()}-${this.safeFileName(fileName)}`
+  }
+
+  private safeFileName(fileName: string) {
     const safeFileName = fileName
       .toLowerCase()
       .replace(/[^a-z0-9.]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "")
 
-    return `${organizationId}/${residentId}/${crypto.randomUUID()}-${safeFileName}`
+    return safeFileName || "upload"
+  }
+
+  private async calculateChecksum(file: File) {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
+
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
   }
 }

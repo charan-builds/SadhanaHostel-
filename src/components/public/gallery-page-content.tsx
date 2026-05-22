@@ -62,13 +62,22 @@ export function GalleryPageContent({
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleItems.map((item, index) => (
               <article key={item.title} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <div className="flex aspect-[4/3] items-center justify-center bg-[linear-gradient(135deg,#eff6ff_0%,#e2e8f0_100%)]">
-                  {index === 0 ? (
-                    <Building2 className="size-12 text-blue-700" aria-hidden="true" />
-                  ) : (
-                    <ImageIcon className="size-12 text-blue-700" aria-hidden="true" />
-                  )}
-                </div>
+                {item.imageUrl ? (
+                  <div
+                    role="img"
+                    aria-label={item.alt}
+                    className="aspect-[4/3] bg-cover bg-center"
+                    style={{ backgroundImage: `url("${item.imageUrl}")` }}
+                  />
+                ) : (
+                  <div className="flex aspect-[4/3] items-center justify-center bg-[linear-gradient(135deg,#eff6ff_0%,#e2e8f0_100%)]">
+                    {index === 0 ? (
+                      <Building2 className="size-12 text-blue-700" aria-hidden="true" />
+                    ) : (
+                      <ImageIcon className="size-12 text-blue-700" aria-hidden="true" />
+                    )}
+                  </div>
+                )}
                 <div className="p-4">
                   <h2 className="font-semibold text-slate-950">{item.title}</h2>
                   <p className="mt-1 text-sm text-slate-600">{item.category}</p>

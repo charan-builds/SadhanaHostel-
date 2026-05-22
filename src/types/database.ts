@@ -2736,6 +2736,7 @@ export type Database = {
         | "payment_receipt"
         | "gallery_image"
         | "facility_image"
+        | "student_id"
         | "support_attachment"
         | "other"
       fee_record_status_enum:
@@ -2810,6 +2811,9 @@ export type Database = {
         | "super_admin"
         | "owner"
         | "admin"
+        | "finance"
+        | "receptionist"
+        | "warden"
         | "staff"
         | "resident"
         | "parent"
@@ -2957,6 +2961,7 @@ export const Constants = {
         "payment_receipt",
         "gallery_image",
         "facility_image",
+        "student_id",
         "support_attachment",
         "other",
       ],
@@ -3041,6 +3046,9 @@ export const Constants = {
         "super_admin",
         "owner",
         "admin",
+        "finance",
+        "receptionist",
+        "warden",
         "staff",
         "resident",
         "parent",

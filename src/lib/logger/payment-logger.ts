@@ -7,6 +7,9 @@ export function logPaymentEvent(metadata: {
     | "verification_attempted"
     | "verified"
     | "failed"
+    | "rejected"
+    | "payment_settings_saved"
+    | "payment_qr_uploaded"
   paymentId?: string
   residentId?: string
   organizationId?: string

@@ -86,22 +86,22 @@ export function residentWorkflow() {
   group("resident dashboard and payments", () => {
     const payments = http.get(
       `${BASE_URL}/api/payments/resident/${RESIDENT_ID}?organizationId=${ORG_ID}`,
-      authHeaders()
+      authHeaders(true, jar)
     )
     recordCheck(payments, "resident payments scoped response", (response) => [200, 401, 403].includes(response.status))
 
     if (ENABLE_MUTATIONS) {
-      const payment = createUpiPayment()
+      const payment = createUpiPayment(jar)
 
       if (payment?.id) {
-        uploadPaymentProof(payment.id)
+        uploadPaymentProof(payment.id, jar)
       }
     }
   })
 
   group("resident leave and notices", () => {
-    const leaves = http.get(`${BASE_URL}/api/leaves?organizationId=${ORG_ID}&residentId=${RESIDENT_ID}`, authHeaders())
-    const notices = http.get(`${BASE_URL}/api/notices?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`, authHeaders())
+    const leaves = http.get(`${BASE_URL}/api/leaves?organizationId=${ORG_ID}&residentId=${RESIDENT_ID}`, authHeaders(true, jar))
+    const notices = http.get(`${BASE_URL}/api/notices?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`, authHeaders(true, jar))
 
     recordCheck(leaves, "resident leaves response scoped", (response) => [200, 401, 403].includes(response.status))
     recordCheck(notices, "notices response scoped", (response) => [200, 401, 403].includes(response.status))
@@ -124,7 +124,7 @@ export function adminWorkflow() {
     const started = Date.now()
     const response = http.get(
       `${BASE_URL}/api/v1/analytics/dashboard?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`,
-      authHeaders()
+      authHeaders(true, jar)
     )
     analyticsLatency.add(Date.now() - started)
     recordCheck(response, "analytics response scoped", (res) => [200, 401, 403].includes(res.status))
@@ -134,7 +134,7 @@ export function adminWorkflow() {
     const started = Date.now()
     const response = http.get(
       `${BASE_URL}/api/v1/search?organizationId=${ORG_ID}&q=resident&page=1&pageSize=20`,
-      authHeaders()
+      authHeaders(true, jar)
     )
     searchLatency.add(Date.now() - started)
     recordCheck(response, "search response scoped", (res) => [200, 401, 403].includes(res.status))
@@ -144,7 +144,7 @@ export function adminWorkflow() {
     const started = Date.now()
     const response = http.get(
       `${BASE_URL}/api/v1/reports/payments?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}&format=csv`,
-      authHeaders()
+      authHeaders(true, jar)
     )
     exportLatency.add(Date.now() - started)
     recordCheck(response, "export response scoped", (res) => [200, 401, 403].includes(res.status))
@@ -174,7 +174,7 @@ function login(jar, email, password) {
   )
 }
 
-function createUpiPayment() {
+function createUpiPayment(jar) {
   const response = http.post(
     `${BASE_URL}/api/payments/create`,
     JSON.stringify({
@@ -187,7 +187,7 @@ function createUpiPayment() {
       notes: "k6 staging payment proof workflow",
       idempotencyKey: `k6-${Date.now()}-${__VU}-${__ITER}`,
     }),
-    authHeaders()
+    authHeaders(true, jar)
   )
 
   const ok = recordCheck(response, "payment create accepted", (res) => res.status === 201 || res.status === 200)
@@ -205,7 +205,7 @@ function createUpiPayment() {
   }
 }
 
-function uploadPaymentProof(paymentId) {
+function uploadPaymentProof(paymentId, jar) {
   const payload = {
     organizationId: ORG_ID,
     hostelId: HOSTEL_ID,
@@ -213,7 +213,7 @@ function uploadPaymentProof(paymentId) {
     paymentId,
     file: http.file("synthetic payment proof", "payment-proof.txt", "image/png"),
   }
-  const response = http.post(`${BASE_URL}/api/uploads/payment-proof`, payload, authHeaders(false))
+  const response = http.post(`${BASE_URL}/api/uploads/payment-proof`, payload, authHeaders(false, jar))
   const ok = recordCheck(response, "payment proof upload accepted", (res) => res.status === 201)
 
   if (!ok) {
@@ -231,7 +231,7 @@ function jsonHeaders() {
   }
 }
 
-function authHeaders(json = true) {
+function authHeaders(json = true, jar = undefined) {
   const headers = {
     accept: "application/json",
     "x-request-id": `k6-${Date.now()}-${__VU}-${__ITER}`,
@@ -241,7 +241,7 @@ function authHeaders(json = true) {
     headers["content-type"] = "application/json"
   }
 
-  return { headers }
+  return jar ? { headers, jar } : { headers }
 }
 
 function recordCheck(response, name, predicate) {
@@ -259,24 +259,30 @@ function recordCheck(response, name, predicate) {
 }
 
 export function handleSummary(data) {
+  const summary = toSummary(data)
+  const markdown = toMarkdownSummary(data)
+
   return {
-    stdout: JSON.stringify(toSummary(data), null, 2),
-    "scripts/load-testing/last-summary.json": JSON.stringify(data, null, 2),
-    "scripts/load-testing/last-summary.md": toMarkdownSummary(data),
+    stdout: markdown,
+    "scripts/load-testing/last-summary.json": JSON.stringify(summary, null, 2),
+    "scripts/load-testing/last-summary.md": markdown,
   }
 }
 
 function toSummary(data) {
+  const metricValues = (name) => data.metrics[name]?.values ?? {}
+
   return {
     finishedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
     mutationsEnabled: ENABLE_MUTATIONS,
     metrics: {
-      httpReqDurationP95: data.metrics.http_req_duration?.percentiles?.["95"],
-      httpReqFailedRate: data.metrics.http_req_failed?.rate,
-      apiErrors: data.metrics.sadhana_api_errors?.count,
-      paymentFailures: data.metrics.sadhana_payment_failures?.count,
-      uploadFailures: data.metrics.sadhana_upload_failures?.count,
+      httpReqDurationP95: metricValues("http_req_duration")["p(95)"],
+      httpReqFailedRate: metricValues("http_req_failed").rate,
+      workflowSuccessRate: metricValues("sadhana_workflow_success_rate").rate,
+      apiErrors: metricValues("sadhana_api_errors").count,
+      paymentFailures: metricValues("sadhana_payment_failures").count,
+      uploadFailures: metricValues("sadhana_upload_failures").count,
     },
   }
 }
@@ -292,6 +298,7 @@ function toMarkdownSummary(data) {
     `- Mutations enabled: ${summary.mutationsEnabled}`,
     `- HTTP p95: ${summary.metrics.httpReqDurationP95 ?? "n/a"} ms`,
     `- HTTP failed rate: ${summary.metrics.httpReqFailedRate ?? "n/a"}`,
+    `- Workflow success rate: ${summary.metrics.workflowSuccessRate ?? "n/a"}`,
     `- API errors: ${summary.metrics.apiErrors ?? 0}`,
     `- Payment failures: ${summary.metrics.paymentFailures ?? 0}`,
     `- Upload failures: ${summary.metrics.uploadFailures ?? 0}`,

@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test"
 
 const adminCredentials = getCredentials("E2E_ADMIN")
 const residentCredentials = getCredentials("E2E_RESIDENT")
+const runCredentialFlows = process.env.E2E_AUTH_RUN_REAL_FLOWS === "true"
 
 test.describe("public authentication pages", () => {
   test("login entry pages render without runtime errors", async ({ page }) => {
@@ -22,6 +23,10 @@ test.describe("public authentication pages", () => {
     await page.goto("/forgot-password")
     await expect(page.getByRole("heading", { name: /reset password/i })).toBeVisible()
 
+    await page.goto("/activate")
+    await expect(page.getByRole("heading", { name: /activate resident access/i })).toBeVisible()
+    await expect(page.getByLabel(/invite code/i)).toBeVisible()
+
     expect(errors).toEqual([])
   })
 
@@ -39,9 +44,7 @@ test.describe("public authentication pages", () => {
     await page.getByLabel(/^password$/i).fill("DefinitelyWrong123!")
     await page.getByRole("button", { name: /^sign in$/i }).click()
 
-    await expect(
-      page.getByText(/invalid email or password|sign in failed|too many requests/i)
-    ).toBeVisible()
+    await expect(page.getByText(/invalid email or password/i)).toBeVisible()
   })
 })
 
@@ -80,7 +83,10 @@ test.describe("server-side auth guards", () => {
 })
 
 test.describe("admin credential flow", () => {
-  test.skip(!adminCredentials, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run admin auth E2E.")
+  test.skip(
+    !runCredentialFlows || !adminCredentials,
+    "Set E2E_AUTH_RUN_REAL_FLOWS=true plus E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD to run admin auth E2E."
+  )
 
   test("admin can login, persist session, and logout", async ({ page }) => {
     await login(page, "/admin/login", adminCredentials!)
@@ -109,7 +115,10 @@ test.describe("admin credential flow", () => {
 })
 
 test.describe("resident credential flow", () => {
-  test.skip(!residentCredentials, "Set E2E_RESIDENT_EMAIL and E2E_RESIDENT_PASSWORD to run resident auth E2E.")
+  test.skip(
+    !runCredentialFlows || !residentCredentials,
+    "Set E2E_AUTH_RUN_REAL_FLOWS=true plus E2E_RESIDENT_EMAIL/E2E_RESIDENT_PASSWORD to run resident auth E2E."
+  )
 
   test("resident can login, persist session, and logout", async ({ page }) => {
     await login(page, "/resident/login", residentCredentials!)

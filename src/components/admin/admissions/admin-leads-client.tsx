@@ -55,6 +55,7 @@ const leadStatuses: Array<LeadStatus | "all"> = [
   "interested",
   "reserved",
   "confirmed",
+  "waitlisted",
   "cancelled",
   "joined",
 ]

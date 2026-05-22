@@ -1,10 +1,13 @@
 "use client"
 
-import { ImageIcon } from "lucide-react"
+import { ImageIcon, Loader2, UploadCloud } from "lucide-react"
+import { useState, type FormEvent } from "react"
+import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -12,19 +15,41 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
-import { useGallery } from "@/hooks"
+import { useGallery, useUploadGalleryImage } from "@/hooks"
 
 export function AdminGalleryClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [formValues, setFormValues] = useState({
+    title: "",
+    description: "",
+    category: "hostel",
+    altText: "",
+  })
   const galleryQuery = useGallery({
     organizationId: organizationId ?? "",
     hostelId,
     page: 1,
     pageSize: 50,
   })
+  const uploadGalleryImage = useUploadGalleryImage()
 
   if (!organizationId) {
     return (
@@ -36,6 +61,52 @@ export function AdminGalleryClient() {
   }
 
   const items = galleryQuery.data?.data ?? []
+
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!organizationId) {
+      return
+    }
+
+    if (!selectedFile) {
+      toast.error("Choose a hostel photo before uploading.")
+      return
+    }
+
+    setUploadProgress(0)
+
+    try {
+      await uploadGalleryImage.mutateAsync({
+        file: selectedFile,
+        input: {
+          organizationId,
+          hostelId,
+          title: formValues.title,
+          description: formValues.description || undefined,
+          category: formValues.category || "hostel",
+          altText: formValues.altText || formValues.title,
+          sortOrder: items.length,
+          status: "published",
+        },
+        options: {
+          onProgress: (progress) => setUploadProgress(progress.percent),
+        },
+      })
+      toast.success("Gallery image uploaded.")
+      setSelectedFile(null)
+      setUploadProgress(null)
+      setFormValues({
+        title: "",
+        description: "",
+        category: "hostel",
+        altText: "",
+      })
+      setUploadOpen(false)
+    } catch {
+      setUploadProgress(null)
+    }
+  }
 
   return (
     <div className="grid gap-6">
@@ -52,11 +123,119 @@ export function AdminGalleryClient() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Gallery</CardTitle>
-          <CardDescription>
-            Review CMS gallery records that feed the public gallery page.
-          </CardDescription>
+        <CardHeader className="gap-3 md:grid md:grid-cols-[1fr_auto]">
+          <div>
+            <CardTitle>Gallery</CardTitle>
+            <CardDescription>
+              Upload, publish, and preview hostel gallery images from the admin panel.
+            </CardDescription>
+          </div>
+          <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <UploadCloud className="size-4" />
+                Upload images
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <form onSubmit={handleUpload}>
+                <DialogHeader>
+                  <DialogTitle>Upload Gallery Image</DialogTitle>
+                  <DialogDescription>
+                    Add a public hostel photo. JPG, PNG, and WebP images up to 6 MB are accepted.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="gallery-file">Image</Label>
+                    <Input
+                      id="gallery-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="gallery-title">Title</Label>
+                    <Input
+                      id="gallery-title"
+                      required
+                      value={formValues.title}
+                      onChange={(event) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="gallery-category">Category</Label>
+                      <Input
+                        id="gallery-category"
+                        value={formValues.category}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            category: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="gallery-alt">Alt text</Label>
+                      <Input
+                        id="gallery-alt"
+                        value={formValues.altText}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            altText: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="gallery-description">Description</Label>
+                    <Textarea
+                      id="gallery-description"
+                      value={formValues.description}
+                      onChange={(event) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  {uploadProgress !== null ? (
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="submit"
+                    disabled={uploadGalleryImage.isPending}
+                    className="gap-2"
+                  >
+                    {uploadGalleryImage.isPending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="size-4" />
+                    )}
+                    Publish image
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
           {galleryQuery.isLoading ? (
@@ -73,16 +252,26 @@ export function AdminGalleryClient() {
             />
           ) : items.length === 0 ? (
             <EmptyState
-              title="No gallery records found"
-              message="Upload gallery images through the secured upload pipeline, then create gallery CMS records."
+              title="No gallery images yet"
+              message="Upload your first hostel photo to make the public gallery feel real and current."
+              action={<Button onClick={() => setUploadOpen(true)}>Upload images</Button>}
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {items.map((item) => (
                 <article key={item.id} className="overflow-hidden rounded-lg border">
-                  <div className="flex aspect-video items-center justify-center bg-muted">
-                    <ImageIcon className="size-8 text-muted-foreground" aria-hidden="true" />
-                  </div>
+                  {item.imageUrl ? (
+                    <div
+                      role="img"
+                      aria-label={item.alt_text ?? item.title}
+                      className="aspect-video w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url("${item.imageUrl}")` }}
+                    />
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center bg-muted">
+                      <ImageIcon className="size-8 text-muted-foreground" aria-hidden="true" />
+                    </div>
+                  )}
                   <div className="grid gap-2 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <h2 className="font-semibold">{item.title}</h2>

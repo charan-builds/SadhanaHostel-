@@ -6,12 +6,14 @@ import { monthlyFeeGenerationJob } from "./monthly-fee-generation.job"
 import { occupancyRecalculationJob } from "./occupancy-recalculation.job"
 import { paymentReminderJob } from "./payment-reminder.job"
 import { reservationExpiryJob } from "./reservation-expiry.job"
+import { residentInviteExpiryJob } from "./resident-invite-expiry.job"
 import { scheduledNoticesJob } from "./scheduled-notices.job"
 import { staleUploadCleanupJob } from "./stale-upload-cleanup.job"
 
 export const jobRegistry = {
   [monthlyFeeGenerationJob.name]: monthlyFeeGenerationJob,
   [reservationExpiryJob.name]: reservationExpiryJob,
+  [residentInviteExpiryJob.name]: residentInviteExpiryJob,
   [admissionFollowUpJob.name]: admissionFollowUpJob,
   [inactiveInquiryCleanupJob.name]: inactiveInquiryCleanupJob,
   [occupancyRecalculationJob.name]: occupancyRecalculationJob,

@@ -7,6 +7,13 @@ import { paymentsSdk } from "@/sdk"
 import type {
   CreatePaymentInput,
   PaymentListInput,
+  PaymentQrUploadInput,
+  PaymentSettingsInput,
+  PaymentSettingsHistoryInput,
+  PaymentSettingsQueryInput,
+  PaymentSettingsTestInput,
+  RejectPaymentInput,
+  ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
   VerifyPaymentInput,
 } from "@/validations/payment.validation"
@@ -91,5 +98,92 @@ export function useVerifyPayment() {
         }),
       })
     },
+  })
+}
+
+export function useRejectPayment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: RejectPaymentInput) => paymentsSdk.reject(input),
+    onSuccess: (payment) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.all({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function usePaymentSettings(params: PaymentSettingsQueryInput | undefined) {
+  return useQuery({
+    queryKey: queryKeys.payments.settings({
+      organizationId: params?.organizationId,
+      hostelId: params?.hostelId,
+    }),
+    queryFn: () => paymentsSdk.getSettings(params as PaymentSettingsQueryInput),
+    enabled: Boolean(params?.organizationId && params?.hostelId),
+  })
+}
+
+export function useSavePaymentSettings() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: PaymentSettingsInput) => paymentsSdk.saveSettings(input),
+    onSuccess: (setting) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.settings({
+          organizationId: setting.organization_id,
+          hostelId: setting.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.settingsHistory({
+          organizationId: setting.organization_id,
+          hostelId: setting.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function usePaymentSettingsHistory(
+  params: PaymentSettingsHistoryInput | undefined
+) {
+  return useQuery({
+    queryKey: queryKeys.payments.settingsHistory({
+      organizationId: params?.organizationId,
+      hostelId: params?.hostelId,
+    }),
+    queryFn: () => paymentsSdk.listSettingsHistory(params as PaymentSettingsHistoryInput),
+    enabled: Boolean(params?.organizationId && params?.hostelId),
+  })
+}
+
+export function useTestPaymentSettings() {
+  return useMutation({
+    mutationFn: (input: PaymentSettingsTestInput) => paymentsSdk.testSettings(input),
+  })
+}
+
+export function usePaymentQrUpload(options?: UploadOptions) {
+  return useMutation({
+    mutationFn: ({ input, file }: { input: PaymentQrUploadInput; file: File }) =>
+      paymentsSdk.uploadQr(input, file, options),
+  })
+}
+
+export function useResidentPaymentLedger(
+  params: ResidentPaymentLedgerInput | undefined
+) {
+  return useQuery({
+    queryKey: queryKeys.payments.ledger({
+      organizationId: params?.organizationId,
+    }, params?.residentId ?? "self"),
+    queryFn: () => paymentsSdk.getLedger(params as ResidentPaymentLedgerInput),
+    enabled: Boolean(params?.organizationId),
   })
 }

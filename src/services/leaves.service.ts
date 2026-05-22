@@ -14,6 +14,7 @@ import {
 } from "@/validations/leave.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { isResidentOperationallyVerified } from "./onboarding/resident-onboarding.policy"
 import { RealtimeService } from "./realtime"
 
 export class LeavesService {
@@ -75,6 +76,10 @@ export class LeavesService {
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only apply leave for themselves.")
+    }
+
+    if (!isAdmin && !isResidentOperationallyVerified(existingResident)) {
+      throw forbidden("Complete resident onboarding verification before applying leave.")
     }
 
     if (existingResident.hostel_id !== values.hostelId) {

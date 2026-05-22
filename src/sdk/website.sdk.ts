@@ -6,10 +6,21 @@ import type {
   FacilitiesListInput,
   GalleryListInput,
   UpdateWebsiteSettingInput,
+  UploadGalleryImageInput,
   WebsiteSettingsListInput,
 } from "@/validations/website.validation"
 
 import type { PaginatedResult } from "./types"
+import { uploadFile, type UploadOptions } from "./uploads.sdk"
+
+export type GalleryItemView = Tables<"gallery"> & {
+  imageUrl?: string | null
+}
+
+export type GalleryUploadResult = {
+  gallery: GalleryItemView
+  document: Tables<"documents">
+}
 
 export const websiteSdk = {
   listSettings(params: WebsiteSettingsListInput) {
@@ -41,7 +52,7 @@ export const websiteSdk = {
   },
 
   listGallery(params: GalleryListInput) {
-    return apiClient.get<PaginatedResult<Tables<"gallery">>>(
+    return apiClient.get<PaginatedResult<GalleryItemView>>(
       "/api/website/gallery",
       params
     )
@@ -51,6 +62,19 @@ export const websiteSdk = {
     return apiClient.post<Tables<"gallery">, CreateGalleryItemInput>(
       "/api/website/gallery",
       input
+    )
+  },
+
+  uploadGalleryImage(
+    input: UploadGalleryImageInput,
+    file: File,
+    options?: UploadOptions
+  ) {
+    return uploadFile<GalleryUploadResult>(
+      "/api/website/gallery/upload",
+      input,
+      file,
+      options
     )
   },
 }

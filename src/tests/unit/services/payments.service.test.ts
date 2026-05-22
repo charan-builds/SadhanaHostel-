@@ -17,6 +17,7 @@ function createServiceHarness() {
   const paymentsRepository = {
     getById: vi.fn(),
     verify: vi.fn(),
+    reject: vi.fn(),
   }
   const uploadsRepository = {
     findLatestPaymentProof: vi.fn(),
@@ -111,5 +112,31 @@ describe("PaymentsService", () => {
     })
 
     expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
+  })
+
+  it("rejects pending manual payments through the atomic repository function", async () => {
+    const harness = createServiceHarness()
+    const failed = paymentFixture({
+      status: "failed",
+      failure_reason: "UTR does not match screenshot.",
+    })
+
+    harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
+    harness.paymentsRepository.reject.mockResolvedValue(failed)
+
+    await expect(
+      harness.service.rejectPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+        reason: "UTR does not match screenshot.",
+      })
+    ).resolves.toEqual(failed)
+
+    expect(harness.paymentsRepository.reject).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      adminAuthContext().authUser.id,
+      "UTR does not match screenshot."
+    )
   })
 })

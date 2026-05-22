@@ -52,6 +52,7 @@ const serverEnvSchema = publicEnvSchema.extend({
   RESEND_API_KEY: optionalEnvString(z.string().min(1)),
   EMAIL_FROM: z.string().min(3).default("Sadhana Boys Hostel <onboarding@resend.dev>"),
   EMAIL_REPLY_TO: optionalEnvString(z.string().email()),
+  INVITE_TOKEN_SECRET: optionalEnvString(z.string().min(32)),
   UPSTASH_REDIS_REST_URL: optionalEnvString(z.string().url()),
   UPSTASH_REDIS_REST_TOKEN: optionalEnvString(z.string().min(1)),
   STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(3600),

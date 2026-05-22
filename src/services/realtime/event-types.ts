@@ -3,6 +3,11 @@ import type { Json } from "@/types/database"
 export type RealtimeEventType =
   | "notification.created"
   | "payment.status_changed"
+  | "payment.submitted"
+  | "payment.approved"
+  | "payment.rejected"
+  | "payment.settings_changed"
+  | "invoice.generated"
   | "leave.status_changed"
   | "dashboard.refresh"
   | "vacancy.changed"
@@ -12,6 +17,10 @@ export type RealtimeEventType =
   | "reservation.confirmed"
   | "reservation.expired"
   | "reservation.converted"
+  | "resident.invite_created"
+  | "resident.invite_resent"
+  | "resident.invite_revoked"
+  | "resident.invite_used"
 
 export type TenantRealtimeEvent<TPayload extends Json = Json> = {
   type: RealtimeEventType

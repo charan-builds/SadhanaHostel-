@@ -12,6 +12,7 @@ export const uploadDocumentSchema = z.object({
     "guardian_id",
     "hostel_agreement",
     "payment_receipt",
+    "student_id",
     "support_attachment",
     "other",
   ]),

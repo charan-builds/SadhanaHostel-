@@ -25,6 +25,7 @@ export const leadStatusValues = [
   "interested",
   "reserved",
   "confirmed",
+  "waitlisted",
   "cancelled",
   "joined",
 ] as const

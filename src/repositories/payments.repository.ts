@@ -223,6 +223,31 @@ export class PaymentsRepository {
     return data
   }
 
+  async reject(
+    paymentId: string,
+    organizationId: string,
+    reviewerUserId: string,
+    reason: string
+  ) {
+    const rpc = this.db as unknown as RejectPaymentRpcClient
+    const { data, error } = await rpc.rpc("reject_payment_atomic", {
+      p_payment_id: paymentId,
+      p_organization_id: organizationId,
+      p_reviewer_user_id: reviewerUserId,
+      p_reason: reason,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to reject payment.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to reject payment.")
+    }
+
+    return data
+  }
+
   async listFeeRecords(
     filters: ListFeeRecordsFilters
   ): Promise<PaginatedResult<MonthlyFeeRecordRow>> {
@@ -298,6 +323,25 @@ export class PaymentsRepository {
     return data
   }
 
+  async getFeeRecordById(
+    organizationId: string,
+    monthlyFeeRecordId: string
+  ) {
+    const { data, error } = await this.db
+      .from("monthly_fee_records")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", monthlyFeeRecordId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load monthly fee record.")
+    }
+
+    return data
+  }
+
   async listDueFeeRecords(organizationId: string, dueBeforeDate: string, limit = 100) {
     const { data, error } = await this.db
       .from("monthly_fee_records")
@@ -348,6 +392,27 @@ export class PaymentsRepository {
       residentId,
     })
   }
+
+  async listResidentInvoices(
+    organizationId: string,
+    residentId: string,
+    limit = 50
+  ) {
+    const { data, error } = await this.db
+      .from("invoices")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("resident_id", residentId)
+      .is("deleted_at", null)
+      .order("issue_date", { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident invoices.")
+    }
+
+    return data ?? []
+  }
 }
 
 type VerifyPaymentRpcClient = {
@@ -389,6 +454,18 @@ type PaymentFinalizeRpcClient = {
       p_organization_id: string
       p_proof_document_id: string
       p_actor_user_id: string
+    }
+  ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
+}
+
+type RejectPaymentRpcClient = {
+  rpc(
+    fn: "reject_payment_atomic",
+    args: {
+      p_payment_id: string
+      p_organization_id: string
+      p_reviewer_user_id: string
+      p_reason: string
     }
   ): Promise<{ data: PaymentRow | null; error: PostgrestError | null }>
 }

@@ -1,8 +1,21 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
+  PaymentQrUploadResult,
+  PaymentSettingView,
+  PaymentSettingTestResult,
+  ResidentPaymentLedger,
+} from "@/types/payment-operations"
+import type {
   CreatePaymentInput,
   PaymentListInput,
+  PaymentQrUploadInput,
+  PaymentSettingsInput,
+  PaymentSettingsHistoryInput,
+  PaymentSettingsQueryInput,
+  PaymentSettingsTestInput,
+  RejectPaymentInput,
+  ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
   VerifyPaymentInput,
 } from "@/validations/payment.validation"
@@ -58,5 +71,53 @@ export const paymentsSdk = {
       input,
       { retry: 0 }
     )
+  },
+
+  reject(input: RejectPaymentInput) {
+    return apiClient.post<Tables<"payments">, RejectPaymentInput>(
+      "/api/payments/reject",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  getSettings(params: PaymentSettingsQueryInput) {
+    return apiClient.get<PaymentSettingView | null>("/api/payments/settings", params)
+  },
+
+  listSettingsHistory(params: PaymentSettingsHistoryInput) {
+    return apiClient.get<PaymentSettingView[]>(
+      "/api/payments/settings/history",
+      params
+    )
+  },
+
+  saveSettings(input: PaymentSettingsInput) {
+    return apiClient.patch<PaymentSettingView, PaymentSettingsInput>(
+      "/api/payments/settings",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  testSettings(input: PaymentSettingsTestInput) {
+    return apiClient.post<PaymentSettingTestResult, PaymentSettingsTestInput>(
+      "/api/payments/settings/test",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  uploadQr(input: PaymentQrUploadInput, file: File, options?: UploadOptions) {
+    return uploadFile<PaymentQrUploadResult>(
+      "/api/payments/settings/qr",
+      input,
+      file,
+      options
+    )
+  },
+
+  getLedger(params: ResidentPaymentLedgerInput) {
+    return apiClient.get<ResidentPaymentLedger>("/api/payments/ledger", params)
   },
 }

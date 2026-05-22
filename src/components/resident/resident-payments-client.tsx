@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Download, Loader2, UploadCloud } from "lucide-react"
+import { Copy, Download, Loader2, QrCode, UploadCloud } from "lucide-react"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
@@ -27,7 +27,9 @@ import {
 import {
   useCurrentResident,
   useInvoiceDownloadUrl,
+  usePaymentSettings,
   usePayments,
+  useResidentPaymentLedger,
   useSubmitUpiPaymentWithProof,
 } from "@/hooks"
 import { useAuth } from "@/lib/auth"
@@ -38,7 +40,13 @@ import type { UploadProgress } from "@/sdk"
 
 const paymentSchema = z.object({
   amount: z.coerce.number().positive("Enter an amount greater than zero."),
-  transactionId: z.string().trim().min(3, "UPI reference is required.").max(120),
+  transactionId: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(6, "UPI reference is required.")
+    .max(64)
+    .regex(/^[A-Z0-9][A-Z0-9._/-]+$/, "Enter a valid UPI reference."),
   notes: z.string().trim().max(1000).optional(),
   isPartial: z.boolean().default(false),
   isAdvance: z.boolean().default(false),
@@ -51,6 +59,12 @@ export function ResidentPaymentsClient() {
   const { organizationId, session } = useAuth()
   const resident = useCurrentResident(organizationId ?? undefined)
   const hostelId = resident.data?.hostel_id ?? session?.hostelIds[0]
+  const paymentSettings = usePaymentSettings(
+    organizationId && hostelId ? { organizationId, hostelId } : undefined
+  )
+  const ledger = useResidentPaymentLedger(
+    organizationId ? { organizationId } : undefined
+  )
   const payments = usePayments({
     organizationId: organizationId ?? "",
     hostelId,
@@ -66,6 +80,10 @@ export function ResidentPaymentsClient() {
   )
   const submitUpiPayment = useSubmitUpiPaymentWithProof({ onProgress: setUploadProgress })
   useRealtimePayments({ enabled: Boolean(organizationId) })
+  const suggestedAmount =
+    ledger.data?.totals.currentDue && ledger.data.totals.currentDue > 0
+      ? ledger.data.totals.currentDue
+      : resident.data?.monthly_fee_amount ?? 0
 
   const {
     register,
@@ -76,7 +94,7 @@ export function ResidentPaymentsClient() {
   } = useForm<PaymentInput, unknown, PaymentValues>({
     resolver: zodResolver(paymentSchema),
     values: {
-      amount: resident.data?.monthly_fee_amount ?? 0,
+      amount: suggestedAmount,
       transactionId: "",
       notes: "",
       isPartial: false,
@@ -120,6 +138,7 @@ export function ResidentPaymentsClient() {
           organizationId,
           hostelId: resident.data.hostel_id,
           residentId: resident.data.id,
+          monthlyFeeRecordId: ledger.data?.primaryDueRecord?.id ?? undefined,
           amount: values.amount,
           method: "upi",
           transactionId: values.transactionId,
@@ -132,6 +151,7 @@ export function ResidentPaymentsClient() {
       })
 
       await payments.refetch()
+      await ledger.refetch()
       reset()
       setProofFile(null)
       setUploadProgress(null)
@@ -181,6 +201,54 @@ export function ResidentPaymentsClient() {
           ) : null}
 
           <div className="mt-5 grid gap-4">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <QrCode className="size-4" aria-hidden="true" />
+                Hostel payment account
+              </div>
+              {paymentSettings.isLoading ? (
+                <p className="mt-2 text-sm text-muted-foreground">Loading payment instructions...</p>
+              ) : paymentSettings.data ? (
+                <div className="mt-3 grid gap-3">
+                  {paymentSettings.data.qrImageSignedUrl ? (
+                    // Signed URLs are short-lived and generated server-side.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={paymentSettings.data.qrImageSignedUrl}
+                      alt="Hostel UPI QR code"
+                      className="h-44 w-44 rounded-lg border bg-background object-contain p-2"
+                    />
+                  ) : null}
+                  <div className="grid gap-1 text-sm">
+                    <p className="font-medium">{paymentSettings.data.account_name}</p>
+                    {paymentSettings.data.upi_id ? (
+                      <button
+                        type="button"
+                        className="flex w-fit items-center gap-2 rounded-md border bg-background px-2 py-1 text-left"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(
+                            paymentSettings.data?.upi_id ?? ""
+                          )
+                          toast.success("UPI ID copied.")
+                        }}
+                      >
+                        <span>{paymentSettings.data.upi_id}</span>
+                        <Copy className="size-3.5" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    {paymentSettings.data.instructions ? (
+                      <p className="text-muted-foreground">
+                        {paymentSettings.data.instructions}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Payment account is not configured yet. Contact hostel administration before paying.
+                </p>
+              )}
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="amount">Amount</Label>
               <Input id="amount" type="number" {...register("amount")} />
@@ -230,7 +298,7 @@ export function ResidentPaymentsClient() {
           <Button
             type="submit"
             className="mt-5 w-full"
-            disabled={isSubmitting || submitUpiPayment.isPending}
+            disabled={isSubmitting || submitUpiPayment.isPending || !paymentSettings.data}
           >
             {isSubmitting || submitUpiPayment.isPending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -242,14 +310,15 @@ export function ResidentPaymentsClient() {
         </form>
 
         <div className="grid gap-4">
+          <Summary label="Current due" value={formatCurrency(ledger.data?.totals.currentDue ?? 0)} />
           <Summary label="Monthly fee" value={formatCurrency(resident.data.monthly_fee_amount)} />
           <Summary
-            label="Pending submissions"
-            value={payments.data?.data.filter((payment) => payment.status === "pending").length ?? 0}
+            label="Pending verification"
+            value={formatCurrency(ledger.data?.totals.pendingVerification ?? 0)}
           />
           <Summary
-            label="Verified payments"
-            value={payments.data?.data.filter((payment) => payment.status === "verified").length ?? 0}
+            label="Verified paid"
+            value={formatCurrency(ledger.data?.totals.verifiedPaid ?? 0)}
           />
         </div>
       </section>

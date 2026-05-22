@@ -44,6 +44,24 @@ export class RealtimeService {
     })
   }
 
+  paymentSettingsChanged(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId?: string | null
+    paymentSettingId: string
+    version: number
+    qrVersion: number
+    isActive: boolean
+  }) {
+    return this.publisher.publish({
+      type: "payment.settings_changed",
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      actorUserId: input.actorUserId,
+      payload: input satisfies Json,
+    })
+  }
+
   leaveStatusChanged(input: {
     organizationId: string
     hostelId?: string | null

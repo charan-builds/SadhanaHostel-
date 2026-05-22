@@ -6,13 +6,119 @@ export const ADMIN_ROUTE_PREFIX = "/admin"
 export const RESIDENT_ROUTE_PREFIX = "/resident"
 
 export const ADMIN_ROLES = ["super_admin", "owner", "admin"] satisfies AppRole[]
+export const FINANCE_ROLES = ["super_admin", "owner", "admin", "finance"] satisfies AppRole[]
+export const OPERATIONS_ROLES = [
+  "super_admin",
+  "owner",
+  "admin",
+  "receptionist",
+  "warden",
+  "staff",
+] satisfies AppRole[]
+export const ADMIN_PORTAL_ROLES = [
+  "super_admin",
+  "owner",
+  "admin",
+  "finance",
+  "receptionist",
+  "warden",
+  "staff",
+] satisfies AppRole[]
 export const RESIDENT_ROLES = ["resident"] satisfies AppRole[]
+
+export type PermissionKey =
+  | "admin.dashboard.view"
+  | "admissions.manage"
+  | "analytics.view"
+  | "cms.manage"
+  | "finance.manage"
+  | "iam.manage"
+  | "leaves.manage"
+  | "notices.manage"
+  | "payments.verify"
+  | "reports.export"
+  | "residents.manage"
+  | "rooms.manage"
+  | "settings.manage"
+
+export const ROLE_PERMISSIONS = {
+  super_admin: [
+    "admin.dashboard.view",
+    "admissions.manage",
+    "analytics.view",
+    "cms.manage",
+    "finance.manage",
+    "iam.manage",
+    "leaves.manage",
+    "notices.manage",
+    "payments.verify",
+    "reports.export",
+    "residents.manage",
+    "rooms.manage",
+    "settings.manage",
+  ],
+  owner: [
+    "admin.dashboard.view",
+    "admissions.manage",
+    "analytics.view",
+    "cms.manage",
+    "finance.manage",
+    "iam.manage",
+    "leaves.manage",
+    "notices.manage",
+    "payments.verify",
+    "reports.export",
+    "residents.manage",
+    "rooms.manage",
+    "settings.manage",
+  ],
+  admin: [
+    "admin.dashboard.view",
+    "admissions.manage",
+    "analytics.view",
+    "cms.manage",
+    "finance.manage",
+    "iam.manage",
+    "leaves.manage",
+    "notices.manage",
+    "payments.verify",
+    "reports.export",
+    "residents.manage",
+    "rooms.manage",
+    "settings.manage",
+  ],
+  finance: [
+    "admin.dashboard.view",
+    "analytics.view",
+    "finance.manage",
+    "payments.verify",
+    "reports.export",
+  ],
+  receptionist: [
+    "admin.dashboard.view",
+    "admissions.manage",
+    "notices.manage",
+    "residents.manage",
+  ],
+  warden: [
+    "admin.dashboard.view",
+    "leaves.manage",
+    "notices.manage",
+    "residents.manage",
+    "rooms.manage",
+  ],
+  staff: ["admin.dashboard.view", "notices.manage", "residents.manage"],
+  resident: [],
+  parent: [],
+} satisfies Record<AppRole, PermissionKey[]>
 
 export const AUTH_REDIRECTS = {
   login: "/login",
   onboarding: "/onboarding",
   unauthorized: "/unauthorized",
+  adminSetup: "/admin/setup",
   adminHome: "/admin/dashboard",
+  residentOnboarding: "/resident/onboarding",
   residentHome: "/resident/dashboard",
 } as const
 
@@ -28,7 +134,7 @@ export type ProtectedRoutePolicy = {
 export const PROTECTED_ROUTE_POLICIES = {
   admin: {
     area: "admin",
-    allowedRoles: ADMIN_ROLES,
+    allowedRoles: ADMIN_PORTAL_ROLES,
     loginPath: AUTH_REDIRECTS.login,
     unauthorizedPath: AUTH_REDIRECTS.unauthorized,
   },

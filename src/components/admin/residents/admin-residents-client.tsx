@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { Edit, Eye, Plus, Search, UserX } from "lucide-react"
+import { Edit, Eye, KeyRound, Plus, Search, UserX } from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { ResidentForm } from "@/components/admin/residents/resident-form"
+import { ResidentInviteDialog } from "@/components/admin/residents/resident-invite-dialog"
 import { DataTableShell } from "@/components/shared/data-table-shell"
 import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
@@ -55,6 +56,7 @@ export function AdminResidentsClient() {
   const [page, setPage] = useState(1)
   const [editingResident, setEditingResident] = useState<Tables<"residents"> | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<Tables<"residents"> | null>(null)
+  const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
   const deactivateResident = useDeactivateResident()
   const query = useResidents({
     organizationId: organizationId ?? "",
@@ -134,7 +136,32 @@ export function AdminResidentsClient() {
         description="Server-side search, filters, pagination, and production API actions."
         empty={
           query.data?.data.length === 0 ? (
-            <EmptyState title="No residents found" message="Try changing the search or filters." />
+            <EmptyState
+              title={search || status !== "all" || residentType !== "all" ? "No residents match these filters" : "No residents yet"}
+              message={
+                search || status !== "all" || residentType !== "all"
+                  ? "Clear filters to return to the full resident list."
+                  : "Create your first resident after admission approval, then send an activation invite."
+              }
+              action={
+                search || status !== "all" || residentType !== "all" ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("")
+                      setStatus("all")
+                      setResidentType("all")
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button asChild>
+                    <Link href={"/admin/residents/new" as Route}>Add resident</Link>
+                  </Button>
+                )
+              }
+            />
           ) : undefined
         }
       >
@@ -224,6 +251,15 @@ export function AdminResidentsClient() {
                         <Edit className="size-3.5" aria-hidden="true" />
                         Edit
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(resident.user_id)}
+                        onClick={() => setInviteTarget(resident)}
+                      >
+                        <KeyRound className="size-3.5" aria-hidden="true" />
+                        Invite
+                      </Button>
                       <Button size="sm" variant="destructive" onClick={() => setDeactivateTarget(resident)}>
                         <UserX className="size-3.5" aria-hidden="true" />
                         Deactivate
@@ -286,6 +322,13 @@ export function AdminResidentsClient() {
         confirmLabel={deactivateResident.isPending ? "Deactivating..." : "Deactivate"}
         variant="danger"
         onConfirm={() => void confirmDeactivate()}
+      />
+
+      <ResidentInviteDialog
+        open={Boolean(inviteTarget)}
+        onOpenChange={(open) => !open && setInviteTarget(null)}
+        resident={inviteTarget}
+        organizationId={organizationId}
       />
     </ResponsiveContainer>
   )

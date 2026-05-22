@@ -139,8 +139,9 @@ export function AdminWebsiteClient() {
             />
           ) : settings.length === 0 ? (
             <EmptyState
-              title="No CMS settings found"
-              message="Run the seed migration or create CMS records before editing public content."
+              title="No website sections yet"
+              message="Open the setup wizard to create starter homepage, SEO, contact, and pricing sections automatically."
+              action={<Button onClick={() => window.location.assign("/admin/setup")}>Open setup wizard</Button>}
             />
           ) : (
             <div className="grid gap-3">
@@ -200,8 +201,9 @@ export function AdminWebsiteClient() {
             />
           ) : facilities.length === 0 ? (
             <EmptyState
-              title="No facilities found"
-              message="Add facilities that should appear on the public website."
+              title="No facilities yet"
+              message="Add your first facility so families can see what the hostel provides."
+              action={<Button onClick={() => setIsFacilityDialogOpen(true)}>Add facility</Button>}
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">

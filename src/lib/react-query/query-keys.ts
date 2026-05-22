@@ -51,6 +51,22 @@ export const queryKeys = {
       return [...queryKeys.admissions.all(scope), "analytics"] as const
     },
   },
+  invites: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "resident-invites"] as const
+    },
+    resident(scope: TenantScope, residentId?: string | null) {
+      return [...queryKeys.invites.all(scope), "resident", residentId ?? "none"] as const
+    },
+  },
+  onboarding: {
+    me(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "onboarding", "me"] as const
+    },
+    queue(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.tenant(scope), "onboarding", "queue", filters] as const
+    },
+  },
   payments: {
     all(scope: TenantScope) {
       return [...queryKeys.tenant(scope), "payments"] as const
@@ -61,6 +77,20 @@ export const queryKeys = {
     detail(scope: TenantScope, paymentId: string) {
       return [...queryKeys.payments.all(scope), "detail", paymentId] as const
     },
+    settings(scope: TenantScope) {
+      return [...queryKeys.payments.all(scope), "settings"] as const
+    },
+    settingsHistory(scope: TenantScope) {
+      return [...queryKeys.payments.all(scope), "settings-history"] as const
+    },
+    ledger(scope: TenantScope, residentId: string) {
+      return [...queryKeys.payments.all(scope), "ledger", residentId] as const
+    },
+  },
+  platform: {
+    setupStatus: ["platform", "setup-status"] as const,
+    organization: ["platform", "organization"] as const,
+    hostels: ["platform", "hostels"] as const,
   },
   leaves: {
     all(scope: TenantScope) {

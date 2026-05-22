@@ -65,9 +65,21 @@ export const createGalleryItemSchema = z.object({
   status: z.enum(Constants.public.Enums.cms_status_enum).default("draft"),
 })
 
+export const uploadGalleryImageSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  title: z.string().trim().min(2).max(160),
+  description: z.string().trim().max(1000).optional(),
+  altText: z.string().trim().max(240).optional(),
+  category: z.string().trim().max(80).default("general"),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  status: z.enum(Constants.public.Enums.cms_status_enum).default("published"),
+})
+
 export type WebsiteSettingsListInput = z.infer<typeof websiteSettingsListSchema>
 export type UpdateWebsiteSettingInput = z.infer<typeof updateWebsiteSettingSchema>
 export type FacilitiesListInput = z.infer<typeof facilitiesListSchema>
 export type CreateFacilityInput = z.infer<typeof createFacilitySchema>
 export type GalleryListInput = z.infer<typeof galleryListSchema>
 export type CreateGalleryItemInput = z.infer<typeof createGalleryItemSchema>
+export type UploadGalleryImageInput = z.infer<typeof uploadGalleryImageSchema>

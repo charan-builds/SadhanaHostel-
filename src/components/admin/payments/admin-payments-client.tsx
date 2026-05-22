@@ -1,6 +1,15 @@
 "use client"
 
-import { CheckCircle2, Eye, FileText, Loader2 } from "lucide-react"
+import {
+  CheckCircle2,
+  Eye,
+  FileText,
+  Loader2,
+  Settings,
+  XCircle,
+} from "lucide-react"
+import Link from "next/link"
+import type { Route } from "next"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -13,6 +22,15 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,11 +38,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import {
   usePaymentProofPreview,
+  usePaymentSettings,
   usePayments,
+  useRejectPayment,
   useVerifyPayment,
 } from "@/hooks"
 import { FrontendApiError } from "@/lib/api-client"
@@ -34,6 +55,8 @@ export function AdminPaymentsClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [selectedPayment, setSelectedPayment] = useState<Tables<"payments"> | null>(null)
+  const [rejectedPayment, setRejectedPayment] = useState<Tables<"payments"> | null>(null)
+  const [rejectionReason, setRejectionReason] = useState("")
   const payments = usePayments({
     organizationId: organizationId ?? "",
     hostelId,
@@ -41,7 +64,11 @@ export function AdminPaymentsClient() {
     pageSize: 50,
   })
   const verifyPayment = useVerifyPayment()
+  const rejectPayment = useRejectPayment()
   const proofPreview = usePaymentProofPreview()
+  const paymentSettings = usePaymentSettings(
+    organizationId && hostelId ? { organizationId, hostelId } : undefined
+  )
 
   if (!organizationId) {
     return <EmptyState title="Organization access required" message="Payments need an assigned organization." />
@@ -55,15 +82,48 @@ export function AdminPaymentsClient() {
       return
     }
 
-    await verifyPayment.mutateAsync({
-      organizationId,
-      paymentId: selectedPayment.id,
-      idempotencyKey: `verify-${selectedPayment.id}`,
-    })
+    try {
+      await verifyPayment.mutateAsync({
+        organizationId,
+        paymentId: selectedPayment.id,
+        idempotencyKey: `verify-${selectedPayment.id}`,
+      })
 
-    await payments.refetch()
-    toast.success("Payment verified. Linked invoices are generated server-side.")
-    setSelectedPayment(null)
+      await payments.refetch()
+      toast.success("Payment verified. Linked invoices are generated server-side.")
+      setSelectedPayment(null)
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Unable to verify payment."
+      )
+    }
+  }
+
+  async function confirmRejection() {
+    if (!organizationId || !rejectedPayment) {
+      return
+    }
+
+    try {
+      await rejectPayment.mutateAsync({
+        organizationId,
+        paymentId: rejectedPayment.id,
+        reason: rejectionReason,
+      })
+
+      await payments.refetch()
+      toast.success("Payment rejected and proof marked for review.")
+      setRejectedPayment(null)
+      setRejectionReason("")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Unable to reject payment."
+      )
+    }
   }
 
   async function openPaymentProof(payment: Tables<"payments">) {
@@ -93,6 +153,14 @@ export function AdminPaymentsClient() {
       <PageHeader
         title="Payments"
         description="Review resident UPI submissions, verify payments, and let the backend generate linked invoices atomically."
+        actions={
+          <Button asChild variant="outline">
+            <Link href={"/admin/finance/payment-security" as Route}>
+              <Settings className="size-4" aria-hidden="true" />
+              Payment Security
+            </Link>
+          </Button>
+        }
       />
 
       {payments.error ? (
@@ -107,6 +175,10 @@ export function AdminPaymentsClient() {
         <SummaryCard label="Pending Verification" value={pendingPayments.length} />
         <SummaryCard label="Verified on page" value={verifiedPayments.length} />
         <SummaryCard
+          label="Active UPI"
+          value={paymentSettings.data?.upi_id ?? "Not configured"}
+        />
+        <SummaryCard
           label="Amount on page"
           value={formatCurrency(
             payments.data?.data.reduce((total, payment) => total + payment.amount, 0) ?? 0
@@ -119,7 +191,17 @@ export function AdminPaymentsClient() {
         description="Pending and recent payment records. Verified payments are immutable in the backend."
         empty={
           payments.data?.data.length === 0 ? (
-            <EmptyState title="No payments found" message="Resident UPI submissions will appear here." />
+            <EmptyState
+              title="No payment submissions yet"
+              message="Resident UPI submissions appear here after they upload a proof and UTR. Configure the active QR before collecting payments."
+              action={
+                <Button asChild>
+                  <Link href={"/admin/finance/payment-security" as Route}>
+                    Open payment security
+                  </Link>
+                </Button>
+              }
+            />
           ) : undefined
         }
       >
@@ -168,6 +250,18 @@ export function AdminPaymentsClient() {
                         <CheckCircle2 className="size-3.5" aria-hidden="true" />
                         Verify
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={payment.status !== "pending" || rejectPayment.isPending}
+                        onClick={() => {
+                          setRejectedPayment(payment)
+                          setRejectionReason("")
+                        }}
+                      >
+                        <XCircle className="size-3.5" aria-hidden="true" />
+                        Reject
+                      </Button>
                       {payment.invoice_id ? (
                         <Button size="sm" variant="outline" disabled>
                           <FileText className="size-3.5" aria-hidden="true" />
@@ -191,6 +285,57 @@ export function AdminPaymentsClient() {
         confirmLabel={verifyPayment.isPending ? "Verifying..." : "Verify payment"}
         onConfirm={() => void confirmVerification()}
       />
+
+      <Dialog
+        open={Boolean(rejectedPayment)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRejectedPayment(null)
+            setRejectionReason("")
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject payment?</DialogTitle>
+            <DialogDescription>
+              Add a clear reason so the resident can resubmit with a corrected UPI reference or proof.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="rejectionReason">Reason</Label>
+            <Textarea
+              id="rejectionReason"
+              value={rejectionReason}
+              onChange={(event) => setRejectionReason(event.target.value)}
+              placeholder="Example: UTR does not match the screenshot."
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectedPayment(null)
+                setRejectionReason("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={rejectionReason.trim().length < 6 || rejectPayment.isPending}
+              onClick={() => void confirmRejection()}
+            >
+              {rejectPayment.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <XCircle className="size-4" aria-hidden="true" />
+              )}
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {verifyPayment.isPending ? (
         <div className="fixed bottom-4 right-4 flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm shadow-lg">

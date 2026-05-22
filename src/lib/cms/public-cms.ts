@@ -105,11 +105,12 @@ function mapFacility(facility: Tables<"facilities">): FacilityItem {
   }
 }
 
-function mapGalleryItem(item: Tables<"gallery">): GalleryItem {
+function mapGalleryItem(item: Tables<"gallery"> & { imageUrl?: string | null }): GalleryItem {
   return {
     title: item.title,
     category: item.category ?? "general",
     alt: item.alt_text ?? item.title,
+    imageUrl: item.imageUrl ?? undefined,
   }
 }
 

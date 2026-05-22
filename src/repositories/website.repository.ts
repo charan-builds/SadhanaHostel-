@@ -12,6 +12,9 @@ import {
 export type WebsiteSettingRow = Tables<"website_settings">
 export type FacilityRow = Tables<"facilities">
 export type GalleryRow = Tables<"gallery">
+export type GalleryWithDocumentRow = GalleryRow & {
+  document?: Pick<Tables<"documents">, "bucket_name" | "storage_path"> | null
+}
 export type WebsiteCmsStatus = Database["public"]["Enums"]["cms_status_enum"]
 
 type WebsiteScopedFilters = PaginationParams & {
@@ -142,12 +145,14 @@ export class WebsiteRepository {
     return data
   }
 
-  async listGallery(filters: ListGalleryFilters): Promise<PaginatedResult<GalleryRow>> {
+  async listGallery(
+    filters: ListGalleryFilters
+  ): Promise<PaginatedResult<GalleryWithDocumentRow>> {
     const { page, pageSize, from, to } = normalizePagination(filters)
 
     let query = this.db
       .from("gallery")
-      .select("*", { count: "exact" })
+      .select("*, document:documents(bucket_name, storage_path)", { count: "exact" })
       .eq("organization_id", filters.organizationId)
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
@@ -172,7 +177,7 @@ export class WebsiteRepository {
     }
 
     return {
-      data: data ?? [],
+      data: (data ?? []) as GalleryWithDocumentRow[],
       meta: createPaginationMeta(count, page, pageSize),
     }
   }

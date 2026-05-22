@@ -1,9 +1,13 @@
 import type { Metadata } from "next"
+import type { Route } from "next"
+import Link from "next/link"
 import { Suspense } from "react"
 
 import { AuthShell } from "@/components/auth/auth-shell"
 import { LoginForm } from "@/components/auth/login-form"
 import { GlobalLoader } from "@/components/system"
+import { Button } from "@/components/ui/button"
+import { hostelConfig } from "@/constants/hostel"
 
 export const metadata: Metadata = {
   title: "Resident Login",
@@ -19,6 +23,23 @@ export default function ResidentLoginPage() {
       <Suspense fallback={<GlobalLoader label="Loading resident login..." />}>
         <LoginForm expectedArea="resident" />
       </Suspense>
+      <div className="mt-6 rounded-lg border bg-muted/30 p-4">
+        <h2 className="text-sm font-semibold">Need hostel access?</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Resident accounts are invite-only. Contact the hostel office after admission approval,
+          or use the secure invite link/code shared by administration.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Button asChild variant="outline" size="sm">
+            <Link href={"/activate" as Route}>Use invite code</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a href={`https://wa.me/${hostelConfig.contact.whatsapp.replace(/\D/g, "")}`}>
+              WhatsApp admin
+            </a>
+          </Button>
+        </div>
+      </div>
     </AuthShell>
   )
 }

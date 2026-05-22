@@ -2,13 +2,14 @@ import "server-only"
 
 import type { User } from "@supabase/supabase-js"
 
-import { ADMIN_ROLES, AUTH_REDIRECTS, type AppRole } from "@/constants/auth"
+import { ADMIN_PORTAL_ROLES, ADMIN_ROLES, AUTH_REDIRECTS, type AppRole } from "@/constants/auth"
 import {
   forbidden,
   notFound,
   unauthorized,
 } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { OrganizationsRepository } from "@/repositories/organizations.repository"
 import { UsersRepository, type UserRoleRow, type UserRow } from "@/repositories/users.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import {
@@ -22,7 +23,10 @@ const ROLE_PRIORITY: Record<AppRole, number> = {
   super_admin: 100,
   owner: 90,
   admin: 80,
+  finance: 70,
+  warden: 65,
   staff: 60,
+  receptionist: 55,
   resident: 30,
   parent: 20,
 }
@@ -51,9 +55,11 @@ export type SessionOverview = {
 
 export class AuthService {
   private readonly usersRepository: UsersRepository
+  private readonly organizationsRepository: OrganizationsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.usersRepository = new UsersRepository(db)
+    this.organizationsRepository = new OrganizationsRepository(db)
   }
 
   static async create() {
@@ -86,7 +92,16 @@ export class AuthService {
       profile = await this.usersRepository.getById(authUser.id)
     }
 
-    if (!profile || profile.deleted_at || !profile.is_active) {
+    const accountStatus = getAccountStatus(profile.metadata)
+
+    if (
+      !profile ||
+      profile.deleted_at ||
+      !profile.is_active ||
+      accountStatus === "suspended" ||
+      accountStatus === "locked" ||
+      accountStatus === "deleted"
+    ) {
       throw unauthorized("Your user profile is inactive or missing.")
     }
 
@@ -94,9 +109,20 @@ export class AuthService {
     const roles = this.resolveRoles(profile, roleAssignments)
     const organizationId =
       profile.organization_id ?? roleAssignments[0]?.organization_id ?? null
-    const hostelIds = [
+    let hostelIds = [
       ...new Set(roleAssignments.map((role) => role.hostel_id).filter(Boolean)),
     ] as string[]
+
+    if (
+      organizationId &&
+      hostelIds.length === 0 &&
+      roles.some((role) => (ADMIN_ROLES as readonly AppRole[]).includes(role))
+    ) {
+      const activeHostels = await this.organizationsRepository.listActiveHostels(
+        organizationId
+      )
+      hostelIds = activeHostels.map((hostel) => hostel.id)
+    }
 
     return {
       authUser,
@@ -292,7 +318,7 @@ export class AuthService {
   }
 
   private resolveRedirectPath(roles: AppRole[]) {
-    if (roles.some((role) => (ADMIN_ROLES as readonly AppRole[]).includes(role))) {
+    if (roles.some((role) => (ADMIN_PORTAL_ROLES as readonly AppRole[]).includes(role))) {
       return AUTH_REDIRECTS.adminHome
     }
 
@@ -302,6 +328,16 @@ export class AuthService {
 
     return AUTH_REDIRECTS.login
   }
+}
+
+function getAccountStatus(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return "active"
+  }
+
+  const status = (metadata as Record<string, unknown>).account_status
+
+  return typeof status === "string" ? status : "active"
 }
 
 export function assertFound<T>(value: T | null | undefined, message: string): T {

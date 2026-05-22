@@ -1,0 +1,76 @@
+import { readFileSync, readdirSync } from "node:fs"
+import path from "node:path"
+
+import { describe, expect, it } from "vitest"
+
+const migrationsDir = path.join(process.cwd(), "supabase", "migrations")
+
+function migration(name: string) {
+  return readFileSync(path.join(migrationsDir, name), "utf8")
+}
+
+function allMigrations() {
+  return readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => ({
+      file,
+      sql: migration(file),
+    }))
+}
+
+describe("static migration security checks", () => {
+  it("does not run ownership-level RLS alterations on Supabase-managed storage tables", () => {
+    const combined = allMigrations()
+      .map(({ sql }) => sql)
+      .join("\n")
+
+    expect(combined).not.toMatch(
+      /alter\s+table\s+storage\.(objects|buckets)\s+(enable|force)\s+row\s+level\s+security/i
+    )
+  })
+
+  it("keeps critical finance and onboarding tables protected by RLS", () => {
+    const manualUpi = migration("20260522001000_manual_upi_payment_operations.sql")
+    const invites = migration("20260522000000_resident_invite_onboarding.sql")
+
+    expect(manualUpi).toMatch(
+      /alter\s+table\s+public\.payment_settings\s+enable\s+row\s+level\s+security/i
+    )
+    expect(manualUpi).toMatch(
+      /alter\s+table\s+public\.payment_settings\s+force\s+row\s+level\s+security/i
+    )
+    expect(invites).toMatch(
+      /alter\s+table\s+public\.resident_invites\s+enable\s+row\s+level\s+security/i
+    )
+  })
+
+  it("keeps manual UPI duplicate protections at database level", () => {
+    const manualUpi = migration("20260522001000_manual_upi_payment_operations.sql")
+
+    expect(manualUpi).toMatch(/payments_upi_transaction_reference_uidx/i)
+    expect(manualUpi).toMatch(/documents_active_payment_proof_uidx/i)
+    expect(manualUpi).toMatch(/documents_payment_proof_checksum_uidx/i)
+  })
+
+  it("keeps payment setting rotation and policy controls database-backed", () => {
+    const paymentSecurity = migration("20260522002000_payment_security_configuration.sql")
+
+    expect(paymentSecurity).toMatch(/require_utr/i)
+    expect(paymentSecurity).toMatch(/require_screenshot/i)
+    expect(paymentSecurity).toMatch(/payment_settings_active_upi_uidx/i)
+    expect(paymentSecurity).toMatch(/payment_setting_snapshot_at/i)
+    expect(paymentSecurity).toMatch(/pg_advisory_xact_lock/i)
+  })
+
+  it("keeps service-role-only onboarding RPCs restricted after security hardening", () => {
+    const stabilization = migration("20260521001000_production_stabilization.sql")
+
+    expect(stabilization).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.onboard_resident/i
+    )
+    expect(stabilization).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.onboard_resident\(uuid,\s*uuid\)\s+to\s+service_role/i
+    )
+  })
+})

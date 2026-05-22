@@ -49,6 +49,7 @@ export const adminNavigation: NavItem[] = [
 
 export const residentNavigation: NavItem[] = [
   { title: "Dashboard", href: "/resident/dashboard", icon: LayoutDashboard },
+  { title: "Onboarding", href: "/resident/onboarding" as Route, icon: ShieldCheck },
   { title: "Profile", href: "/resident/profile", icon: User },
   { title: "Payments", href: "/resident/payments", icon: CreditCard },
   { title: "Leave", href: "/resident/leave", icon: CalendarDays },

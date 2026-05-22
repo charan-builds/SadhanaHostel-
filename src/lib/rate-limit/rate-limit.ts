@@ -36,6 +36,11 @@ export const RATE_LIMIT_POLICIES = {
     limit: 3,
     windowMs: 5 * 60_000,
   },
+  inviteActivation: {
+    name: "auth.invite_activation",
+    limit: 8,
+    windowMs: 5 * 60_000,
+  },
   uploads: {
     name: "uploads.write",
     limit: 20,

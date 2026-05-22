@@ -7,13 +7,18 @@ export type DocumentRow = Tables<"documents">
 export class UploadsRepository {
   constructor(private readonly db: AppSupabaseClient) {}
 
-  async uploadObject(bucketName: string, storagePath: string, file: File) {
+  async uploadObject(
+    bucketName: string,
+    storagePath: string,
+    file: File,
+    options?: { upsert?: boolean; cacheControl?: string }
+  ) {
     const { data, error } = await this.db.storage
       .from(bucketName)
       .upload(storagePath, file, {
-        cacheControl: "3600",
+        cacheControl: options?.cacheControl ?? "3600",
         contentType: file.type,
-        upsert: false,
+        upsert: options?.upsert ?? false,
       })
 
     if (error) {
@@ -46,7 +51,13 @@ export class UploadsRepository {
       throw new RepositoryError(error.message, "SIGNED_URL_FAILED", error)
     }
 
-    return data
+    return data.signedUrl
+  }
+
+  getPublicUrl(bucketName: string, storagePath: string) {
+    const { data } = this.db.storage.from(bucketName).getPublicUrl(storagePath)
+
+    return data.publicUrl
   }
 
   async findLatestPaymentProof(organizationId: string, paymentId: string) {

@@ -196,8 +196,27 @@ export function AdminRoomsClient() {
             />
           ) : rooms.length === 0 ? (
             <EmptyState
-              title="No rooms found"
-              message="Create the first room or adjust the search and status filters."
+              title={search || status !== "all" ? "No rooms match these filters" : "No rooms yet"}
+              message={
+                search || status !== "all"
+                  ? "Clear the filters or adjust the search to find existing rooms."
+                  : "Create your first room so vacancy, allocation, and pricing can work automatically."
+              }
+              action={
+                search || status !== "all" ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("")
+                      setStatus("all")
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button onClick={() => setIsRoomDialogOpen(true)}>Create room</Button>
+                )
+              }
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border">

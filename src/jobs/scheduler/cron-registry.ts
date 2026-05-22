@@ -8,6 +8,7 @@ import {
   occupancyRecalculationJob,
   paymentReminderJob,
   reservationExpiryJob,
+  residentInviteExpiryJob,
   scheduledNoticesJob,
   staleUploadCleanupJob,
   type JobDefinition,
@@ -63,6 +64,17 @@ export const cronRegistry = {
     buildPayload: ({ organization }: CronBuildInput) => ({
       organizationId: organization.id,
       limit: 200,
+    }),
+  },
+  "resident-invite-expiry": {
+    name: "resident-invite-expiry",
+    job: residentInviteExpiryJob,
+    description: "Expire stale resident activation invites.",
+    schedule: "*/30 * * * *",
+    maxDurationSeconds: 45,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      limit: 500,
     }),
   },
   "admission-follow-ups": {
