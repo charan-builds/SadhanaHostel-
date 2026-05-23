@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { uuidSchema } from "./common.validation"
+
 export const runJobSchema = z.object({
   name: z.enum([
     "monthly_fee_generation",
@@ -17,6 +19,7 @@ export const runJobSchema = z.object({
     "onboarding_aging",
     "checkout_reconciliation",
   ]),
-  organizationId: z.uuid(),
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
   payload: z.record(z.string(), z.unknown()),
 })

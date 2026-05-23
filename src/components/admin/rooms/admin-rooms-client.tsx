@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Building2, DoorOpen, Edit, Loader2, Plus, Search, UserPlus } from "lucide-react"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -47,7 +47,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
-import { useAllocateRoom, useCreateRoom, useResidents, useRooms, useUpdateRoom } from "@/hooks"
+import {
+  useAllocateRoom,
+  useCreateRoom,
+  useResidents,
+  useRooms,
+  useTransferRoom,
+  useUpdateRoom,
+} from "@/hooks"
 import type { Tables } from "@/types/database"
 
 const PAGE_SIZE = 12
@@ -68,6 +75,7 @@ const roomFormSchema = z.object({
 })
 
 const allocationFormSchema = z.object({
+  mode: z.enum(["allocate", "transfer"]).default("allocate"),
   residentId: z.string().uuid("Choose a resident"),
   bedLabel: z.string().trim().max(40).optional(),
   allocatedFrom: z.string().min(1, "Allocation date is required"),
@@ -531,10 +539,12 @@ function AllocateRoomDialog({
   residents: Tables<"residents">[]
 }) {
   const allocateRoom = useAllocateRoom()
+  const transferRoom = useTransferRoom()
   const today = new Date().toISOString().slice(0, 10)
   const form = useForm<AllocationFormInput, unknown, AllocationFormValues>({
     resolver: zodResolver(allocationFormSchema),
     defaultValues: {
+      mode: "allocate",
       residentId: "",
       bedLabel: "",
       allocatedFrom: today,
@@ -542,9 +552,11 @@ function AllocateRoomDialog({
       reason: "",
     },
   })
+  const lifecycleMode = useWatch({ control: form.control, name: "mode" })
 
   useEffect(() => {
     form.reset({
+      mode: "allocate",
       residentId: "",
       bedLabel: "",
       allocatedFrom: today,
@@ -558,17 +570,31 @@ function AllocateRoomDialog({
       return
     }
 
-    await allocateRoom.mutateAsync({
-      organizationId,
-      hostelId,
-      roomId: room.id,
-      residentId: values.residentId,
-      bedLabel: values.bedLabel,
-      allocatedFrom: values.allocatedFrom,
-      monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee,
-      reason: values.reason,
-    })
-    toast.success("Room allocated.")
+    if (values.mode === "transfer") {
+      await transferRoom.mutateAsync({
+        organizationId,
+        hostelId,
+        toRoomId: room.id,
+        residentId: values.residentId,
+        bedLabel: values.bedLabel,
+        transferDate: values.allocatedFrom,
+        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee,
+        reason: values.reason,
+      })
+      toast.success("Resident transferred.")
+    } else {
+      await allocateRoom.mutateAsync({
+        organizationId,
+        hostelId,
+        roomId: room.id,
+        residentId: values.residentId,
+        bedLabel: values.bedLabel,
+        allocatedFrom: values.allocatedFrom,
+        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee,
+        reason: values.reason,
+      })
+      toast.success("Room allocated.")
+    }
     onOpenChange(false)
   }
 
@@ -583,6 +609,23 @@ function AllocateRoomDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="mt-5 grid gap-4">
+            <FormField label="Lifecycle action" error={form.formState.errors.mode?.message}>
+              <Controller
+                control={form.control}
+                name="mode"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose action" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="allocate">New allocation</SelectItem>
+                      <SelectItem value="transfer">Transfer existing resident</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </FormField>
             <FormField label="Resident" error={form.formState.errors.residentId?.message}>
               <Controller
                 control={form.control}
@@ -632,15 +675,15 @@ function AllocateRoomDialog({
             </Button>
             <Button
               type="submit"
-              disabled={allocateRoom.isPending || residents.length === 0}
+              disabled={allocateRoom.isPending || transferRoom.isPending || residents.length === 0}
               className="gap-2"
             >
-              {allocateRoom.isPending ? (
+              {allocateRoom.isPending || transferRoom.isPending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : (
                 <UserPlus className="size-4" aria-hidden="true" />
               )}
-              Allocate room
+              {lifecycleMode === "transfer" ? "Transfer resident" : "Allocate room"}
             </Button>
           </DialogFooter>
         </form>

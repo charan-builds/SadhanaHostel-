@@ -13,6 +13,7 @@ function createServiceHarness() {
   const authService = {
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
+    requireHostelAccess: vi.fn(),
   }
   const paymentsRepository = {
     getById: vi.fn(),

@@ -73,7 +73,7 @@ export class ReportBuilderService {
     const values = reportRequestSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     return {
       fileName: this.fileName(type, values),

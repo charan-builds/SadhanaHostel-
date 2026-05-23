@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test"
 const ORGANIZATION_ID = "00000000-0000-4000-8000-000000000001"
 const HOSTEL_ID = "00000000-0000-4000-8000-000000000002"
 const RESIDENT_ID = "00000000-0000-4000-8000-000000000031"
+const ROOM_ID = "00000000-0000-4000-8000-000000000041"
 const PAYMENT_ID = "00000000-0000-4000-8000-000000000051"
 
 test.describe("black-box unauthenticated abuse resistance", () => {
@@ -49,6 +50,96 @@ test.describe("black-box unauthenticated abuse resistance", () => {
     expect([401, 403]).toContain(response.status())
     expect(body.success).toBe(false)
     expect(body.error.message).not.toMatch(/signedUrl|storage_path|bucket/i)
+  })
+
+  test("tenant-scoped admin APIs reject forged anonymous identifiers", async ({
+    request,
+  }) => {
+    const attempts = await Promise.all([
+      request.get(
+        `/api/operations/consistency/report?organizationId=${ORGANIZATION_ID}&hostelId=${HOSTEL_ID}`
+      ),
+      request.get(`/api/staff-access/users?organizationId=${ORGANIZATION_ID}`),
+      request.get(
+        `/api/resident-invites?organizationId=${ORGANIZATION_ID}&residentId=${RESIDENT_ID}`
+      ),
+      request.get(
+        `/api/v1/analytics/owner?organizationId=${ORGANIZATION_ID}&hostelId=${HOSTEL_ID}`
+      ),
+    ])
+
+    for (const response of attempts) {
+      const body = await response.json()
+
+      expect([401, 403]).toContain(response.status())
+      expect(body.success).toBe(false)
+      expect(body.error.message).not.toMatch(/organization_id|hostel_id|rls|policy|stack/i)
+    }
+  })
+
+  test("role escalation and finance mutations require authenticated privileged users", async ({
+    request,
+  }) => {
+    const attempts = await Promise.all([
+      request.post("/api/staff-access/users", {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          hostelId: HOSTEL_ID,
+          fullName: "Privilege Escalation Attempt",
+          email: "attacker@example.com",
+          role: "owner",
+          deliveryMode: "temp_password",
+        },
+      }),
+      request.patch("/api/payments/settings", {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          hostelId: HOSTEL_ID,
+          paymentMethod: "upi",
+          accountName: "Attacker",
+          upiId: "attacker@upi",
+          isActive: true,
+          supportsManualVerification: true,
+        },
+      }),
+    ])
+
+    for (const response of attempts) {
+      const body = await response.json()
+
+      expect([401, 403]).toContain(response.status())
+      expect(body.success).toBe(false)
+      expect(body.error.message).not.toMatch(/service_role|stack|postgres|supabase/i)
+    }
+  })
+
+  test("occupancy lifecycle mutations reject anonymous transfer and checkout attempts", async ({
+    request,
+  }) => {
+    const attempts = await Promise.all([
+      request.post(`/api/rooms/${ROOM_ID}/transfer`, {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          hostelId: HOSTEL_ID,
+          residentId: RESIDENT_ID,
+          transferDate: "2026-06-15",
+        },
+      }),
+      request.post(`/api/residents/${RESIDENT_ID}/checkout`, {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          checkoutDate: "2026-06-30",
+        },
+      }),
+    ])
+
+    for (const response of attempts) {
+      const body = await response.json()
+
+      expect([401, 403]).toContain(response.status())
+      expect(body.success).toBe(false)
+      expect(body.error.message).not.toMatch(/stack|postgres|supabase|rpc/i)
+    }
   })
 
   test("payment proof upload requires multipart file input", async ({ request }) => {

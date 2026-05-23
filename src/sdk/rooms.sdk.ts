@@ -4,6 +4,7 @@ import type {
   AllocateRoomInput,
   CreateRoomInput,
   RoomListInput,
+  TransferRoomInput,
   UpdateRoomInput,
 } from "@/validations/room.validation"
 
@@ -38,6 +39,15 @@ export const roomsSdk = {
 
     return apiClient.post<Tables<"room_allocations">, Omit<AllocateRoomInput, "roomId">>(
       `/api/rooms/${roomId}/allocate`,
+      body
+    )
+  },
+
+  transfer(input: TransferRoomInput) {
+    const { toRoomId, ...body } = input
+
+    return apiClient.post<Tables<"room_allocations">, Omit<TransferRoomInput, "toRoomId">>(
+      `/api/rooms/${toRoomId}/transfer`,
       body
     )
   },

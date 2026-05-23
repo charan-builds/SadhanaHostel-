@@ -43,9 +43,10 @@ export class UploadsRepository {
   }
 
   async createSignedUrl(bucketName: string, storagePath: string, expiresIn = 3600) {
+    const safeExpiresIn = Math.min(Math.max(Math.trunc(expiresIn), 60), 3600)
     const { data, error } = await this.db.storage
       .from(bucketName)
-      .createSignedUrl(storagePath, expiresIn)
+      .createSignedUrl(storagePath, safeExpiresIn)
 
     if (error) {
       throw new RepositoryError(error.message, "SIGNED_URL_FAILED", error)

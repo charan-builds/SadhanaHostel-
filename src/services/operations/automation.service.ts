@@ -64,7 +64,7 @@ export class AutomationService {
       }
     }
 
-    this.authService.requireOrganizationAccess(context, organizationId)
+    this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     const [recentRuns, consistency, settings] = await Promise.all([
       this.repository.listRecentJobEvents(organizationId, 25),
@@ -106,7 +106,7 @@ export class AutomationService {
     const values = automationRunSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const setting = await this.repository.getAutomationSetting({
       organizationId: values.organizationId,
@@ -128,8 +128,12 @@ export class AutomationService {
       }
     }
 
+    const safePayload = { ...values.payload }
+    delete safePayload.organizationId
+    delete safePayload.hostelId
+
     const payload = {
-      ...values.payload,
+      ...safePayload,
       organizationId: values.organizationId,
       ...(values.hostelId ? { hostelId: values.hostelId } : {}),
     }
@@ -169,7 +173,7 @@ export class AutomationService {
     const values = automationSettingsSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const setting = await this.repository.upsertAutomationSetting({
       organizationId: values.organizationId,

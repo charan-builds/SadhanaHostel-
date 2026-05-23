@@ -39,6 +39,18 @@ export const allocateRoomSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 })
 
+export const transferRoomSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema,
+  residentId: uuidSchema,
+  fromRoomId: uuidSchema.optional(),
+  toRoomId: uuidSchema,
+  bedLabel: z.string().trim().max(40).optional(),
+  transferDate: dateOnlySchema,
+  monthlyFeeAmount: moneySchema.default(0),
+  reason: z.string().trim().max(500).optional(),
+})
+
 export const updateRoomSchema = createRoomSchema
   .omit({
     organizationId: true,
@@ -55,4 +67,5 @@ export const updateRoomSchema = createRoomSchema
 export type RoomListInput = z.infer<typeof roomListSchema>
 export type CreateRoomInput = z.infer<typeof createRoomSchema>
 export type AllocateRoomInput = z.infer<typeof allocateRoomSchema>
+export type TransferRoomInput = z.infer<typeof transferRoomSchema>
 export type UpdateRoomInput = z.infer<typeof updateRoomSchema>

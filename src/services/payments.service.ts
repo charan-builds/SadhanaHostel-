@@ -78,7 +78,12 @@ export class PaymentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+      return this.paymentsRepository.list(values)
+    }
+
+    {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         values.organizationId
@@ -93,15 +98,13 @@ export class PaymentsService {
         residentId: resident.id,
       })
     }
-
-    return this.paymentsRepository.list(values)
   }
 
   async recordManualPayment(input: unknown) {
     const values = createPaymentSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const resident = await this.residentsRepository.getById(
       values.residentId,
@@ -196,6 +199,10 @@ export class PaymentsService {
 
     if (resident.hostel_id !== values.hostelId) {
       throw conflict("Payment hostel does not match resident hostel.")
+    }
+
+    if (isFinanceUser) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     }
 
     await this.assertPaymentSettingPolicy(values)
@@ -299,6 +306,10 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
+    if (isFinanceUser) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    }
+
     await this.assertPaymentSettingPolicy(values)
 
     if (values.idempotencyKey) {
@@ -360,6 +371,14 @@ export class PaymentsService {
     const payment = await this.paymentsRepository.getById(paymentId, organizationId)
     const existingPayment = assertFound(payment, "Payment not found.")
 
+    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+      this.authService.requireHostelAccess(
+        context,
+        existingPayment.organization_id,
+        existingPayment.hostel_id
+      )
+    }
+
     if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
@@ -389,6 +408,19 @@ export class PaymentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
+    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    } else {
+      const resident = await this.residentsRepository.getByUserId(
+        context.authUser.id,
+        values.organizationId
+      )
+
+      if (!resident || resident.hostel_id !== values.hostelId) {
+        throw forbidden("Residents can only view payment settings for their own hostel.")
+      }
+    }
+
     const setting = await this.paymentSettingsRepository.getActive(
       values.organizationId,
       values.hostelId
@@ -401,7 +433,7 @@ export class PaymentsService {
     const values = paymentSettingsHistorySchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const settings = await this.paymentSettingsRepository.list(
       values.organizationId,
@@ -415,7 +447,7 @@ export class PaymentsService {
     const values = paymentSettingsSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const previousSetting = values.id
       ? await this.paymentSettingsRepository.getById(values.organizationId, values.id)
@@ -518,7 +550,7 @@ export class PaymentsService {
     const values = paymentSettingsTestSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const checks: Array<{
       key: string
@@ -580,7 +612,7 @@ export class PaymentsService {
     const values = paymentQrUploadSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     this.validateQrFile(file)
 
     const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"
@@ -648,6 +680,10 @@ export class PaymentsService {
       await this.residentsRepository.getById(residentId, values.organizationId),
       "Resident not found."
     )
+
+    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+      this.authService.requireHostelAccess(context, values.organizationId, resident.hostel_id)
+    }
 
     const feeRecords = await this.paymentsRepository.listFeeRecords({
       organizationId: values.organizationId,
@@ -720,6 +756,12 @@ export class PaymentsService {
     )
 
     const existingPayment = assertFound(payment, "Payment not found.")
+
+    this.authService.requireHostelAccess(
+      context,
+      existingPayment.organization_id,
+      existingPayment.hostel_id
+    )
 
     logPaymentEvent({
       action: "verification_attempted",
@@ -810,6 +852,12 @@ export class PaymentsService {
     )
     const existingPayment = assertFound(payment, "Payment not found.")
 
+    this.authService.requireHostelAccess(
+      context,
+      existingPayment.organization_id,
+      existingPayment.hostel_id
+    )
+
     if (existingPayment.status === "verified") {
       throw conflict("Verified payments cannot be rejected.")
     }
@@ -854,7 +902,7 @@ export class PaymentsService {
     const values = generateMonthlyFeeSchema.parse(input)
     const context = await this.authService.requireRole(FINANCE_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const totalAmount =
       values.baseAmount +

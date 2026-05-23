@@ -3,6 +3,7 @@ import "server-only"
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import { RoomsRepository } from "@/repositories/rooms.repository"
@@ -10,6 +11,7 @@ import type { AppSupabaseClient } from "@/repositories/types"
 import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import type { RealtimeEventType } from "@/services/realtime/event-types"
 import {
+  checkoutResidentSchema,
   createResidentSchema,
   residentIdMutationSchema,
   residentListSchema,
@@ -117,7 +119,7 @@ export class ResidentsService {
           hostelId: values.hostelId,
           roomId: values.roomId,
           residentId: resident.id,
-          bedLabel: values.bedLabel,
+          bedLabel: normalizeOptionalText(values.bedLabel),
           allocatedFrom: values.allocatedFrom ?? new Date().toISOString().slice(0, 10),
           monthlyFeeAmount: values.monthlyFeeAmount,
           reason: "Initial resident creation room assignment.",
@@ -202,9 +204,24 @@ export class ResidentsService {
   }
 
   async onboardResident(residentId: string, userId: string) {
-    await this.authService.requireAdmin()
+    const context = await this.authService.requireAdmin()
+    const resident = assertFound(
+      await this.residentsRepository.getById(residentId),
+      "Resident not found."
+    )
 
-    return this.residentsRepository.linkUser(residentId, userId)
+    this.authService.requireOrganizationAccess(context, resident.organization_id)
+
+    const { data, error } = await createSupabaseAdminClient().rpc("onboard_resident", {
+      target_resident_id: residentId,
+      target_user_id: userId,
+    })
+
+    if (error) {
+      throw forbidden(error.message)
+    }
+
+    return data
   }
 
   async deactivateResident(input: unknown) {
@@ -222,6 +239,29 @@ export class ResidentsService {
     await this.publishResidentEvent("resident.deactivated", resident, context.authUser.id)
 
     return resident
+  }
+
+  async checkoutResident(input: unknown) {
+    const values = checkoutResidentSchema.parse(input)
+    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    try {
+      const resident = await this.residentsRepository.checkout({
+        residentId: values.residentId,
+        organizationId: values.organizationId,
+        checkoutDate: values.checkoutDate ?? new Date().toISOString().slice(0, 10),
+        reason: values.reason ?? "Resident checked out from admin residents workflow.",
+        actorUserId: context.authUser.id,
+      })
+
+      await this.publishResidentEvent("resident.checked_out", resident, context.authUser.id)
+
+      return resident
+    } catch (error) {
+      throw mapResidentAllocationError(error)
+    }
   }
 
   private async rollbackResidentAfterAllocationFailure(
@@ -302,6 +342,12 @@ export class ResidentsService {
   }
 }
 
+function normalizeOptionalText(value?: string) {
+  const normalized = value?.trim()
+
+  return normalized || undefined
+}
+
 function mapResidentAllocationError(error: unknown): never {
   const message = error instanceof Error ? error.message : ""
 
@@ -319,6 +365,10 @@ function mapResidentAllocationError(error: unknown): never {
 
   if (message.includes("resident_not_allocatable")) {
     throw conflict("Resident is not eligible for room allocation.")
+  }
+
+  if (message.includes("resident_not_found")) {
+    throw conflict("Resident not found.")
   }
 
   if (message.includes("room_not_found")) {

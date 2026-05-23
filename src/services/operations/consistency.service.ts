@@ -63,7 +63,7 @@ export class ConsistencyService {
       })
     }
 
-    this.authService.requireOrganizationAccess(context, organizationId)
+    this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     return scanConsistency(this.repository, {
       organizationId,
@@ -76,7 +76,7 @@ export class ConsistencyService {
     const values = consistencyRepairSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     if (values.dryRun) {
       return {
@@ -310,6 +310,7 @@ export async function scanConsistency(
   findings.push(...await detectDuplicateResidents(repository, input))
   findings.push(...await detectResidentAllocationAnomalies(repository, input))
   findings.push(...await detectOverCapacityRooms(repository, input))
+  findings.push(...await detectSecurityAnomalies(repository, input))
 
   const report = buildReport({
     organizationId: input.organizationId,
@@ -461,6 +462,17 @@ async function detectResidentAllocationAnomalies(
       .map((allocation) => allocation.resident_id)
       .filter((residentId): residentId is string => typeof residentId === "string")
   )
+  const allocationCountByResident = new Map<string, number>()
+
+  activeAllocations.forEach((allocation) => {
+    if (typeof allocation.resident_id === "string") {
+      allocationCountByResident.set(
+        allocation.resident_id,
+        (allocationCountByResident.get(allocation.resident_id) ?? 0) + 1
+      )
+    }
+  })
+
   const activeResidentIds = new Set(
     activeResidents
       .map((resident) => resident.id)
@@ -473,6 +485,9 @@ async function detectResidentAllocationAnomalies(
     (allocation) =>
       typeof allocation.resident_id === "string" &&
       !activeResidentIds.has(allocation.resident_id)
+  ).length
+  const residentsWithMultipleActiveAllocations = [...allocationCountByResident.values()].filter(
+    (count) => count > 1
   ).length
   const findings: ConsistencyFinding[] = []
 
@@ -500,6 +515,243 @@ async function detectResidentAllocationAnomalies(
         "Allocations for archived, suspended, or missing residents can inflate occupancy unless reconciled.",
         allocationWithoutActiveResident,
         "recalculate_occupancy"
+      )
+    )
+  }
+
+  if (residentsWithMultipleActiveAllocations > 0) {
+    findings.push(
+      finding(
+        "allocations.multiple_active_for_resident",
+        "occupancy",
+        "critical",
+        "Residents have multiple active room allocations",
+        "A resident must occupy at most one active room. Use Repair Occupancy before running billing or vacancy reports.",
+        residentsWithMultipleActiveAllocations,
+        "recalculate_occupancy"
+      )
+    )
+  }
+
+  return findings
+}
+
+async function detectSecurityAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const [
+    documents,
+    payments,
+    residents,
+    roles,
+    users,
+    invites,
+    reservations,
+    reservationPayments,
+  ] = await Promise.all([
+    repository.list("documents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select:
+        "id,organization_id,hostel_id,resident_id,payment_id,invoice_id,document_type,bucket_name,storage_path,is_public",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("payments", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,monthly_fee_record_id,invoice_id,status",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("residents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,user_id,status,is_active",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("user_roles", {
+      organizationId: input.organizationId,
+      select: "id,organization_id,hostel_id,user_id,role,status",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("users", {
+      organizationId: input.organizationId,
+      select: "id,organization_id,is_active,deleted_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("resident_invites", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,used_at,revoked_at",
+      limit: 5000,
+    }),
+    repository.list("reservations", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,lead_id,status",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("reservation_payments", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,reservation_id,lead_id,status,proof_document_id",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+  ])
+  const findings: ConsistencyFinding[] = []
+  const residentById = indexById(residents)
+  const paymentById = indexById(payments)
+  const userById = indexById(users)
+  const reservationById = indexById(reservations)
+  const unsafePublicDocuments = documents.filter(
+    (document) =>
+      stringValue(document, "bucket_name") !== "gallery-images" &&
+      booleanValue(document, "is_public") === true
+  ).length
+  const pathScopeMismatches = documents.filter((document) => {
+    const storagePath = stringValue(document, "storage_path")
+
+    return Boolean(storagePath && !storagePath.startsWith(`${input.organizationId}/`))
+  }).length
+  const orphanDocuments = documents.filter((document) => {
+    const residentId = stringValue(document, "resident_id")
+    const paymentId = stringValue(document, "payment_id")
+    const residentMissing = Boolean(residentId && !residentById.has(residentId))
+    const paymentMissing = Boolean(paymentId && !paymentById.has(paymentId))
+
+    return residentMissing || paymentMissing
+  }).length
+  const paymentProofScopeMismatches = documents.filter((document) => {
+    if (stringValue(document, "document_type") !== "payment_receipt") {
+      return false
+    }
+
+    const paymentId = stringValue(document, "payment_id")
+    const residentId = stringValue(document, "resident_id")
+    const payment = paymentId ? paymentById.get(paymentId) : null
+
+    return (
+      stringValue(document, "bucket_name") !== "payment-screenshots" ||
+      !paymentId ||
+      !residentId ||
+      !payment ||
+      stringValue(payment, "resident_id") !== residentId
+    )
+  }).length
+  const activeRolesWithoutUsers = roles.filter((role) => {
+    if (stringValue(role, "status") !== "active") {
+      return false
+    }
+
+    const user = userById.get(stringValue(role, "user_id") ?? "")
+
+    return !user || booleanValue(user, "is_active") === false
+  }).length
+  const roleTenantMismatches = roles.filter((role) => {
+    const user = userById.get(stringValue(role, "user_id") ?? "")
+    const userOrganizationId = user ? stringValue(user, "organization_id") : null
+
+    return Boolean(
+      userOrganizationId &&
+        userOrganizationId !== stringValue(role, "organization_id")
+    )
+  }).length
+  const paymentResidentMismatches = payments.filter((payment) => {
+    const resident = residentById.get(stringValue(payment, "resident_id") ?? "")
+
+    return (
+      !resident ||
+      stringValue(resident, "organization_id") !== stringValue(payment, "organization_id") ||
+      stringValue(resident, "hostel_id") !== stringValue(payment, "hostel_id")
+    )
+  }).length
+  const inviteResidentMismatches = invites.filter((invite) => {
+    const resident = residentById.get(stringValue(invite, "resident_id") ?? "")
+
+    return (
+      !resident ||
+      stringValue(resident, "organization_id") !== stringValue(invite, "organization_id") ||
+      stringValue(resident, "hostel_id") !== stringValue(invite, "hostel_id")
+    )
+  }).length
+  const reservationPaymentMismatches = reservationPayments.filter((reservationPayment) => {
+    const reservation = reservationById.get(
+      stringValue(reservationPayment, "reservation_id") ?? ""
+    )
+
+    return (
+      !reservation ||
+      stringValue(reservation, "organization_id") !==
+        stringValue(reservationPayment, "organization_id") ||
+      stringValue(reservation, "hostel_id") !==
+        stringValue(reservationPayment, "hostel_id") ||
+      stringValue(reservation, "lead_id") !== stringValue(reservationPayment, "lead_id")
+    )
+  }).length
+
+  if (unsafePublicDocuments > 0 || pathScopeMismatches > 0) {
+    findings.push(
+      finding(
+        "security.upload_scope",
+        "security",
+        "critical",
+        "Upload tenant scope needs security review",
+        "Private documents must not be public, and all storage paths must start with the organization ID.",
+        unsafePublicDocuments + pathScopeMismatches,
+        "review_manually"
+      )
+    )
+  }
+
+  if (orphanDocuments > 0 || paymentProofScopeMismatches > 0) {
+    findings.push(
+      finding(
+        "security.upload_ownership",
+        "security",
+        "critical",
+        "Upload ownership anomalies detected",
+        "Document metadata references missing or mismatched residents/payments. Signed URL access should be blocked until repaired.",
+        orphanDocuments + paymentProofScopeMismatches,
+        "review_manually"
+      )
+    )
+  }
+
+  if (activeRolesWithoutUsers > 0 || roleTenantMismatches > 0) {
+    findings.push(
+      finding(
+        "security.role_scope",
+        "security",
+        "critical",
+        "Role assignments need access review",
+        "Active role assignments must point to active users in the same organization to prevent stale or cross-tenant access.",
+        activeRolesWithoutUsers + roleTenantMismatches,
+        "review_manually"
+      )
+    )
+  }
+
+  if (
+    paymentResidentMismatches > 0 ||
+    inviteResidentMismatches > 0 ||
+    reservationPaymentMismatches > 0
+  ) {
+    findings.push(
+      finding(
+        "security.business_tenant_scope",
+        "security",
+        "critical",
+        "Business records have tenant linkage anomalies",
+        "Payments, resident invites, and reservation payments must link only to records inside the same organization and hostel.",
+        paymentResidentMismatches + inviteResidentMismatches + reservationPaymentMismatches,
+        "review_manually"
       )
     )
   }
@@ -560,4 +812,30 @@ function finding(
     count,
     repairAction,
   }
+}
+
+function indexById(rows: Array<Record<string, unknown>>) {
+  const index = new Map<string, Record<string, unknown>>()
+
+  rows.forEach((row) => {
+    const id = stringValue(row, "id")
+
+    if (id) {
+      index.set(id, row)
+    }
+  })
+
+  return index
+}
+
+function stringValue(row: Record<string, unknown>, key: string) {
+  const value = row[key]
+
+  return typeof value === "string" ? value : null
+}
+
+function booleanValue(row: Record<string, unknown>, key: string) {
+  const value = row[key]
+
+  return typeof value === "boolean" ? value : null
 }

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/react-query"
 import { residentsSdk } from "@/sdk"
 import type {
+  CheckoutResidentInput,
   CreateResidentInput,
   ResidentListInput,
   UpdateOwnResidentProfileInput,
@@ -83,6 +84,17 @@ export function useDeactivateResident() {
   return useMutation({
     mutationFn: (input: { residentId: string; organizationId: string }) =>
       residentsSdk.deactivate(input),
+    onSuccess: (resident) => {
+      invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
+    },
+  })
+}
+
+export function useCheckoutResident() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CheckoutResidentInput) => residentsSdk.checkout(input),
     onSuccess: (resident) => {
       invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },

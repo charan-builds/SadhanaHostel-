@@ -295,6 +295,28 @@ export class ResidentsRepository {
     return data as ResidentRow
   }
 
+  async checkout(input: {
+    residentId: string
+    organizationId: string
+    checkoutDate?: string
+    actorUserId?: string
+    reason?: string
+  }) {
+    const { data, error } = await this.residentsDb().rpc("checkout_resident_atomic", {
+      p_organization_id: input.organizationId,
+      p_resident_id: input.residentId,
+      p_checkout_date: input.checkoutDate ?? null,
+      p_actor_user_id: input.actorUserId ?? null,
+      p_reason: input.reason ?? null,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to check out resident.")
+    }
+
+    return data as ResidentRow
+  }
+
   async linkUser(residentId: string, userId: string) {
     const { data, error } = await this.db.rpc("onboard_resident", {
       target_resident_id: residentId,

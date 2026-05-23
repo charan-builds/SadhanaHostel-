@@ -125,4 +125,55 @@ describe("upload access restrictions", () => {
     expect(documentPayload.checksum).toMatch(/^[a-f0-9]{64}$/)
     expect(documentPayload.document_type).toBe("payment_receipt")
   })
+
+  it("rejects uploads when the requested hostel scope does not match the resident", async () => {
+    const service = new UploadsService({} as never)
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue({
+        roles: ["admin"],
+        authUser: { id: "admin-id" },
+      }),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getById: vi.fn().mockResolvedValue({
+        id: RESIDENT_ID,
+        user_id: "resident-user-id",
+        hostel_id: TEST_HOSTEL_ID,
+        status: "active",
+        onboarding_status: "verified",
+      }),
+    }
+    const uploadsRepository = {
+      uploadObject: vi.fn(),
+      createDocument: vi.fn(),
+      createSignedUrl: vi.fn(),
+      removeObject: vi.fn(),
+    }
+    const file = new File(["aadhaar"], "aadhaar.pdf", {
+      type: "application/pdf",
+    })
+
+    Object.assign(service, {
+      authService,
+      residentsRepository,
+      uploadsRepository,
+    })
+
+    await expect(
+      service.uploadDocument(
+        {
+          organizationId: TEST_ORGANIZATION_ID,
+          hostelId: "00000000-0000-4000-8000-000000000099",
+          residentId: RESIDENT_ID,
+          documentType: "aadhaar",
+        },
+        file
+      )
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    })
+
+    expect(uploadsRepository.uploadObject).not.toHaveBeenCalled()
+  })
 })

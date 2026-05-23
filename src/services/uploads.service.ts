@@ -129,7 +129,8 @@ export class UploadsService {
 
     if (
       proof.resident_id !== payment.resident_id ||
-      proof.organization_id !== payment.organization_id
+      proof.organization_id !== payment.organization_id ||
+      proof.hostel_id !== payment.hostel_id
     ) {
       throw forbidden("Payment proof ownership does not match the payment.")
     }
@@ -172,6 +173,11 @@ export class UploadsService {
     )
     const existingResident = assertFound(resident, "Resident not found.")
     const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const targetHostelId = input.hostelId ?? existingResident.hostel_id
+
+    if (targetHostelId !== existingResident.hostel_id) {
+      throw forbidden("Upload hostel scope must match the resident.")
+    }
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only upload their own files.")
@@ -193,7 +199,7 @@ export class UploadsService {
 
       if (
         payment.resident_id !== input.residentId ||
-        payment.hostel_id !== (input.hostelId ?? existingResident.hostel_id)
+        payment.hostel_id !== targetHostelId
       ) {
         throw forbidden("Payment proof must belong to the same resident and hostel.")
       }
@@ -225,7 +231,7 @@ export class UploadsService {
     try {
       const document = await this.uploadsRepository.createDocument({
         organization_id: input.organizationId,
-        hostel_id: input.hostelId ?? existingResident.hostel_id,
+        hostel_id: targetHostelId,
         resident_id: input.residentId,
         payment_id: input.paymentId,
         uploaded_by_user_id: context.authUser.id,

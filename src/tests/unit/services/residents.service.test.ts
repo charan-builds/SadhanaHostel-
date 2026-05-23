@@ -20,6 +20,7 @@ function createServiceHarness() {
     create: vi.fn(),
     getById: vi.fn(),
     deactivate: vi.fn(),
+    checkout: vi.fn(),
     update: vi.fn(),
   }
   const roomsRepository = {
@@ -116,6 +117,35 @@ describe("ResidentsService", () => {
       draftResident.id,
       TEST_ORGANIZATION_ID,
       adminAuthContext().authUser.id
+    )
+  })
+
+  it("checks out residents through the atomic repository function", async () => {
+    const harness = createServiceHarness()
+    const checkedOutResident = residentFixture({
+      status: "checked_out",
+      is_active: false,
+      checkout_on: "2026-06-30",
+    })
+
+    harness.residentsRepository.checkout.mockResolvedValue(checkedOutResident)
+
+    await expect(
+      harness.service.checkoutResident({
+        residentId: checkedOutResident.id,
+        organizationId: TEST_ORGANIZATION_ID,
+        checkoutDate: "2026-06-30",
+        reason: "Resident completed stay.",
+      })
+    ).resolves.toEqual(checkedOutResident)
+
+    expect(harness.residentsRepository.checkout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        residentId: checkedOutResident.id,
+        organizationId: TEST_ORGANIZATION_ID,
+        checkoutDate: "2026-06-30",
+        actorUserId: adminAuthContext().authUser.id,
+      })
     )
   })
 })

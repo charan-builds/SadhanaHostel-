@@ -93,4 +93,35 @@ describe("static migration security checks", () => {
     expect(occupancy).toMatch(/create\s+or\s+replace\s+function\s+public\.deactivate_resident_atomic/i)
     expect(occupancy).toMatch(/status\s+=\s+'completed'/i)
   })
+
+  it("keeps resident movement lifecycle mutations transaction-safe", () => {
+    const lifecycle = migration("20260523004000_resident_lifecycle_occupancy_hardening.sql")
+
+    expect(lifecycle).toMatch(/create\s+or\s+replace\s+function\s+public\.transfer_room_atomic/i)
+    expect(lifecycle).toMatch(/create\s+or\s+replace\s+function\s+public\.checkout_resident_atomic/i)
+    expect(lifecycle).toMatch(/pg_advisory_xact_lock/i)
+    expect(lifecycle).toMatch(/status\s+=\s+'transferred'/i)
+    expect(lifecycle).toMatch(/status\s+=\s+'checked_out'/i)
+    expect(lifecycle).toMatch(/perform\s+public\.recalculate_hostel_capacity/i)
+    expect(lifecycle).toMatch(/lower\(nullif\(btrim\(bed_label\),\s*''\)\)/i)
+  })
+
+  it("releases occupancy when resident status exits active occupancy", () => {
+    const lifecycle = migration("20260523004000_resident_lifecycle_occupancy_hardening.sql")
+
+    expect(lifecycle).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.release_resident_occupancy_on_status_exit/i
+    )
+    expect(lifecycle).toMatch(/residents_release_occupancy_on_status_exit/i)
+    expect(lifecycle).toMatch(/new\.status\s+in\s+\('suspended',\s*'checked_out',\s*'archived'\)/i)
+    expect(lifecycle).toMatch(/Temporary leave does not release a bed/i)
+  })
+
+  it("surfaces lifecycle occupancy anomalies for repair dashboards", () => {
+    const lifecycle = migration("20260523004000_resident_lifecycle_occupancy_hardening.sql")
+
+    expect(lifecycle).toMatch(/resident_multiple_active_allocations/i)
+    expect(lifecycle).toMatch(/room_over_capacity/i)
+    expect(lifecycle).toMatch(/active_allocation_without_active_resident/i)
+  })
 })

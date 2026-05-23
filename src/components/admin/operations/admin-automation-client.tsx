@@ -150,9 +150,9 @@ export function AdminAutomationClient() {
 
       <section className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold">Occupancy reconciliation</h2>
+          <h2 className="text-sm font-semibold">Repair Occupancy</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Recompute vacancy from active residents, active allocations, reservations, and maintenance blocks.
+            Recompute vacancy from active residents, allocations, reservations, and maintenance blocks; flags orphan or duplicate occupancy records for review.
           </p>
         </div>
         <Button
@@ -166,7 +166,7 @@ export function AdminAutomationClient() {
           ) : (
             <RotateCcw className="size-4" aria-hidden="true" />
           )}
-          Recalculate Occupancy
+          Repair Occupancy
         </Button>
       </section>
 

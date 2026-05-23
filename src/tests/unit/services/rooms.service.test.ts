@@ -18,6 +18,7 @@ function createServiceHarness() {
   }
   const roomsRepository = {
     allocateRoomAtomic: vi.fn(),
+    transferRoomAtomic: vi.fn(),
   }
 
   Object.assign(service, {
@@ -82,5 +83,55 @@ describe("RoomsService", () => {
         actorUserId: adminAuthContext().authUser.id,
       })
     )
+  })
+
+  it("delegates room transfers to the atomic repository function", async () => {
+    const harness = createServiceHarness()
+    const allocation = roomAllocationFixture({ room_id: ROOM_ID, resident_id: RESIDENT_ID })
+
+    harness.roomsRepository.transferRoomAtomic.mockResolvedValue(allocation)
+
+    await expect(
+      harness.service.transferRoom({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        toRoomId: ROOM_ID,
+        transferDate: "2026-06-15",
+        reason: "Operational room transfer",
+      })
+    ).resolves.toEqual(allocation)
+
+    expect(harness.roomsRepository.transferRoomAtomic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        toRoomId: ROOM_ID,
+        transferDate: "2026-06-15",
+        actorUserId: adminAuthContext().authUser.id,
+      })
+    )
+  })
+
+  it("maps invalid transfers to operator-safe conflict errors", async () => {
+    const harness = createServiceHarness()
+
+    harness.roomsRepository.transferRoomAtomic.mockRejectedValue(
+      new Error("resident_not_allocated")
+    )
+
+    await expect(
+      harness.service.transferRoom({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        toRoomId: ROOM_ID,
+        transferDate: "2026-06-15",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "Resident does not have an active room allocation to transfer.",
+    })
   })
 })

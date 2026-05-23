@@ -20,14 +20,18 @@ export async function POST(request: Request) {
       const values = runJobSchema.parse(await parseJsonBody(request))
       const authService = await AuthService.create()
       const context = await authService.requireAdmin()
-      authService.requireOrganizationAccess(context, values.organizationId)
+      authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
       const job = jobRegistry[values.name] as JobDefinition<Record<string, unknown>>
+      const safePayload = { ...values.payload }
+      delete safePayload.organizationId
+      delete safePayload.hostelId
       const result = await runJob(
         job,
         {
-          ...values.payload,
+          ...safePayload,
           organizationId: values.organizationId,
+          ...(values.hostelId ? { hostelId: values.hostelId } : {}),
         },
         {
           requestedBy: context.authUser.id,

@@ -11,6 +11,7 @@ import {
   allocateRoomSchema,
   createRoomSchema,
   roomListSchema,
+  transferRoomSchema,
   updateRoomSchema,
 } from "@/validations/room.validation"
 
@@ -123,7 +124,7 @@ export class RoomsService {
         hostelId: values.hostelId,
         roomId: values.roomId,
         residentId: values.residentId,
-        bedLabel: values.bedLabel,
+        bedLabel: normalizeOptionalText(values.bedLabel),
         allocatedFrom: values.allocatedFrom,
         allocatedTo: values.allocatedTo,
         monthlyFeeAmount: values.monthlyFeeAmount,
@@ -139,9 +140,42 @@ export class RoomsService {
     }
   }
 
+  async transferRoom(input: unknown) {
+    const values = transferRoomSchema.parse(input)
+    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    try {
+      const allocation = await this.roomsRepository.transferRoomAtomic({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        fromRoomId: values.fromRoomId,
+        toRoomId: values.toRoomId,
+        bedLabel: normalizeOptionalText(values.bedLabel),
+        transferDate: values.transferDate,
+        monthlyFeeAmount: values.monthlyFeeAmount,
+        reason: values.reason,
+        actorUserId: context.authUser.id,
+      })
+
+      await this.publishAllocationEvents(
+        allocation,
+        context.authUser.id,
+        "room.transfer_completed"
+      )
+
+      return allocation
+    } catch (error) {
+      throw mapRoomAllocationError(error)
+    }
+  }
+
   private async publishAllocationEvents(
     allocation: { id: string; organization_id: string; hostel_id: string; room_id: string; resident_id: string },
-    actorUserId: string
+    actorUserId: string,
+    reason: "room.allocation_changed" | "room.transfer_completed" = "room.allocation_changed"
   ) {
     try {
       const publisher = new RealtimeEventPublisher()
@@ -153,7 +187,7 @@ export class RoomsService {
 
       await Promise.all([
         publisher.publish({
-          type: "room.allocation_changed",
+          type: reason,
           organizationId: allocation.organization_id,
           hostelId: allocation.hostel_id,
           actorUserId,
@@ -165,7 +199,7 @@ export class RoomsService {
           hostelId: allocation.hostel_id,
           actorUserId,
           payload: {
-            reason: "room.allocation_changed",
+            reason,
             ...payload,
           },
         }),
@@ -175,7 +209,7 @@ export class RoomsService {
           hostelId: allocation.hostel_id,
           actorUserId,
           payload: {
-            reason: "room.allocation_changed",
+            reason,
             ...payload,
           },
         }),
@@ -242,8 +276,18 @@ export class RoomsService {
   }
 }
 
+function normalizeOptionalText(value?: string) {
+  const normalized = value?.trim()
+
+  return normalized || undefined
+}
+
 function mapRoomAllocationError(error: unknown): never {
   const message = error instanceof Error ? error.message : ""
+
+  if (message.includes("target_room_capacity_exceeded")) {
+    throw conflict("Target room is already at full capacity.")
+  }
 
   if (message.includes("room_capacity_exceeded")) {
     throw conflict("Room is already at full capacity.")
@@ -251,6 +295,14 @@ function mapRoomAllocationError(error: unknown): never {
 
   if (message.includes("resident_already_allocated")) {
     throw conflict("Resident already has an active room allocation.")
+  }
+
+  if (message.includes("resident_not_allocated")) {
+    throw conflict("Resident does not have an active room allocation to transfer.")
+  }
+
+  if (message.includes("same_room_transfer")) {
+    throw conflict("Resident is already allocated to this room.")
   }
 
   if (message.includes("room_not_allocatable")) {

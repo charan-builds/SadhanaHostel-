@@ -42,7 +42,7 @@ export class AnalyticsService {
     const values = dashboardAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const cacheKey = buildTenantCacheKey({
       organizationId: values.organizationId,
@@ -77,7 +77,7 @@ export class AnalyticsService {
     const values = advancedAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const range = normalizeAnalyticsRange(values.fromDate, values.toDate)
     const cacheKey = buildTenantCacheKey({
@@ -119,7 +119,7 @@ export class AnalyticsService {
     const values = ownerAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "finance"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const range = normalizeAnalyticsRange(values.fromDate, values.toDate)
     const cacheKey = buildTenantCacheKey({

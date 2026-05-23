@@ -34,9 +34,13 @@ export class InvoiceStorageService {
   }
 
   async createSignedDownloadUrl(storagePath: string, expiresInSeconds = 900) {
+    const safeExpiresInSeconds = Math.min(
+      Math.max(Math.trunc(expiresInSeconds), 60),
+      3600
+    )
     const { data, error } = await this.db.storage
       .from(INVOICE_BUCKET)
-      .createSignedUrl(storagePath, expiresInSeconds)
+      .createSignedUrl(storagePath, safeExpiresInSeconds)
 
     if (error) {
       throw new RepositoryError(error.message, "INVOICE_SIGNED_URL_FAILED", error)

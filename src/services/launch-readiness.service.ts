@@ -59,7 +59,7 @@ export class LaunchReadinessService {
       } satisfies LaunchDiagnostics
     }
 
-    this.authService.requireOrganizationAccess(context, organizationId)
+    this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     const [
       envCheck,

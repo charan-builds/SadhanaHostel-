@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
+  CheckoutResidentInput,
   CreateResidentInput,
   ResidentIdMutationInput,
   ResidentListInput,
@@ -57,5 +58,14 @@ export const residentsSdk = {
     return apiClient.delete<Tables<"residents">>(`/api/residents/${input.residentId}`, {
       organizationId: input.organizationId,
     })
+  },
+
+  checkout(input: CheckoutResidentInput) {
+    const { residentId, ...body } = input
+
+    return apiClient.post<Tables<"residents">, Omit<CheckoutResidentInput, "residentId">>(
+      `/api/residents/${residentId}/checkout`,
+      body
+    )
   },
 }

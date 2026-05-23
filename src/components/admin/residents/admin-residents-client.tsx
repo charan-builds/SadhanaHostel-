@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { Edit, Eye, KeyRound, Plus, Search, UserX } from "lucide-react"
+import { Edit, Eye, KeyRound, LogOut, Plus, Search, UserX } from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
@@ -42,7 +42,7 @@ import {
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
-import { useDeactivateResident, useResidents } from "@/hooks"
+import { useCheckoutResident, useDeactivateResident, useResidents } from "@/hooks"
 import type { Tables } from "@/types/database"
 
 type ResidentStatusFilter = "all" | "draft" | "active" | "suspended" | "checked_out" | "archived"
@@ -58,8 +58,10 @@ export function AdminResidentsClient() {
   const [page, setPage] = useState(1)
   const [editingResident, setEditingResident] = useState<Tables<"residents"> | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<Tables<"residents"> | null>(null)
+  const [checkoutTarget, setCheckoutTarget] = useState<Tables<"residents"> | null>(null)
   const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
   const deactivateResident = useDeactivateResident()
+  const checkoutResident = useCheckoutResident()
   const query = useResidents({
     organizationId: organizationId ?? "",
     hostelId,
@@ -92,6 +94,21 @@ export function AdminResidentsClient() {
     })
     toast.success("Resident deactivated.")
     setDeactivateTarget(null)
+  }
+
+  async function confirmCheckout() {
+    if (!organizationId || !checkoutTarget) {
+      return
+    }
+
+    await checkoutResident.mutateAsync({
+      residentId: checkoutTarget.id,
+      organizationId,
+      checkoutDate: new Date().toISOString().slice(0, 10),
+      reason: "Resident checked out from admin residents table.",
+    })
+    toast.success("Resident checked out and occupancy released.")
+    setCheckoutTarget(null)
   }
 
   if (!organizationId) {
@@ -262,6 +279,15 @@ export function AdminResidentsClient() {
                         <KeyRound className="size-3.5" aria-hidden="true" />
                         Invite
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={resident.status === "checked_out" || resident.status === "archived"}
+                        onClick={() => setCheckoutTarget(resident)}
+                      >
+                        <LogOut className="size-3.5" aria-hidden="true" />
+                        Checkout
+                      </Button>
                       <Button size="sm" variant="destructive" onClick={() => setDeactivateTarget(resident)}>
                         <UserX className="size-3.5" aria-hidden="true" />
                         Deactivate
@@ -315,6 +341,15 @@ export function AdminResidentsClient() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(checkoutTarget)}
+        onOpenChange={(open) => !open && setCheckoutTarget(null)}
+        title={`Check out ${checkoutTarget?.full_name ?? "resident"}?`}
+        description="Checkout releases the active room allocation, updates vacancy, and keeps the resident record visible for operational history."
+        confirmLabel={checkoutResident.isPending ? "Checking out..." : "Check out"}
+        onConfirm={() => void confirmCheckout()}
+      />
 
       <ConfirmDialog
         open={Boolean(deactivateTarget)}

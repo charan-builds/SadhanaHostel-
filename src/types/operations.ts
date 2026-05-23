@@ -14,6 +14,7 @@ export type ConsistencyFinding = {
     | "payment"
     | "upload"
     | "checkout"
+    | "security"
   severity: ConsistencySeverity
   title: string
   description: string

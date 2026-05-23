@@ -8,6 +8,7 @@ import type {
   AllocateRoomInput,
   CreateRoomInput,
   RoomListInput,
+  TransferRoomInput,
   UpdateRoomInput,
 } from "@/validations/room.validation"
 
@@ -54,6 +55,17 @@ export function useAllocateRoom() {
 
   return useMutation({
     mutationFn: (input: AllocateRoomInput) => roomsSdk.allocate(input),
+    onSuccess: (allocation) => {
+      invalidateRoomOperationalState(queryClient, allocation.organization_id, allocation.hostel_id)
+    },
+  })
+}
+
+export function useTransferRoom() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: TransferRoomInput) => roomsSdk.transfer(input),
     onSuccess: (allocation) => {
       invalidateRoomOperationalState(queryClient, allocation.organization_id, allocation.hostel_id)
     },

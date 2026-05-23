@@ -222,7 +222,7 @@ export class RoomsRepository {
       p_hostel_id: values.hostelId,
       p_room_id: values.roomId,
       p_resident_id: values.residentId,
-      p_bed_label: values.bedLabel ?? null,
+      p_bed_label: normalizeOptionalText(values.bedLabel),
       p_allocated_from: values.allocatedFrom,
       p_allocated_to: values.allocatedTo ?? null,
       p_monthly_fee_amount: values.monthlyFeeAmount ?? null,
@@ -236,6 +236,43 @@ export class RoomsRepository {
 
     if (!data) {
       throwRepositoryError(null, "Unable to allocate room.")
+    }
+
+    return data
+  }
+
+  async transferRoomAtomic(values: {
+    organizationId: string
+    hostelId: string
+    residentId: string
+    fromRoomId?: string
+    toRoomId: string
+    bedLabel?: string
+    transferDate: string
+    monthlyFeeAmount?: number
+    reason?: string
+    actorUserId: string
+  }) {
+    const rpc = this.db as unknown as TransferRoomAtomicRpcClient
+    const { data, error } = await rpc.rpc("transfer_room_atomic", {
+      p_organization_id: values.organizationId,
+      p_hostel_id: values.hostelId,
+      p_resident_id: values.residentId,
+      p_from_room_id: values.fromRoomId ?? null,
+      p_to_room_id: values.toRoomId,
+      p_bed_label: normalizeOptionalText(values.bedLabel),
+      p_transfer_date: values.transferDate,
+      p_monthly_fee_amount: values.monthlyFeeAmount ?? null,
+      p_reason: values.reason ?? null,
+      p_actor_user_id: values.actorUserId,
+    })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to transfer resident room.")
+    }
+
+    if (!data) {
+      throwRepositoryError(null, "Unable to transfer resident room.")
     }
 
     return data
@@ -258,6 +295,12 @@ export class RoomsRepository {
   }
 }
 
+function normalizeOptionalText(value?: string) {
+  const normalized = value?.trim()
+
+  return normalized || null
+}
+
 type AllocateRoomAtomicRpcClient = {
   rpc(
     fn: "allocate_room_atomic",
@@ -269,6 +312,24 @@ type AllocateRoomAtomicRpcClient = {
       p_bed_label: string | null
       p_allocated_from: string
       p_allocated_to: string | null
+      p_monthly_fee_amount: number | null
+      p_reason: string | null
+      p_actor_user_id: string
+    }
+  ): Promise<{ data: RoomAllocationRow | null; error: PostgrestError | null }>
+}
+
+type TransferRoomAtomicRpcClient = {
+  rpc(
+    fn: "transfer_room_atomic",
+    args: {
+      p_organization_id: string
+      p_hostel_id: string
+      p_resident_id: string
+      p_from_room_id: string | null
+      p_to_room_id: string
+      p_bed_label: string | null
+      p_transfer_date: string
       p_monthly_fee_amount: number | null
       p_reason: string | null
       p_actor_user_id: string

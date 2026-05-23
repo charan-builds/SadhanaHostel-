@@ -8,6 +8,7 @@ import {
   notFound,
   unauthorized,
 } from "@/lib/api/api-error"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
 import { UsersRepository, type UserRoleRow, type UserRow } from "@/repositories/users.repository"
@@ -242,11 +243,51 @@ export class AuthService {
     }
   }
 
+  requireHostelAccess(
+    context: AuthContext,
+    organizationId: string,
+    hostelId?: string | null
+  ) {
+    this.requireOrganizationAccess(context, organizationId)
+
+    if (!hostelId || context.roles.includes("super_admin")) {
+      return
+    }
+
+    const scopedRoleMatches = context.roleAssignments.some(
+      (assignment) =>
+        assignment.organization_id === organizationId &&
+        assignment.status === "active" &&
+        (!assignment.hostel_id || assignment.hostel_id === hostelId)
+    )
+
+    if (!scopedRoleMatches && !context.hostelIds.includes(hostelId)) {
+      throw forbidden("You cannot access data from another hostel.")
+    }
+  }
+
   async onboardResident(input: unknown) {
     const values = residentOnboardingSchema.parse(input)
-    await this.requireAdmin()
+    const context = await this.requireAdmin()
+    const { data: resident, error: residentError } = await this.db
+      .from("residents")
+      .select("organization_id")
+      .eq("id", values.residentId)
+      .is("deleted_at", null)
+      .maybeSingle()
 
-    const { data, error } = await this.db.rpc("onboard_resident", {
+    if (residentError) {
+      throw forbidden("Unable to validate resident tenant scope.")
+    }
+
+    if (!resident) {
+      throw notFound("Resident not found.")
+    }
+
+    this.requireOrganizationAccess(context, resident.organization_id)
+
+    const adminDb = createSupabaseAdminClient()
+    const { data, error } = await adminDb.rpc("onboard_resident", {
       target_resident_id: values.residentId,
       target_user_id: values.userId,
     })
@@ -268,7 +309,8 @@ export class AuthService {
       throw forbidden("Only owner/admin roles can be onboarded through this workflow.")
     }
 
-    const { data, error } = await this.db.rpc("onboard_admin", {
+    const adminDb = createSupabaseAdminClient()
+    const { data, error } = await adminDb.rpc("onboard_admin", {
       target_user_id: values.userId,
       target_organization_id: values.organizationId,
       target_hostel_id: values.hostelId,
