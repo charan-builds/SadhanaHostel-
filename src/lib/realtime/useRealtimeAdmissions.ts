@@ -23,7 +23,31 @@ export function useRealtimeAdmissions(options?: { enabled?: boolean }) {
       }),
     })
     void queryClient.invalidateQueries({
+      queryKey: queryKeys.residents.all({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.rooms.all({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
+    })
+    void queryClient.invalidateQueries({
       queryKey: queryKeys.analytics.dashboard({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.analytics.all({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.operations.all({
         organizationId,
         hostelId: defaultHostelId,
       }),
@@ -76,6 +100,34 @@ export function useRealtimeAdmissions(options?: { enabled?: boolean }) {
     organizationId,
     hostelId: defaultHostelId,
     event: "reservation.converted",
+    enabled: options?.enabled,
+    onEvent,
+  })
+  useRealtimeChannel({
+    organizationId,
+    hostelId: defaultHostelId,
+    event: "room.allocation_changed",
+    enabled: options?.enabled,
+    onEvent,
+  })
+  useRealtimeChannel({
+    organizationId,
+    hostelId: defaultHostelId,
+    event: "resident.created",
+    enabled: options?.enabled,
+    onEvent,
+  })
+  useRealtimeChannel({
+    organizationId,
+    hostelId: defaultHostelId,
+    event: "resident.updated",
+    enabled: options?.enabled,
+    onEvent,
+  })
+  useRealtimeChannel({
+    organizationId,
+    hostelId: defaultHostelId,
+    event: "resident.deactivated",
     enabled: options?.enabled,
     onEvent,
   })

@@ -71,6 +71,7 @@ export function ResidentOnboardingClient() {
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null)
   const [studentIdFile, setStudentIdFile] = useState<File | null>(null)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [uploadRecoveryMessage, setUploadRecoveryMessage] = useState<string | null>(null)
 
   const resident = onboarding.data?.resident
   const requirements = onboarding.data?.requirements
@@ -173,45 +174,54 @@ export function ResidentOnboardingClient() {
       return
     }
 
-    if (kind === "photo" && photoFile) {
-      await photoUpload.mutateAsync({
-        input: {
-          organizationId,
-          hostelId: resident.hostel_id,
-          residentId: resident.id,
-        },
-        file: photoFile,
-      })
-    }
+    try {
+      setUploadRecoveryMessage(null)
 
-    if (kind === "aadhaar" && aadhaarFile) {
-      await aadhaarUpload.mutateAsync({
-        input: {
-          organizationId,
-          hostelId: resident.hostel_id,
-          residentId: resident.id,
-          documentType: "aadhaar",
-          isPublic: false,
-        },
-        file: aadhaarFile,
-      })
-    }
+      if (kind === "photo" && photoFile) {
+        await photoUpload.mutateAsync({
+          input: {
+            organizationId,
+            hostelId: resident.hostel_id,
+            residentId: resident.id,
+          },
+          file: photoFile,
+        })
+      }
 
-    if (kind === "student_id" && studentIdFile) {
-      await studentIdUpload.mutateAsync({
-        input: {
-          organizationId,
-          hostelId: resident.hostel_id,
-          residentId: resident.id,
-          documentType: "student_id",
-          isPublic: false,
-        },
-        file: studentIdFile,
-      })
-    }
+      if (kind === "aadhaar" && aadhaarFile) {
+        await aadhaarUpload.mutateAsync({
+          input: {
+            organizationId,
+            hostelId: resident.hostel_id,
+            residentId: resident.id,
+            documentType: "aadhaar",
+            isPublic: false,
+          },
+          file: aadhaarFile,
+        })
+      }
 
-    await onboarding.refetch()
-    toast.success("Document uploaded.")
+      if (kind === "student_id" && studentIdFile) {
+        await studentIdUpload.mutateAsync({
+          input: {
+            organizationId,
+            hostelId: resident.hostel_id,
+            residentId: resident.id,
+            documentType: "student_id",
+            isPublic: false,
+          },
+          file: studentIdFile,
+        })
+      }
+
+      await onboarding.refetch()
+      toast.success("Document uploaded.")
+    } catch {
+      setUploadRecoveryMessage(
+        "Upload did not complete. Check your connection, use a supported file type, and retry. Staff can help from support if it keeps failing."
+      )
+      toast.error("Upload failed. Retry or open support.")
+    }
   }
 
   async function submitForVerification() {
@@ -254,6 +264,13 @@ export function ResidentOnboardingClient() {
               <AlertCircle className="mb-2 size-4" aria-hidden="true" />
               {resident.onboarding_rejection_reason ||
                 "Your onboarding was rejected. Update the requested details and submit again."}
+              <div className="mt-3">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={"/resident/support?category=onboarding" as Route}>
+                    Get onboarding help
+                  </Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         ) : null}
@@ -320,6 +337,19 @@ export function ResidentOnboardingClient() {
               <CardDescription>Upload clear images or PDFs where allowed.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4">
+              {uploadRecoveryMessage ? (
+                <APIErrorState
+                  title="Upload recovery"
+                  message={uploadRecoveryMessage}
+                  action={
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={"/resident/support?category=upload" as Route}>
+                        Open support
+                      </Link>
+                    </Button>
+                  }
+                />
+              ) : null}
               <DocumentUploader
                 label="Aadhaar"
                 uploaded={Boolean(resident.aadhaar_document_id)}

@@ -6,15 +6,18 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3,
   BedDouble,
+  Bot,
   Building2,
   CalendarCheck,
   CalendarDays,
   ClipboardList,
+  ClipboardCheck,
   CreditCard,
   GalleryHorizontalEnd,
-  KeyRound,
   Globe,
+  KeyRound,
   LayoutDashboard,
+  LifeBuoy,
   Settings,
   ShieldCheck,
   UserRoundPlus,
@@ -34,6 +37,7 @@ export type AdminNavigationItem = {
 
 export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
   { title: "Reservations", href: "/admin/reservations", icon: CalendarCheck },
   { title: "Vacancy", href: "/admin/vacancy", icon: BedDouble },
@@ -47,6 +51,9 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Website CMS", href: "/admin/website", icon: Globe },
   { title: "Gallery", href: "/admin/gallery", icon: GalleryHorizontalEnd },
   { title: "Reports", href: "/admin/reports", icon: BarChart3 },
+  { title: "Alerts", href: "/admin/alerts", icon: LifeBuoy },
+  { title: "Launch Readiness", href: "/admin/launch-readiness", icon: ClipboardCheck },
+  { title: "Automation", href: "/admin/operations/automation", icon: Bot },
   { title: "Staff & Access", href: "/admin/settings/staff-access", icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]

@@ -41,12 +41,7 @@ export function useCreateResident() {
   return useMutation({
     mutationFn: (input: CreateResidentInput) => residentsSdk.create(input),
     onSuccess: (resident) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.residents.all({
-          organizationId: resident.organization_id,
-          hostelId: resident.hostel_id,
-        }),
-      })
+      invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },
   })
 }
@@ -57,12 +52,7 @@ export function useUpdateResident() {
   return useMutation({
     mutationFn: (input: UpdateResidentInput) => residentsSdk.update(input),
     onSuccess: (resident) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.residents.all({
-          organizationId: resident.organization_id,
-          hostelId: resident.hostel_id,
-        }),
-      })
+      invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },
   })
 }
@@ -82,12 +72,7 @@ export function useUpdateCurrentResident() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.residents.detail({ organizationId: resident.organization_id }, "me"),
       })
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.residents.all({
-          organizationId: resident.organization_id,
-          hostelId: resident.hostel_id,
-        }),
-      })
+      invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },
   })
 }
@@ -99,12 +84,21 @@ export function useDeactivateResident() {
     mutationFn: (input: { residentId: string; organizationId: string }) =>
       residentsSdk.deactivate(input),
     onSuccess: (resident) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.residents.all({
-          organizationId: resident.organization_id,
-          hostelId: resident.hostel_id,
-        }),
-      })
+      invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },
   })
+}
+
+function invalidateResidentOperationalState(
+  queryClient: ReturnType<typeof useQueryClient>,
+  organizationId: string,
+  hostelId?: string | null
+) {
+  const scope = { organizationId, hostelId }
+
+  void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.operations.all(scope) })
 }

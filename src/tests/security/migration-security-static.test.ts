@@ -73,4 +73,24 @@ describe("static migration security checks", () => {
       /grant\s+execute\s+on\s+function\s+public\.onboard_resident\(uuid,\s*uuid\)\s+to\s+service_role/i
     )
   })
+
+  it("keeps occupancy snapshots derived from active allocations and active residents", () => {
+    const occupancy = migration("20260523002000_occupancy_consistency.sql")
+
+    expect(occupancy).toMatch(/create\s+or\s+replace\s+view\s+public\.room_vacancy_view/i)
+    expect(occupancy).toMatch(/resident\.status\s+=\s+'active'/i)
+    expect(occupancy).toMatch(/resident\.is_active\s+is\s+true/i)
+    expect(occupancy).toMatch(/create\s+trigger\s+room_allocations_refresh_capacity/i)
+    expect(occupancy).toMatch(/create\s+trigger\s+reservations_refresh_capacity/i)
+  })
+
+  it("keeps room allocation and resident deactivation transaction-safe", () => {
+    const occupancy = migration("20260523002000_occupancy_consistency.sql")
+
+    expect(occupancy).toMatch(/create\s+or\s+replace\s+function\s+public\.allocate_room_atomic/i)
+    expect(occupancy).toMatch(/pg_advisory_xact_lock/i)
+    expect(occupancy).toMatch(/perform\s+public\.recalculate_hostel_capacity/i)
+    expect(occupancy).toMatch(/create\s+or\s+replace\s+function\s+public\.deactivate_resident_atomic/i)
+    expect(occupancy).toMatch(/status\s+=\s+'completed'/i)
+  })
 })

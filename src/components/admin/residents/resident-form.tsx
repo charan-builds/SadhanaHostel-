@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
-import { useCreateResident, useUpdateResident } from "@/hooks"
+import { useAdmissionsVacancy, useCreateResident, useUpdateResident } from "@/hooks"
 import type { Tables } from "@/types/database"
 
 const residentFormSchema = z.object({
@@ -42,6 +42,9 @@ const residentFormSchema = z.object({
   permanentAddress: z.string().trim().max(500).optional(),
   monthlyFeeAmount: z.coerce.number().nonnegative(),
   securityDepositAmount: z.coerce.number().nonnegative(),
+  roomId: z.string().uuid("Choose an available room.").optional().or(z.literal("")),
+  bedLabel: z.string().trim().max(40).optional(),
+  allocatedFrom: z.string().optional(),
   notes: z.string().trim().max(1000).optional(),
   status: z.enum(["draft", "active", "suspended", "checked_out", "archived"]).optional(),
 })
@@ -60,6 +63,14 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   const hostelId = resident?.hostel_id ?? session?.hostelIds[0] ?? null
   const createResident = useCreateResident()
   const updateResident = useUpdateResident()
+  const vacancyQuery = useAdmissionsVacancy({
+    organizationId: organizationId ?? "",
+    hostelId: hostelId ?? undefined,
+  })
+  const availableRooms =
+    vacancyQuery.data?.rooms.filter(
+      (room) => room.room_status === "active" && room.available_beds > 0
+    ) ?? []
   const {
     control,
     register,
@@ -86,6 +97,9 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       permanentAddress: resident?.permanent_address ?? "",
       monthlyFeeAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
       securityDepositAmount: resident?.security_deposit_amount ?? 0,
+      roomId: "",
+      bedLabel: "",
+      allocatedFrom: new Date().toISOString().slice(0, 10),
       notes: resident?.notes ?? "",
       status: resident?.status ?? "active",
     },
@@ -141,6 +155,9 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             permanentAddress: values.permanentAddress || undefined,
             monthlyFeeAmount: values.monthlyFeeAmount,
             securityDepositAmount: values.securityDepositAmount,
+            roomId: values.roomId || undefined,
+            bedLabel: values.bedLabel || undefined,
+            allocatedFrom: values.allocatedFrom || undefined,
             notes: values.notes || undefined,
           })
 
@@ -239,6 +256,51 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         <Field id="securityDepositAmount" label="Security deposit" error={errors.securityDepositAmount?.message}>
           <Input id="securityDepositAmount" type="number" {...register("securityDepositAmount")} />
         </Field>
+        {!resident ? (
+          <>
+            <div className="md:col-span-2">
+              <h3 className="text-sm font-semibold text-foreground">Room assignment</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Assign a room now to update live occupancy and vacancy immediately. Leave blank only for draft pre-onboarding residents.
+              </p>
+            </div>
+            <Field id="roomId" label="Available room" error={errors.roomId?.message}>
+              <Controller
+                control={control}
+                name="roomId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value || "none"}
+                    onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
+                    disabled={vacancyQuery.isLoading}
+                  >
+                    <SelectTrigger id="roomId" className="h-9 w-full">
+                      <SelectValue
+                        placeholder={
+                          vacancyQuery.isLoading ? "Loading rooms" : "Choose room"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Do not assign yet</SelectItem>
+                      {availableRooms.map((room) => (
+                        <SelectItem key={room.room_id} value={room.room_id}>
+                          {room.room_number} · {room.available_beds} beds available
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </Field>
+            <Field id="bedLabel" label="Bed label" error={errors.bedLabel?.message}>
+              <Input id="bedLabel" placeholder="A, B, 1, 2" {...register("bedLabel")} />
+            </Field>
+            <Field id="allocatedFrom" label="Allocated from" error={errors.allocatedFrom?.message}>
+              <Input id="allocatedFrom" type="date" {...register("allocatedFrom")} />
+            </Field>
+          </>
+        ) : null}
         <Field id="permanentAddress" label="Permanent address" error={errors.permanentAddress?.message} className="md:col-span-2">
           <Textarea id="permanentAddress" className="min-h-24" {...register("permanentAddress")} />
         </Field>

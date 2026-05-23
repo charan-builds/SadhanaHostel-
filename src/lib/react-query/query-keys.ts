@@ -100,6 +100,39 @@ export const queryKeys = {
       return [...queryKeys.staffAccess.all(scope), "list", filters] as const
     },
   },
+  support: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "support"] as const
+    },
+    requests(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.support.all(scope), "requests", filters] as const
+    },
+    alerts(scope: TenantScope) {
+      return [...queryKeys.support.all(scope), "alerts"] as const
+    },
+  },
+  operations: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "operations"] as const
+    },
+    automation(scope: TenantScope) {
+      return [...queryKeys.operations.all(scope), "automation"] as const
+    },
+    consistency(scope: TenantScope) {
+      return [...queryKeys.operations.all(scope), "consistency"] as const
+    },
+  },
+  launch: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "launch"] as const
+    },
+    diagnostics(scope: TenantScope) {
+      return [...queryKeys.launch.all(scope), "diagnostics"] as const
+    },
+    metrics(scope: TenantScope) {
+      return [...queryKeys.launch.all(scope), "metrics"] as const
+    },
+  },
   leaves: {
     all(scope: TenantScope) {
       return [...queryKeys.tenant(scope), "leaves"] as const
@@ -117,11 +150,17 @@ export const queryKeys = {
     },
   },
   analytics: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "analytics"] as const
+    },
     dashboard(scope: TenantScope) {
-      return [...queryKeys.tenant(scope), "analytics", "dashboard"] as const
+      return [...queryKeys.analytics.all(scope), "dashboard"] as const
     },
     advanced(scope: TenantScope, range: Record<string, unknown>) {
-      return [...queryKeys.tenant(scope), "analytics", "advanced", range] as const
+      return [...queryKeys.analytics.all(scope), "advanced", range] as const
+    },
+    owner(scope: TenantScope, range: Record<string, unknown>) {
+      return [...queryKeys.analytics.all(scope), "owner", range] as const
     },
   },
   website: {

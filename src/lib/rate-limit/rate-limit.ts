@@ -61,6 +61,11 @@ export const RATE_LIMIT_POLICIES = {
     limit: 60,
     windowMs: 60_000,
   },
+  support: {
+    name: "support.write",
+    limit: 8,
+    windowMs: 60_000,
+  },
 } satisfies Record<string, RateLimitPolicy>
 
 const buckets = new Map<string, RateLimitBucket>()

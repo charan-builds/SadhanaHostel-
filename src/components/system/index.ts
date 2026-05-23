@@ -1,4 +1,5 @@
 export * from "./api-error-state"
+export * from "./connectivity-recovery-banner"
 export * from "./empty-state"
 export * from "./error-boundary"
 export * from "./global-loader"

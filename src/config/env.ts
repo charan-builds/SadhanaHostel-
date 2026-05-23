@@ -41,11 +41,26 @@ const publicEnvSchema = z.object({
     z.string().url()
   ),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: configuredString("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+  NEXT_PUBLIC_LAUNCH_MODE: z
+    .enum(["local", "staging", "soft_launch", "production"])
+    .default("local"),
+  NEXT_PUBLIC_MAINTENANCE_MODE: booleanEnvSchema("false"),
+  NEXT_PUBLIC_FEATURE_FLAGS: optionalEnvString(),
 })
 
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: configuredString("SUPABASE_SERVICE_ROLE_KEY"),
   LOG_LEVEL: logLevelSchema,
+  LAUNCH_MODE: z
+    .enum(["local", "staging", "soft_launch", "production"])
+    .default("local"),
+  MAINTENANCE_MODE: booleanEnvSchema("false"),
+  MAINTENANCE_MESSAGE: optionalEnvString(),
+  MAINTENANCE_BYPASS_TOKEN: optionalEnvString(z.string().min(16)),
+  FEATURE_FLAGS: optionalEnvString(),
+  SOFT_LAUNCH_RESIDENT_LIMIT: z.coerce.number().int().positive().default(20),
+  LAUNCH_SUPPORT_WHATSAPP: optionalEnvString(),
+  LAUNCH_OWNER_EMAIL: optionalEnvString(z.string().email()),
   RATE_LIMIT_ENABLED: booleanEnvSchema("true"),
   NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),
   CRON_SECRET: optionalEnvString(z.string().min(16)),
@@ -75,6 +90,9 @@ function readPublicEnv() {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_LAUNCH_MODE: process.env.NEXT_PUBLIC_LAUNCH_MODE,
+    NEXT_PUBLIC_MAINTENANCE_MODE: process.env.NEXT_PUBLIC_MAINTENANCE_MODE,
+    NEXT_PUBLIC_FEATURE_FLAGS: process.env.NEXT_PUBLIC_FEATURE_FLAGS,
   }
 }
 

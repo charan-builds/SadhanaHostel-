@@ -11,3 +11,12 @@ export const advancedAnalyticsSchema = dashboardAnalyticsSchema.extend({
   fromDate: isoDateSchema.optional(),
   toDate: isoDateSchema.optional(),
 })
+
+export const ownerAnalyticsSchema = dashboardAnalyticsSchema.extend({
+  fromDate: isoDateSchema.optional(),
+  toDate: isoDateSchema.optional(),
+})
+
+export const ownerAnalyticsExportSchema = ownerAnalyticsSchema.extend({
+  format: z.enum(["csv", "pdf"]).default("csv"),
+})

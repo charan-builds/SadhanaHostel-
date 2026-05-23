@@ -281,26 +281,18 @@ export class ResidentsRepository {
   }
 
   async deactivate(residentId: string, organizationId: string, actorUserId: string) {
-    const { data, error } = await this.db
-      .from("residents")
-      .update({
-        status: "archived",
-        is_active: false,
-        deleted_at: new Date().toISOString(),
-        deleted_by: actorUserId,
-        updated_by: actorUserId,
-      })
-      .eq("id", residentId)
-      .eq("organization_id", organizationId)
-      .is("deleted_at", null)
-      .select("*")
-      .single()
+    const { data, error } = await this.residentsDb().rpc("deactivate_resident_atomic", {
+      p_organization_id: organizationId,
+      p_resident_id: residentId,
+      p_actor_user_id: actorUserId,
+      p_reason: "Resident deactivated from admin residents workflow.",
+    })
 
     if (error) {
       throwRepositoryError(error, "Unable to deactivate resident.")
     }
 
-    return data
+    return data as ResidentRow
   }
 
   async linkUser(residentId: string, userId: string) {

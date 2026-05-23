@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { Bell, LogOut, Search } from "lucide-react"
@@ -76,8 +77,10 @@ export function AdminTopbar() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button type="button" variant="outline" size="icon" aria-label="Notifications">
-            <Bell className="size-4" aria-hidden="true" />
+          <Button asChild variant="outline" size="icon" aria-label="Operational alerts">
+            <Link href={"/admin/alerts" as Route}>
+              <Bell className="size-4" aria-hidden="true" />
+            </Link>
           </Button>
 
           <DropdownMenu>

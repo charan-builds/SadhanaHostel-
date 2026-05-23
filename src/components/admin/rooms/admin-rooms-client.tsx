@@ -46,6 +46,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, humanizeEnum } from "@/lib/format"
+import { useRealtimeAdmissions } from "@/lib/realtime"
 import { useAllocateRoom, useCreateRoom, useResidents, useRooms, useUpdateRoom } from "@/hooks"
 import type { Tables } from "@/types/database"
 
@@ -82,6 +83,7 @@ type AllocationFormValues = z.output<typeof allocationFormSchema>
 export function AdminRoomsClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
+  useRealtimeAdmissions({ enabled: Boolean(organizationId) })
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<(typeof roomStatuses)[number] | "all">("all")
@@ -101,12 +103,15 @@ export function AdminRoomsClient() {
   const residentsQuery = useResidents({
     organizationId: organizationId ?? "",
     hostelId,
-    status: "active",
     page: 1,
     pageSize: 100,
   })
 
   const rooms = roomsQuery.data?.data ?? []
+  const allocatableResidents =
+    residentsQuery.data?.data.filter((resident) =>
+      ["draft", "active"].includes(resident.status)
+    ) ?? []
   const meta = roomsQuery.data?.meta
   const activeRooms = rooms.filter((room) => room.status === "active").length
   const totalCapacity = rooms.reduce((sum, room) => sum + room.capacity, 0)
@@ -329,7 +334,7 @@ export function AdminRoomsClient() {
         room={allocatingRoom}
         organizationId={organizationId}
         hostelId={hostelId}
-        residents={residentsQuery.data?.data ?? []}
+        residents={allocatableResidents}
       />
     </div>
   )

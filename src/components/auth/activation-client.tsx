@@ -1,6 +1,7 @@
 "use client"
 
 import type { Route } from "next"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck } from "lucide-react"
@@ -196,6 +197,18 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
         <EmptyState
           title="Invite unavailable"
           message="This invite link is invalid, expired, or already used. Please contact hostel administration for a new access link."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link href={"/support?topic=expired-invite" as Route}>
+                  Get invite help
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={"/activate" as Route}>Enter invite code</Link>
+              </Button>
+            </div>
+          }
         />
       ) : null}
 

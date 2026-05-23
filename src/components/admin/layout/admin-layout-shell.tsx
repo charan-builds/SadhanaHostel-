@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { AdminBreadcrumbs } from "@/components/admin/layout/admin-breadcrumbs"
 import { AdminSidebar } from "@/components/admin/layout/admin-sidebar"
 import { AdminTopbar } from "@/components/admin/layout/admin-topbar"
+import { AdminOperationalBanner } from "@/components/admin/support/admin-operational-banner"
 
 type AdminLayoutShellProps = {
   children: ReactNode
@@ -16,6 +17,7 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
         <AdminTopbar />
         <main className="flex flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           <AdminBreadcrumbs />
+          <AdminOperationalBanner />
           {children}
         </main>
       </div>

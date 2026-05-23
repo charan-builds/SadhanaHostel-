@@ -5,6 +5,12 @@ import {
   AUTH_REDIRECTS,
   RESIDENT_ROUTE_PREFIX,
 } from "@/constants/auth"
+import {
+  getMaintenanceMessage,
+  isMaintenanceBypassRequest,
+  isMaintenanceExemptPath,
+  isMaintenanceModeEnabled,
+} from "@/config/launch"
 import { updateSession } from "@/lib/supabase/middleware"
 
 export async function proxy(request: NextRequest) {
@@ -13,6 +19,14 @@ export async function proxy(request: NextRequest) {
   const pathWithSearch = `${pathname}${request.nextUrl.search}`
 
   requestHeaders.set("x-sadhana-pathname", pathWithSearch)
+
+  if (
+    isMaintenanceModeEnabled() &&
+    !isMaintenanceExemptPath(pathname) &&
+    !isMaintenanceBypassRequest(request)
+  ) {
+    return maintenanceResponse(request)
+  }
 
   const { response, user } = await updateSession(request, requestHeaders)
 
@@ -31,6 +45,35 @@ export async function proxy(request: NextRequest) {
   }
 
   return response
+}
+
+function maintenanceResponse(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "MAINTENANCE_MODE",
+          message: getMaintenanceMessage(),
+        },
+      },
+      {
+        status: 503,
+        headers: {
+          "cache-control": "no-store",
+          "retry-after": "300",
+        },
+      }
+    )
+  }
+
+  const maintenanceUrl = request.nextUrl.clone()
+  maintenanceUrl.pathname = "/maintenance"
+  maintenanceUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`)
+
+  return NextResponse.redirect(maintenanceUrl)
 }
 
 function isProtectedPath(pathname: string) {

@@ -1,10 +1,14 @@
 import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
-import { forbidden } from "@/lib/api/api-error"
+import { conflict, forbidden } from "@/lib/api/api-error"
+import { logger } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ResidentsRepository } from "@/repositories/residents.repository"
+import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
+import type { RealtimeEventType } from "@/services/realtime/event-types"
 import {
   createResidentSchema,
   residentIdMutationSchema,
@@ -18,10 +22,12 @@ import { assertFound, AuthService } from "./auth.service"
 export class ResidentsService {
   private readonly authService: AuthService
   private readonly residentsRepository: ResidentsRepository
+  private readonly roomsRepository: RoomsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.roomsRepository = new RoomsRepository(db)
   }
 
   static async create() {
@@ -78,7 +84,7 @@ export class ResidentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.residentsRepository.create({
+    const resident = await this.residentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       admission_number: values.admissionNumber,
@@ -101,6 +107,41 @@ export class ResidentsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    let allocatedRoomId: string | null = null
+
+    if (values.roomId) {
+      try {
+        const allocation = await this.roomsRepository.allocateRoomAtomic({
+          organizationId: values.organizationId,
+          hostelId: values.hostelId,
+          roomId: values.roomId,
+          residentId: resident.id,
+          bedLabel: values.bedLabel,
+          allocatedFrom: values.allocatedFrom ?? new Date().toISOString().slice(0, 10),
+          monthlyFeeAmount: values.monthlyFeeAmount,
+          reason: "Initial resident creation room assignment.",
+          actorUserId: context.authUser.id,
+        })
+        allocatedRoomId = allocation.room_id
+      } catch (error) {
+        await this.rollbackResidentAfterAllocationFailure(
+          resident.id,
+          values.organizationId,
+          context.authUser.id
+        )
+        throw mapResidentAllocationError(error)
+      }
+    }
+
+    const currentResident =
+      (await this.residentsRepository.getById(resident.id, values.organizationId)) ?? resident
+
+    await this.publishResidentEvent("resident.created", currentResident, context.authUser.id, {
+      allocatedRoomId,
+    })
+
+    return currentResident
   }
 
   async updateResident(input: unknown) {
@@ -109,7 +150,7 @@ export class ResidentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.residentsRepository.update(values.residentId, values.organizationId, {
+    const resident = await this.residentsRepository.update(values.residentId, values.organizationId, {
       full_name: values.fullName,
       preferred_name: values.preferredName,
       resident_type: values.residentType,
@@ -129,6 +170,10 @@ export class ResidentsService {
       status: values.status,
       updated_by: context.authUser.id,
     })
+
+    await this.publishResidentEvent("resident.updated", resident, context.authUser.id)
+
+    return resident
   }
 
   async updateCurrentResident(input: unknown) {
@@ -168,10 +213,117 @@ export class ResidentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.residentsRepository.deactivate(
+    const resident = await this.residentsRepository.deactivate(
       values.residentId,
       values.organizationId,
       context.authUser.id
     )
+
+    await this.publishResidentEvent("resident.deactivated", resident, context.authUser.id)
+
+    return resident
   }
+
+  private async rollbackResidentAfterAllocationFailure(
+    residentId: string,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    try {
+      await this.residentsRepository.deactivate(residentId, organizationId, actorUserId)
+    } catch (rollbackError) {
+      logger.warn({
+        event: "resident.create_allocation_rollback_failed",
+        message: "Resident creation allocation rollback failed; consistency scanner will surface the draft record.",
+        organizationId,
+        userId: actorUserId,
+        metadata: { residentId },
+        error: rollbackError instanceof Error
+          ? { name: rollbackError.name, message: rollbackError.message }
+          : undefined,
+      })
+    }
+  }
+
+  private async publishResidentEvent(
+    type: RealtimeEventType,
+    resident: { id: string; organization_id: string; hostel_id: string | null },
+    actorUserId: string,
+    metadata?: { allocatedRoomId?: string | null }
+  ) {
+    try {
+      const publisher = new RealtimeEventPublisher()
+      const payload = {
+        residentId: resident.id,
+        hostelId: resident.hostel_id,
+        allocatedRoomId: metadata?.allocatedRoomId ?? null,
+      }
+
+      await Promise.all([
+        publisher.publish({
+          type,
+          organizationId: resident.organization_id,
+          hostelId: resident.hostel_id,
+          actorUserId,
+          payload,
+        }),
+        publisher.publish({
+          type: "vacancy.changed",
+          organizationId: resident.organization_id,
+          hostelId: resident.hostel_id,
+          actorUserId,
+          payload: {
+            reason: type,
+            residentId: resident.id,
+            allocatedRoomId: metadata?.allocatedRoomId ?? null,
+          },
+        }),
+        publisher.publish({
+          type: "dashboard.refresh",
+          organizationId: resident.organization_id,
+          hostelId: resident.hostel_id,
+          actorUserId,
+          payload: {
+            reason: type,
+            residentId: resident.id,
+          },
+        }),
+      ])
+    } catch (error) {
+      logger.warn({
+        event: "resident.realtime_publish_failed",
+        message: "Resident lifecycle completed, but realtime refresh could not be published.",
+        organizationId: resident.organization_id,
+        userId: actorUserId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        metadata: { residentId: resident.id, eventType: type },
+      })
+    }
+  }
+}
+
+function mapResidentAllocationError(error: unknown): never {
+  const message = error instanceof Error ? error.message : ""
+
+  if (message.includes("room_capacity_exceeded")) {
+    throw conflict("Room is already full. Choose another room or run occupancy recalculation.")
+  }
+
+  if (message.includes("resident_already_allocated")) {
+    throw conflict("Resident already has an active room allocation.")
+  }
+
+  if (message.includes("room_not_allocatable")) {
+    throw conflict("Room is not available for allocation.")
+  }
+
+  if (message.includes("resident_not_allocatable")) {
+    throw conflict("Resident is not eligible for room allocation.")
+  }
+
+  if (message.includes("room_not_found")) {
+    throw conflict("Room not found.")
+  }
+
+  throw error
 }

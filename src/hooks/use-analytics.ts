@@ -3,7 +3,12 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { queryKeys } from "@/lib/react-query"
-import { analyticsSdk, type AdvancedAnalyticsInput, type DashboardAnalyticsInput } from "@/sdk"
+import {
+  analyticsSdk,
+  type AdvancedAnalyticsInput,
+  type DashboardAnalyticsInput,
+  type OwnerAnalyticsInput,
+} from "@/sdk"
 
 export function useDashboardAnalytics(params: DashboardAnalyticsInput) {
   return useQuery({
@@ -20,5 +25,15 @@ export function useAdvancedAnalytics(params: AdvancedAnalyticsInput) {
     queryFn: () => analyticsSdk.advanced(params),
     enabled: Boolean(params.organizationId),
     staleTime: 5 * 60_000,
+  })
+}
+
+export function useOwnerAnalytics(params: OwnerAnalyticsInput) {
+  return useQuery({
+    queryKey: queryKeys.analytics.owner(params, params),
+    queryFn: () => analyticsSdk.owner(params),
+    enabled: Boolean(params.organizationId),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 }

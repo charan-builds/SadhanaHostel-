@@ -3,8 +3,11 @@ import "server-only"
 import {
   invoiceCleanupJob,
   admissionFollowUpJob,
+  checkoutReconciliationJob,
+  consistencyValidationJob,
   inactiveInquiryCleanupJob,
   monthlyFeeGenerationJob,
+  onboardingAgingJob,
   occupancyRecalculationJob,
   paymentReminderJob,
   reservationExpiryJob,
@@ -141,6 +144,39 @@ export const cronRegistry = {
       organizationId: organization.id,
       runAt: now.toISOString(),
       limit: 100,
+    }),
+  },
+  "consistency-validation": {
+    name: "consistency-validation",
+    job: consistencyValidationJob,
+    description: "Scan operational consistency and record findings for admin review.",
+    schedule: "15 1 * * *",
+    maxDurationSeconds: 60,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      persist: true,
+    }),
+  },
+  "onboarding-aging": {
+    name: "onboarding-aging",
+    job: onboardingAgingJob,
+    description: "Notify residents and admins about stale incomplete onboarding.",
+    schedule: "45 2 * * *",
+    maxDurationSeconds: 60,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
+      olderThanDays: 7,
+      limit: 100,
+    }),
+  },
+  "checkout-reconciliation": {
+    name: "checkout-reconciliation",
+    job: checkoutReconciliationJob,
+    description: "Release room allocations for checked-out residents.",
+    schedule: "20 3 * * *",
+    maxDurationSeconds: 60,
+    buildPayload: ({ organization }: CronBuildInput) => ({
+      organizationId: organization.id,
     }),
   },
 } as const

@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
+import { OperationsRepository } from "@/repositories/operations.repository"
 
 import { runJob } from "../job-runner"
 import type { JobDefinition, JobResult } from "../types"
@@ -35,6 +36,7 @@ export async function executeVercelCron(
   const now = new Date()
   const db = createSupabaseAdminClient()
   const organizationsRepository = new OrganizationsRepository(db)
+  const operationsRepository = new OperationsRepository(db)
   const organizations = await organizationsRepository.listActiveOrganizations()
   const runId = crypto.randomUUID()
   const results: CronExecutionResult["results"] = []
@@ -53,6 +55,25 @@ export async function executeVercelCron(
   })
 
   for (const organization of organizations) {
+    const setting = await operationsRepository.getAutomationSetting({
+      organizationId: organization.id,
+      jobName: schedule.job.name,
+    })
+
+    if (setting && !setting.enabled) {
+      results.push({
+        organizationId: organization.id,
+        result: {
+          status: "skipped",
+          processed: 0,
+          skipped: 1,
+          failed: 0,
+          message: "Cron skipped because automation job is disabled for this organization.",
+        },
+      })
+      continue
+    }
+
     const payload = schedule.buildPayload({ organization, now }) as Record<string, unknown>
     const result = await runJob(
       schedule.job as JobDefinition<Record<string, unknown>>,

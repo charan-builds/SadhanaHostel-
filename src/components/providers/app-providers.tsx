@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 
 import { Toaster } from "@/components/ui/sonner"
-import { ErrorBoundary } from "@/components/system"
+import { ConnectivityRecoveryBanner, ErrorBoundary } from "@/components/system"
 import { AuthProvider } from "@/lib/auth"
 import { AppQueryProvider } from "@/lib/react-query"
 import { RealtimeProvider } from "@/lib/realtime"
@@ -23,6 +23,7 @@ export function SessionProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
       <SentryContextSync />
+      <ConnectivityRecoveryBanner />
       <RealtimeProvider>{children}</RealtimeProvider>
     </AuthProvider>
   )

@@ -91,6 +91,8 @@ function getAdminRouteAllowedRoles(requestedPath: string): readonly AppRole[] | 
 
   if (
     pathname.startsWith("/admin/settings") ||
+    pathname.startsWith("/admin/operations/automation") ||
+    pathname.startsWith("/admin/launch-readiness") ||
     pathname.startsWith("/admin/finance/payment-security") ||
     pathname.startsWith("/admin/website") ||
     pathname.startsWith("/admin/gallery")
@@ -100,7 +102,8 @@ function getAdminRouteAllowedRoles(requestedPath: string): readonly AppRole[] | 
 
   if (
     pathname.startsWith("/admin/payments") ||
-    pathname.startsWith("/admin/reports")
+    pathname.startsWith("/admin/reports") ||
+    pathname.startsWith("/admin/owner-dashboard")
   ) {
     return FINANCE_ROLES
   }

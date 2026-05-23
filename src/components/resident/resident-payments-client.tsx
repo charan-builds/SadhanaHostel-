@@ -1,7 +1,9 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Copy, Download, Loader2, QrCode, UploadCloud } from "lucide-react"
+import Link from "next/link"
+import type { Route } from "next"
+import { AlertTriangle, Copy, Download, Loader2, QrCode, UploadCloud } from "lucide-react"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
@@ -84,6 +86,8 @@ export function ResidentPaymentsClient() {
     ledger.data?.totals.currentDue && ledger.data.totals.currentDue > 0
       ? ledger.data.totals.currentDue
       : resident.data?.monthly_fee_amount ?? 0
+  const rejectedPayments =
+    payments.data?.data.filter((payment) => payment.status === "failed") ?? []
 
   const {
     register,
@@ -197,6 +201,13 @@ export function ResidentPaymentsClient() {
           {errors.root?.message ? (
             <div className="mt-4">
               <APIErrorState title="Payment failed" message={errors.root.message} />
+              <div className="mt-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={"/resident/support?category=payment" as Route}>
+                    Get payment help
+                  </Link>
+                </Button>
+              </div>
             </div>
           ) : null}
 
@@ -332,6 +343,23 @@ export function ResidentPaymentsClient() {
           ) : undefined
         }
       >
+        {rejectedPayments.length > 0 ? (
+          <div className="border-b bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <p>
+                  {rejectedPayments.length} payment submission needs correction. Check the UPI reference and upload a fresh screenshot.
+                </p>
+              </div>
+              <Button asChild variant="outline" size="sm" className="bg-background">
+                <Link href={"/resident/support?category=payment" as Route}>
+                  Ask finance
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {payments.isLoading ? (
           <LoadingState variant="table" />
         ) : (

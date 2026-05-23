@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Constants } from "@/types/database"
 
 import {
+  dateOnlySchema,
   moneySchema,
   optionalEmailSchema,
   paginationSchema,
@@ -37,6 +38,9 @@ export const createResidentSchema = z.object({
   permanentAddress: z.string().trim().max(500).optional(),
   monthlyFeeAmount: moneySchema.default(0),
   securityDepositAmount: moneySchema.default(0),
+  roomId: uuidSchema.optional(),
+  bedLabel: z.string().trim().max(40).optional(),
+  allocatedFrom: dateOnlySchema.optional(),
   notes: z.string().trim().max(1000).optional(),
 })
 
@@ -45,6 +49,9 @@ export const updateResidentSchema = createResidentSchema
     organizationId: true,
     hostelId: true,
     admissionNumber: true,
+    roomId: true,
+    bedLabel: true,
+    allocatedFrom: true,
   })
   .partial()
   .extend({

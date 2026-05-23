@@ -138,7 +138,7 @@ export function DashboardShell({
             className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-2 py-2 shadow-lg backdrop-blur lg:hidden"
             aria-label="Resident quick navigation"
           >
-            <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+            <div className="mx-auto flex max-w-md gap-1 overflow-x-auto">
               {navigation.map((item) => {
                 const Icon = item.icon
 
@@ -146,8 +146,8 @@ export function DashboardShell({
                   <Button
                     key={item.href}
                     asChild
-                    variant="ghost"
-                    className="h-14 flex-col gap-1 px-1 text-[11px]"
+                  variant="ghost"
+                    className="h-14 min-w-16 flex-col gap-1 px-1 text-[11px]"
                   >
                     <Link href={item.href}>
                       {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}

@@ -92,7 +92,15 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
   return (
     <form className="grid gap-5" onSubmit={handleSubmit(onSubmit)}>
       {errors.root?.message ? (
-        <APIErrorState title="Sign in failed" message={errors.root.message} />
+        <APIErrorState
+          title="Sign in failed"
+          message={`${errors.root.message} If your account was suspended, locked, or invitation-only access has expired, contact hostel administration from the support center.`}
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href={"/support?topic=account" as Route}>Open support</Link>
+            </Button>
+          }
+        />
       ) : null}
 
       <div className="grid gap-2">

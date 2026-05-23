@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
+import { useRealtimeAdmissions } from "@/lib/realtime"
 import { useDeactivateResident, useResidents } from "@/hooks"
 import type { Tables } from "@/types/database"
 
@@ -50,6 +51,7 @@ type ResidentTypeFilter = "all" | "student" | "employee" | "other"
 export function AdminResidentsClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
+  useRealtimeAdmissions({ enabled: Boolean(organizationId) })
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<ResidentStatusFilter>("all")
   const [residentType, setResidentType] = useState<ResidentTypeFilter>("all")

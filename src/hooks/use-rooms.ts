@@ -33,12 +33,7 @@ export function useCreateRoom() {
   return useMutation({
     mutationFn: (input: CreateRoomInput) => roomsSdk.create(input),
     onSuccess: (room) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.rooms.all({
-          organizationId: room.organization_id,
-          hostelId: room.hostel_id,
-        }),
-      })
+      invalidateRoomOperationalState(queryClient, room.organization_id, room.hostel_id)
     },
   })
 }
@@ -49,12 +44,7 @@ export function useUpdateRoom() {
   return useMutation({
     mutationFn: (input: UpdateRoomInput) => roomsSdk.update(input),
     onSuccess: (room) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.rooms.all({
-          organizationId: room.organization_id,
-          hostelId: room.hostel_id,
-        }),
-      })
+      invalidateRoomOperationalState(queryClient, room.organization_id, room.hostel_id)
     },
   })
 }
@@ -65,12 +55,21 @@ export function useAllocateRoom() {
   return useMutation({
     mutationFn: (input: AllocateRoomInput) => roomsSdk.allocate(input),
     onSuccess: (allocation) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.rooms.all({
-          organizationId: allocation.organization_id,
-          hostelId: allocation.hostel_id,
-        }),
-      })
+      invalidateRoomOperationalState(queryClient, allocation.organization_id, allocation.hostel_id)
     },
   })
+}
+
+function invalidateRoomOperationalState(
+  queryClient: ReturnType<typeof useQueryClient>,
+  organizationId: string,
+  hostelId?: string | null
+) {
+  const scope = { organizationId, hostelId }
+
+  void queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(scope) })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.operations.all(scope) })
 }

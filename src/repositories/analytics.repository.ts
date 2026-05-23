@@ -1,3 +1,5 @@
+import type { PostgrestError } from "@supabase/supabase-js"
+
 import type { Tables } from "@/types/database"
 
 import { throwRepositoryError, type AppSupabaseClient } from "./types"
@@ -11,6 +13,70 @@ export type RecentLeave = Pick<
   Tables<"leave_requests">,
   "id" | "resident_id" | "from_date" | "to_date" | "status" | "created_at"
 >
+
+export type OwnerRoom = Pick<
+  Tables<"rooms">,
+  "id" | "room_number" | "room_type" | "capacity" | "base_monthly_fee" | "status"
+>
+
+export type OwnerAllocation = Pick<
+  Tables<"room_allocations">,
+  "room_id" | "resident_id" | "allocated_from" | "allocated_to" | "status"
+>
+
+export type OwnerResident = {
+  id: string
+  created_at: string
+  joined_on: string | null
+  checkout_on: string | null
+  status: string
+  monthly_fee_amount: number
+  onboarding_status: string | null
+}
+
+export type OwnerReservation = {
+  id: string
+  created_at: string
+  reserved_until: string
+  reserved_bed_count: number
+  advance_amount: number
+  status: string
+}
+
+export type OwnerFeeRecord = Pick<
+  Tables<"monthly_fee_records">,
+  "resident_id" | "period_month" | "due_date" | "total_amount" | "paid_amount" | "balance_amount" | "status"
+>
+
+export type OwnerCapacity = {
+  total_beds: number
+  occupied_beds: number
+  reserved_beds: number
+  maintenance_blocked_beds: number
+  available_beds: number
+  last_calculated_at: string
+}
+
+type QueryResult<T> = {
+  data: T | null
+  error: PostgrestError | null
+}
+
+type GenericAnalyticsQueryBuilder = {
+  select(columns?: string): GenericAnalyticsQueryBuilder
+  eq(column: string, value: unknown): GenericAnalyticsQueryBuilder
+  is(column: string, value: boolean | null): GenericAnalyticsQueryBuilder
+  gte(column: string, value: unknown): GenericAnalyticsQueryBuilder
+  lte(column: string, value: unknown): GenericAnalyticsQueryBuilder
+  order(column: string, options?: { ascending?: boolean }): GenericAnalyticsQueryBuilder
+  limit(count: number): GenericAnalyticsQueryBuilder
+  maybeSingle(): Promise<QueryResult<unknown>>
+  range(from: number, to: number): Promise<QueryResult<unknown[]>>
+}
+
+type GenericAnalyticsDb = {
+  from(table: string): GenericAnalyticsQueryBuilder
+}
 
 export class AnalyticsRepository {
   constructor(private readonly db: AppSupabaseClient) {}
@@ -299,5 +365,148 @@ export class AnalyticsRepository {
     }
 
     return data ?? []
+  }
+
+  async getHostelCapacitySnapshot(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("hostel_capacity")
+      .select(
+        "total_beds,occupied_beds,reserved_beds,maintenance_blocked_beds,available_beds,last_calculated_at"
+      )
+      .eq("organization_id", organizationId)
+      .order("last_calculated_at", { ascending: false })
+      .limit(1)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load capacity snapshot.")
+    }
+
+    return data as unknown as OwnerCapacity | null
+  }
+
+  async listOwnerRooms(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("rooms")
+      .select("id,room_number,room_type,capacity,base_monthly_fee,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("room_number", { ascending: true })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner room analytics.")
+    }
+
+    return (data ?? []) as OwnerRoom[]
+  }
+
+  async listOwnerAllocations(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("room_allocations")
+      .select("room_id,resident_id,allocated_from,allocated_to,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner allocation analytics.")
+    }
+
+    return (data ?? []) as OwnerAllocation[]
+  }
+
+  async listOwnerResidents(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("residents")
+      .select("id,created_at,joined_on,checkout_on,status,monthly_fee_amount,onboarding_status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner resident analytics.")
+    }
+
+    return (data ?? []) as unknown as OwnerResident[]
+  }
+
+  async listOwnerReservations(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.analyticsDb()
+      .from("reservations")
+      .select("id,created_at,reserved_until,reserved_bed_count,advance_amount,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+      .order("created_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load reservation analytics.")
+    }
+
+    return (data ?? []) as unknown as OwnerReservation[]
+  }
+
+  async listOwnerFeeRecords(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("monthly_fee_records")
+      .select("resident_id,period_month,due_date,total_amount,paid_amount,balance_amount,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("period_month", fromDate)
+      .lte("period_month", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner fee analytics.")
+    }
+
+    return (data ?? []) as OwnerFeeRecord[]
+  }
+
+  private analyticsDb() {
+    return this.db as unknown as GenericAnalyticsDb
   }
 }

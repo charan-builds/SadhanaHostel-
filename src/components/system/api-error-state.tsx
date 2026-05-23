@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import { Button } from "@/components/ui/button"
 
 export function APIErrorState({
@@ -6,12 +8,14 @@ export function APIErrorState({
   message,
   requestId,
   onRetry,
+  action,
 }: {
   title?: string
   error?: unknown
   message?: string
   requestId?: string
   onRetry?: () => void
+  action?: ReactNode
 }) {
   const resolvedMessage = message ?? getErrorMessage(error)
   const resolvedRequestId = requestId ?? getRequestId(error)
@@ -27,10 +31,15 @@ export function APIErrorState({
           <p className="text-xs text-muted-foreground">Request ID: {resolvedRequestId}</p>
         ) : null}
       </div>
-      {onRetry ? (
-        <Button className="mt-4" size="sm" variant="outline" onClick={onRetry}>
-          Retry
-        </Button>
+      {onRetry || action ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {onRetry ? (
+            <Button size="sm" variant="outline" onClick={onRetry}>
+              Retry
+            </Button>
+          ) : null}
+          {action}
+        </div>
       ) : null}
     </div>
   )

@@ -2,9 +2,11 @@ import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict } from "@/lib/api/api-error"
+import { logger } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import {
   allocateRoomSchema,
   createRoomSchema,
@@ -44,7 +46,7 @@ export class RoomsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.roomsRepository.create({
+    const room = await this.roomsRepository.create({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       room_number: values.roomNumber,
@@ -60,6 +62,10 @@ export class RoomsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    await this.publishRoomInventoryEvents(room, context.authUser.id, "room.created")
+
+    return room
   }
 
   async getRoom(roomId: string, organizationId: string) {
@@ -86,7 +92,7 @@ export class RoomsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.roomsRepository.update(values.roomId, values.organizationId, {
+    const room = await this.roomsRepository.update(values.roomId, values.organizationId, {
       room_name: values.roomName,
       room_type: values.roomType,
       floor: values.floor,
@@ -99,6 +105,10 @@ export class RoomsService {
       description: values.description,
       updated_by: context.authUser.id,
     })
+
+    await this.publishRoomInventoryEvents(room, context.authUser.id, "room.updated")
+
+    return room
   }
 
   async allocateRoom(input: unknown) {
@@ -108,7 +118,7 @@ export class RoomsService {
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
     try {
-      return await this.roomsRepository.allocateRoomAtomic({
+      const allocation = await this.roomsRepository.allocateRoomAtomic({
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         roomId: values.roomId,
@@ -120,8 +130,114 @@ export class RoomsService {
         reason: values.reason,
         actorUserId: context.authUser.id,
       })
+
+      await this.publishAllocationEvents(allocation, context.authUser.id)
+
+      return allocation
     } catch (error) {
       throw mapRoomAllocationError(error)
+    }
+  }
+
+  private async publishAllocationEvents(
+    allocation: { id: string; organization_id: string; hostel_id: string; room_id: string; resident_id: string },
+    actorUserId: string
+  ) {
+    try {
+      const publisher = new RealtimeEventPublisher()
+      const payload = {
+        allocationId: allocation.id,
+        roomId: allocation.room_id,
+        residentId: allocation.resident_id,
+      }
+
+      await Promise.all([
+        publisher.publish({
+          type: "room.allocation_changed",
+          organizationId: allocation.organization_id,
+          hostelId: allocation.hostel_id,
+          actorUserId,
+          payload,
+        }),
+        publisher.publish({
+          type: "vacancy.changed",
+          organizationId: allocation.organization_id,
+          hostelId: allocation.hostel_id,
+          actorUserId,
+          payload: {
+            reason: "room.allocation_changed",
+            ...payload,
+          },
+        }),
+        publisher.publish({
+          type: "dashboard.refresh",
+          organizationId: allocation.organization_id,
+          hostelId: allocation.hostel_id,
+          actorUserId,
+          payload: {
+            reason: "room.allocation_changed",
+            ...payload,
+          },
+        }),
+      ])
+    } catch (error) {
+      logger.warn({
+        event: "room_allocation.realtime_publish_failed",
+        message: "Room allocation succeeded, but realtime refresh could not be published.",
+        organizationId: allocation.organization_id,
+        userId: actorUserId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        metadata: {
+          allocationId: allocation.id,
+          roomId: allocation.room_id,
+          residentId: allocation.resident_id,
+        },
+      })
+    }
+  }
+
+  private async publishRoomInventoryEvents(
+    room: { id: string; organization_id: string; hostel_id: string },
+    actorUserId: string,
+    reason: "room.created" | "room.updated"
+  ) {
+    try {
+      const publisher = new RealtimeEventPublisher()
+
+      await Promise.all([
+        publisher.publish({
+          type: "vacancy.changed",
+          organizationId: room.organization_id,
+          hostelId: room.hostel_id,
+          actorUserId,
+          payload: {
+            reason,
+            roomId: room.id,
+          },
+        }),
+        publisher.publish({
+          type: "dashboard.refresh",
+          organizationId: room.organization_id,
+          hostelId: room.hostel_id,
+          actorUserId,
+          payload: {
+            reason,
+            roomId: room.id,
+          },
+        }),
+      ])
+    } catch (error) {
+      logger.warn({
+        event: "room_inventory.realtime_publish_failed",
+        message: "Room inventory changed, but realtime refresh could not be published.",
+        organizationId: room.organization_id,
+        userId: actorUserId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        metadata: {
+          roomId: room.id,
+          reason,
+        },
+      })
     }
   }
 }
