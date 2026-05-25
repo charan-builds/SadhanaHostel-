@@ -21,6 +21,10 @@ export function resolveHomeRoute(session: SessionOverview | null) {
     return "/login"
   }
 
+  if (session.onboardingRequired && session.redirectTo) {
+    return session.redirectTo
+  }
+
   if (session.roles.includes("super_admin") || session.roles.includes("admin") || session.roles.includes("owner")) {
     return "/admin/dashboard"
   }

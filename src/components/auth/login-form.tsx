@@ -383,6 +383,10 @@ function resolveRedirect(
   }
 
   if (expectedArea === "resident") {
+    if (session?.onboardingRequired && session.redirectTo?.startsWith("/resident")) {
+      return session.redirectTo
+    }
+
     return nextPath?.startsWith("/resident/") || nextPath === "/resident"
       ? nextPath
       : AUTH_REDIRECTS.residentHome

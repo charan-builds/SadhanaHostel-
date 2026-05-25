@@ -147,6 +147,12 @@ export class ResidentInviteService {
       updated_by: context.authUser.id,
       metadata: {
         delivery_channel: values.deliveryChannel,
+        access_mode: values.deliveryChannel === "temp_password"
+          ? "temporary_password"
+          : "activation_link",
+        temporary_password_expires_at: values.deliveryChannel === "temp_password"
+          ? expiresAt.toISOString()
+          : null,
         permissions: DEFAULT_INVITE_PERMISSIONS,
       } satisfies Json,
     })
@@ -348,7 +354,13 @@ export class ResidentInviteService {
   }
 
   async expireDueInvites(input: { organizationId?: string; hostelId?: string; limit?: number }) {
-    return this.invitesRepository.expireDue(input)
+    const cleanup = await this.invitesRepository.cleanupOnboardingAccess(input)
+
+    return (
+      cleanup.expired_count +
+      cleanup.activated_invites_revoked_count +
+      cleanup.duplicate_invites_revoked_count
+    )
   }
 
   private async resolveUsableInvite(input: {
@@ -451,9 +463,8 @@ export class ResidentInviteService {
         email_confirm: Boolean(input.invite.email),
         phone_confirm: Boolean(input.invite.phone),
         user_metadata: {
-          full_name: input.residentName,
-          organization_id: input.invite.organization_id,
-          activated_from_invite: true,
+          ...recordFromUnknown(existing.user_metadata),
+          ...buildAuthActivationMetadata(input.invite, input.residentName),
         },
       })
 
@@ -470,11 +481,7 @@ export class ResidentInviteService {
       password: input.password,
       email_confirm: Boolean(input.invite.email),
       phone_confirm: Boolean(input.invite.phone),
-      user_metadata: {
-        full_name: input.residentName,
-        organization_id: input.invite.organization_id,
-        activated_from_invite: true,
-      },
+      user_metadata: buildAuthActivationMetadata(input.invite, input.residentName),
     })
 
     if (error || !data.user) {
@@ -518,6 +525,22 @@ export class ResidentInviteService {
   }
 
   private async assertExistingUserIsSafe(user: User, invite: ResidentInviteRow) {
+    const userMetadata = recordFromUnknown(user.user_metadata)
+    const userOrganizationId = typeof userMetadata.organization_id === "string"
+      ? userMetadata.organization_id
+      : null
+    const userResidentId = typeof userMetadata.resident_id === "string"
+      ? userMetadata.resident_id
+      : null
+
+    if (userOrganizationId && userOrganizationId !== invite.organization_id) {
+      throw forbidden("This login account belongs to another organization.")
+    }
+
+    if (userResidentId && userResidentId !== invite.resident_id) {
+      throw conflict("This login account is already linked to another resident.")
+    }
+
     const profile = await this.usersRepository.getById(user.id)
 
     if (!profile) {
@@ -706,6 +729,35 @@ function normalizeInviteCode(inviteCode?: string) {
   }
 
   return value
+}
+
+function buildAuthActivationMetadata(invite: ResidentInviteRow, residentName: string) {
+  const inviteMetadata = recordFromUnknown(invite.metadata)
+  const accessMode = inviteMetadata.access_mode === "temporary_password"
+    ? "temporary_password"
+    : "activation_link"
+
+  return {
+    full_name: residentName,
+    organization_id: invite.organization_id,
+    resident_id: invite.resident_id,
+    activated_from_invite: true,
+    resident_access_mode: accessMode,
+    temporary_password_active: accessMode === "temporary_password",
+    temporary_password_expires_at:
+      accessMode === "temporary_password" &&
+      typeof inviteMetadata.temporary_password_expires_at === "string"
+        ? inviteMetadata.temporary_password_expires_at
+        : undefined,
+  }
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }
 
 function mapActivationBootstrapError(error: unknown): never {

@@ -337,6 +337,39 @@ export class ResidentInvitesRepository {
     return expired
   }
 
+  async cleanupOnboardingAccess(input: {
+    organizationId?: string
+    hostelId?: string
+    limit?: number
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.inviteDb().rpc(
+      "cleanup_resident_onboarding_access",
+      {
+        p_organization_id: input.organizationId ?? null,
+        p_hostel_id: input.hostelId ?? null,
+        p_limit: input.limit ?? 500,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to clean up resident onboarding access.")
+    }
+
+    const rows = (data ?? []) as Array<{
+      expired_count: number
+      activated_invites_revoked_count: number
+      duplicate_invites_revoked_count: number
+    }>
+
+    return rows[0] ?? {
+      expired_count: 0,
+      activated_invites_revoked_count: 0,
+      duplicate_invites_revoked_count: 0,
+    }
+  }
+
   private inviteDb() {
     return this.db as unknown as GenericInviteDb
   }

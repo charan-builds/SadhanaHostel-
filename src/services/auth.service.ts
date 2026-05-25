@@ -11,9 +11,14 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
+import {
+  ResidentsRepository,
+  type ResidentWithOnboarding,
+} from "@/repositories/residents.repository"
 import { UsersRepository, type UserRoleRow, type UserRow } from "@/repositories/users.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { maskPhone } from "@/lib/security"
+import { getResidentOnboardingRequirements } from "@/services/onboarding/resident-onboarding.policy"
 import {
   adminOnboardingSchema,
   loginSchema,
@@ -60,10 +65,12 @@ export type SessionOverview = {
 export class AuthService {
   private readonly usersRepository: UsersRepository
   private readonly organizationsRepository: OrganizationsRepository
+  private readonly residentsRepository: ResidentsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.usersRepository = new UsersRepository(db)
     this.organizationsRepository = new OrganizationsRepository(db)
+    this.residentsRepository = new ResidentsRepository(db)
   }
 
   static async create() {
@@ -179,6 +186,8 @@ export class AuthService {
     }
 
     const context = await this.getCurrentContext()
+
+    await this.assertTemporaryPasswordIsUsable(context)
 
     return this.toSessionOverview(context)
   }
@@ -449,7 +458,13 @@ export class AuthService {
     )
   }
 
-  private toSessionOverview(context: AuthContext): SessionOverview {
+  private async toSessionOverview(context: AuthContext): Promise<SessionOverview> {
+    const residentSession = await this.resolveResidentSessionState(context)
+    const onboardingRequired = !context.organizationId || residentSession.onboardingRequired
+    const redirectTo = !context.organizationId
+      ? AUTH_REDIRECTS.onboarding
+      : residentSession.redirectTo ?? this.resolveRedirectPath(context.roles)
+
     return {
       authenticated: true,
       user: {
@@ -469,11 +484,74 @@ export class AuthService {
       primaryRole: context.primaryRole,
       organizationId: context.organizationId,
       hostelIds: context.hostelIds,
-      onboardingRequired: !context.organizationId,
-      redirectTo: context.organizationId
-        ? this.resolveRedirectPath(context.roles)
-        : AUTH_REDIRECTS.onboarding,
+      onboardingRequired,
+      redirectTo,
     }
+  }
+
+  private async resolveResidentSessionState(context: AuthContext) {
+    const isResidentOnlySession =
+      context.roles.includes("resident") &&
+      !context.roles.some((role) =>
+        (ADMIN_PORTAL_ROLES as readonly AppRole[]).includes(role)
+      )
+
+    if (!isResidentOnlySession || !context.organizationId) {
+      return {
+        onboardingRequired: false,
+        redirectTo: null as string | null,
+      }
+    }
+
+    const resident = await this.residentsRepository.getByUserId(
+      context.authUser.id,
+      context.organizationId
+    )
+
+    if (!resident) {
+      return {
+        onboardingRequired: true,
+        redirectTo: AUTH_REDIRECTS.residentOnboarding,
+      }
+    }
+
+    const requirements = getResidentOnboardingRequirements(
+      resident as ResidentWithOnboarding
+    )
+
+    if (!requirements.canAccessResidentOperations) {
+      return {
+        onboardingRequired: true,
+        redirectTo: AUTH_REDIRECTS.residentOnboarding,
+      }
+    }
+
+    return {
+      onboardingRequired: false,
+      redirectTo: null as string | null,
+    }
+  }
+
+  private async assertTemporaryPasswordIsUsable(context: AuthContext) {
+    const metadata = recordFromUnknown(context.profile.metadata)
+
+    if (metadata.temporary_password_active !== true) {
+      return
+    }
+
+    const expiresAt = typeof metadata.temporary_password_expires_at === "string"
+      ? Date.parse(metadata.temporary_password_expires_at)
+      : Number.NaN
+
+    if (!Number.isFinite(expiresAt) || expiresAt > Date.now()) {
+      return
+    }
+
+    await this.db.auth.signOut()
+
+    throw unauthorized(
+      "This temporary password has expired. Ask hostel administration to resend resident access."
+    )
   }
 
   private resolveRedirectPath(roles: AppRole[]) {
@@ -490,13 +568,17 @@ export class AuthService {
 }
 
 function getAccountStatus(metadata: unknown) {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return "active"
-  }
-
-  const status = (metadata as Record<string, unknown>).account_status
+  const status = recordFromUnknown(metadata).account_status
 
   return typeof status === "string" ? status : "active"
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }
 
 function normalizePhoneForAuth(phone: string) {

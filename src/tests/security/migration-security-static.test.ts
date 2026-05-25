@@ -143,4 +143,51 @@ describe("static migration security checks", () => {
     expect(lifecycle).toMatch(/room_over_capacity/i)
     expect(lifecycle).toMatch(/active_allocation_without_active_resident/i)
   })
+
+  it("keeps reservation conversion invite-first and non-operational", () => {
+    const lifecycle = migration("20260525000000_reservation_conversion_lifecycle_safe.sql")
+    const convertBlock = lifecycle.slice(
+      lifecycle.indexOf("create or replace function public.convert_reservation_to_resident_atomic"),
+      lifecycle.indexOf("create or replace function public.transition_resident_onboarding_atomic")
+    )
+
+    expect(convertBlock).toMatch(/status,\s*onboarding_status,\s*joined_on/i)
+    expect(convertBlock).toMatch(/'draft',\s*'invited',\s*null/i)
+    expect(convertBlock).toMatch(/requires_invite_activation/i)
+    expect(convertBlock).toMatch(/requested_room_assignment/i)
+    expect(convertBlock).toMatch(/operational_occupancy_created',\s*false/i)
+    expect(convertBlock).toMatch(/can_manage_organization\(p_organization_id\)/i)
+    expect(convertBlock).not.toMatch(/perform\s+public\.allocate_room_atomic/i)
+  })
+
+  it("activates preferred reservation rooms only during verified onboarding", () => {
+    const lifecycle = migration("20260525000000_reservation_conversion_lifecycle_safe.sql")
+    const transitionBlock = lifecycle.slice(
+      lifecycle.indexOf("create or replace function public.transition_resident_onboarding_atomic")
+    )
+
+    expect(transitionBlock).toMatch(/if\s+p_next_status\s+=\s+'verified'\s+then/i)
+    expect(transitionBlock).toMatch(/requested_room_assignment,room_id/i)
+    expect(transitionBlock).toMatch(/perform\s+public\.allocate_room_atomic/i)
+    expect(transitionBlock).toMatch(/preferred_room_activation_attempted/i)
+  })
+
+  it("keeps phone-first resident access metadata synchronized after invite use", () => {
+    const lifecycle = migration("20260525001000_phone_first_onboarding_stabilization.sql")
+
+    expect(lifecycle).toMatch(/sync_resident_invite_activation_metadata/i)
+    expect(lifecycle).toMatch(/after update of status,\s*used_at on public\.resident_invites/i)
+    expect(lifecycle).toMatch(/temporary_password_active/i)
+    expect(lifecycle).toMatch(/temporary_password_expires_at/i)
+    expect(lifecycle).toMatch(/resident_access_mode/i)
+  })
+
+  it("provides operational cleanup for stale and duplicate resident invites", () => {
+    const lifecycle = migration("20260525001000_phone_first_onboarding_stabilization.sql")
+
+    expect(lifecycle).toMatch(/cleanup_resident_onboarding_access/i)
+    expect(lifecycle).toMatch(/resident_invite_cleanup_forbidden/i)
+    expect(lifecycle).toMatch(/resident_already_activated/i)
+    expect(lifecycle).toMatch(/duplicate_active_invite/i)
+  })
 })

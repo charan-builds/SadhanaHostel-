@@ -140,6 +140,12 @@ describe("ResidentInviteService activation bootstrap", () => {
       expect.objectContaining({
         email: invite.email,
         password: "StrongPassword123!",
+        user_metadata: expect.objectContaining({
+          organization_id: invite.organization_id,
+          resident_id: invite.resident_id,
+          activated_from_invite: true,
+          resident_access_mode: "activation_link",
+        }),
       })
     )
     expect(harness.invitesRepository.activateInviteAtomic).toHaveBeenCalledWith({
@@ -194,6 +200,83 @@ describe("ResidentInviteService activation bootstrap", () => {
     })
 
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("blocks phone reuse when an existing auth account belongs to another organization", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      email: null,
+      invite_token_hash: hashInviteToken(token),
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          authUserFixture({
+            email: undefined,
+            phone: "+919000000002",
+            user_metadata: {
+              organization_id: "00000000-0000-4000-8000-000000009999",
+            },
+          } as Partial<User>),
+        ],
+      },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "This login account belongs to another organization.",
+    })
+
+    expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("blocks phone reuse when an existing auth account is marked for another resident", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      email: null,
+      invite_token_hash: hashInviteToken(token),
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          authUserFixture({
+            email: undefined,
+            phone: "+919000000002",
+            user_metadata: {
+              organization_id: invite.organization_id,
+              resident_id: "00000000-0000-4000-8000-000000009998",
+            },
+          } as Partial<User>),
+        ],
+      },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "This login account is already linked to another resident.",
+    })
+
+    expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
@@ -307,6 +390,8 @@ describe("ResidentInviteService activation bootstrap", () => {
         invited_by: ADMIN_USER_ID,
         metadata: expect.objectContaining({
           delivery_channel: "temp_password",
+          access_mode: "temporary_password",
+          temporary_password_expires_at: expect.any(String),
         }),
       })
     )
