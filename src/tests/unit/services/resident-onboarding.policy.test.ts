@@ -23,6 +23,9 @@ const baseResident = {
   profile_image_document_id: "doc-photo",
   student_id_document_id: "doc-student",
   status: "active",
+  is_active: true,
+  user_id: "auth-user-1",
+  checkout_on: null,
   onboarding_status: "verified",
 } as ResidentWithOnboarding
 
@@ -39,6 +42,12 @@ describe("resident onboarding policy", () => {
       isResidentOperationallyVerified({
         ...baseResident,
         status: "draft",
+      })
+    ).toBe(false)
+    expect(
+      isResidentOperationallyVerified({
+        ...baseResident,
+        user_id: null,
       })
     ).toBe(false)
   })

@@ -64,6 +64,13 @@ export function useRealtimeAdmissions(options?: { enabled?: boolean }) {
   useRealtimeChannel({
     organizationId,
     hostelId: defaultHostelId,
+    event: "dashboard.refresh",
+    enabled: options?.enabled,
+    onEvent,
+  })
+  useRealtimeChannel({
+    organizationId,
+    hostelId: defaultHostelId,
     event: "lead.created",
     enabled: options?.enabled,
     onEvent,

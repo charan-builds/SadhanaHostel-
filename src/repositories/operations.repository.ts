@@ -379,6 +379,62 @@ export class OperationsRepository {
     return data
   }
 
+  async repairOccupancyConsistency(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "repair_occupancy_consistency_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to repair occupancy consistency.")
+    }
+
+    return data as {
+      invalidAllocationsRepaired?: number
+      duplicateAllocationsRepaired?: number
+      hostelsRecalculated?: number
+    } | null
+  }
+
+  async repairTenantLinkageConsistency(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "repair_tenant_linkage_consistency_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to repair tenant linkage consistency.")
+    }
+
+    return data as {
+      roomAllocationsRepaired?: number
+      monthlyFeeRecordsRepaired?: number
+      invoicesRepaired?: number
+      paymentsRepaired?: number
+      residentInvitesRepaired?: number
+      reservationsRepaired?: number
+      reservationPaymentsRepaired?: number
+      documentsRepaired?: number
+      hostelsRecalculated?: number
+    } | null
+  }
+
   private operationsDb() {
     return this.db as unknown as GenericOperationsDb
   }

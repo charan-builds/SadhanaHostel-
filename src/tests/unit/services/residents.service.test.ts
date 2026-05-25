@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest"
 import { ResidentsService } from "@/services/residents.service"
 import {
   residentFixture,
-  roomAllocationFixture,
   ROOM_ID,
   TEST_HOSTEL_ID,
   TEST_ORGANIZATION_ID,
@@ -15,10 +14,13 @@ function createServiceHarness() {
   const authService = {
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
+    requireHostelAccess: vi.fn(),
+    resolveHostelScope: vi.fn((_context, _organizationId, hostelId) => hostelId ?? null),
   }
   const residentsRepository = {
     create: vi.fn(),
     getById: vi.fn(),
+    findAdmissionDuplicate: vi.fn().mockResolvedValue(null),
     deactivate: vi.fn(),
     checkout: vi.fn(),
     update: vi.fn(),
@@ -42,19 +44,12 @@ function createServiceHarness() {
 }
 
 describe("ResidentsService", () => {
-  it("creates a resident and assigns a room through the atomic allocation flow", async () => {
+  it("creates a quick draft resident with a preferred room without consuming occupancy", async () => {
     const harness = createServiceHarness()
     const draftResident = residentFixture({ status: "draft", joined_on: null })
-    const activeResident = residentFixture({ status: "active", joined_on: "2026-06-01" })
-    const allocation = roomAllocationFixture({
-      room_id: ROOM_ID,
-      resident_id: draftResident.id,
-      allocated_from: "2026-06-01",
-    })
 
     harness.residentsRepository.create.mockResolvedValue(draftResident)
-    harness.roomsRepository.allocateRoomAtomic.mockResolvedValue(allocation)
-    harness.residentsRepository.getById.mockResolvedValue(activeResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
 
     await expect(
       harness.service.createResident({
@@ -62,6 +57,7 @@ describe("ResidentsService", () => {
         hostelId: TEST_HOSTEL_ID,
         admissionNumber: "SBH-T-010",
         fullName: "New Resident",
+        phone: "+91 90000 01010",
         residentType: "student",
         monthlyFeeAmount: 6500,
         securityDepositAmount: 0,
@@ -69,32 +65,29 @@ describe("ResidentsService", () => {
         bedLabel: "B",
         allocatedFrom: "2026-06-01",
       })
-    ).resolves.toEqual(activeResident)
+    ).resolves.toEqual(draftResident)
 
-    expect(harness.roomsRepository.allocateRoomAtomic).toHaveBeenCalledWith(
+    expect(harness.residentsRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: TEST_ORGANIZATION_ID,
-        hostelId: TEST_HOSTEL_ID,
-        roomId: ROOM_ID,
-        residentId: draftResident.id,
-        bedLabel: "B",
-        allocatedFrom: "2026-06-01",
-        actorUserId: adminAuthContext().authUser.id,
+        status: "draft",
+        metadata: expect.objectContaining({
+          requested_room_assignment: {
+            room_id: ROOM_ID,
+            bed_label: "B",
+            allocated_from: "2026-06-01",
+          },
+        }),
       })
     )
+    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
   })
 
-  it("rolls back the created resident when initial allocation fails", async () => {
+  it("does not roll back a draft resident when a preferred room is supplied", async () => {
     const harness = createServiceHarness()
     const draftResident = residentFixture({ status: "draft", joined_on: null })
 
     harness.residentsRepository.create.mockResolvedValue(draftResident)
-    harness.roomsRepository.allocateRoomAtomic.mockRejectedValue(
-      new Error("room_capacity_exceeded")
-    )
-    harness.residentsRepository.deactivate.mockResolvedValue(
-      residentFixture({ status: "archived", deleted_at: "2026-06-01T00:00:00.000Z" })
-    )
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
 
     await expect(
       harness.service.createResident({
@@ -102,22 +95,93 @@ describe("ResidentsService", () => {
         hostelId: TEST_HOSTEL_ID,
         admissionNumber: "SBH-T-011",
         fullName: "Overflow Resident",
+        phone: "+91 90000 01011",
         residentType: "student",
         monthlyFeeAmount: 6500,
         securityDepositAmount: 0,
         roomId: ROOM_ID,
         allocatedFrom: "2026-06-01",
       })
-    ).rejects.toMatchObject({
-      code: "CONFLICT",
-      message: "Room is already full. Choose another room or run occupancy recalculation.",
+    ).resolves.toEqual(draftResident)
+
+    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
+    expect(harness.residentsRepository.deactivate).not.toHaveBeenCalled()
+  })
+
+  it("creates quick draft residents with generated admission numbers", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({
+      status: "draft",
+      admission_number: "DRAFT-ABC-1234",
+      phone: "+91 90000 01012",
+      joined_on: null,
     })
 
-    expect(harness.residentsRepository.deactivate).toHaveBeenCalledWith(
-      draftResident.id,
-      TEST_ORGANIZATION_ID,
-      adminAuthContext().authUser.id
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Quick Resident",
+        phone: "+91 90000 01012",
+        residentType: "student",
+        monthlyFeeAmount: 6500,
+        securityDepositAmount: 0,
+      })
+    ).resolves.toEqual(draftResident)
+
+    expect(harness.residentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        admission_number: expect.stringMatching(/^DRAFT-/),
+        status: "draft",
+        phone: "+91 90000 01012",
+        metadata: expect.objectContaining({
+          admission_flow: "quick_admin_create",
+          profile_completion_required: true,
+        }),
+      })
     )
+    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
+  })
+
+  it("returns operational duplicate guidance before insert", async () => {
+    const harness = createServiceHarness()
+    const existingResident = residentFixture({
+      status: "draft",
+      admission_number: "SBH-DRAFT-009",
+      phone: "+91 90000 01013",
+      user_id: null,
+    })
+
+    harness.residentsRepository.findAdmissionDuplicate.mockResolvedValue({
+      resident: existingResident,
+      matchedFields: ["phone"],
+    })
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Duplicate Resident",
+        phone: "+91 90000 01013",
+        residentType: "student",
+        monthlyFeeAmount: 6500,
+        securityDepositAmount: 0,
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      details: expect.objectContaining({
+        type: "resident_duplicate",
+        resident: expect.objectContaining({
+          id: existingResident.id,
+          admissionNumber: "SBH-DRAFT-009",
+        }),
+      }),
+    })
+
+    expect(harness.residentsRepository.create).not.toHaveBeenCalled()
   })
 
   it("checks out residents through the atomic repository function", async () => {
@@ -129,6 +193,7 @@ describe("ResidentsService", () => {
     })
 
     harness.residentsRepository.checkout.mockResolvedValue(checkedOutResident)
+    harness.residentsRepository.getById.mockResolvedValue(checkedOutResident)
 
     await expect(
       harness.service.checkoutResident({

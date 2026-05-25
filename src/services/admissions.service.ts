@@ -61,7 +61,7 @@ export class AdmissionsService {
     const tenant = await this.resolveTenant(values.organizationId, values.hostelId)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, tenant.organizationId)
+    this.authService.requireHostelAccess(context, tenant.organizationId, tenant.hostelId)
 
     return this.buildVacancyPayload(tenant.organizationId, tenant.hostelId)
   }
@@ -69,21 +69,30 @@ export class AdmissionsService {
   async listLeads(input: unknown) {
     const values = leadListSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    return this.admissionsRepository.listLeads(values)
+    return this.admissionsRepository.listLeads({
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
   }
 
   async createLead(input: unknown) {
     const values = createLeadSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const lead = await this.admissionsRepository.createLead({
       organization_id: values.organizationId,
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       full_name: values.fullName,
       phone: values.phone,
       whatsapp_number: values.whatsappNumber,
@@ -170,7 +179,20 @@ export class AdmissionsService {
     const values = updateLeadSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingLead = assertFound(
+      await this.admissionsRepository.getLeadById(values.leadId, values.organizationId),
+      "Lead not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingLead.organization_id,
+      existingLead.hostel_id
+    )
+
+    if (values.hostelId && values.hostelId !== existingLead.hostel_id) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    }
 
     const lead = await this.admissionsRepository.updateLead(
       values.leadId,
@@ -209,7 +231,16 @@ export class AdmissionsService {
     const values = addLeadNoteSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const lead = assertFound(
+      await this.admissionsRepository.getLeadById(values.leadId, values.organizationId),
+      "Lead not found."
+    )
+
+    this.authService.requireHostelAccess(context, lead.organization_id, lead.hostel_id)
+
+    if (values.hostelId && values.hostelId !== lead.hostel_id) {
+      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    }
 
     return this.admissionsRepository.addLeadNote({
       organization_id: values.organizationId,
@@ -225,17 +256,23 @@ export class AdmissionsService {
   async listReservations(input: unknown) {
     const values = reservationListSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    return this.admissionsRepository.listReservations(values)
+    return this.admissionsRepository.listReservations({
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
   }
 
   async createReservation(input: unknown) {
     const values = createReservationSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     try {
       const reservation = await this.admissionsRepository.createReservationAtomic({
@@ -275,7 +312,19 @@ export class AdmissionsService {
     const values = reservationIdSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingReservation = assertFound(
+      await this.admissionsRepository.getReservationById(
+        values.reservationId,
+        values.organizationId
+      ),
+      "Reservation not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingReservation.organization_id,
+      existingReservation.hostel_id
+    )
 
     const reservation = await this.admissionsRepository.updateReservation(
       values.reservationId,
@@ -306,7 +355,19 @@ export class AdmissionsService {
     const values = cancelReservationSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingReservation = assertFound(
+      await this.admissionsRepository.getReservationById(
+        values.reservationId,
+        values.organizationId
+      ),
+      "Reservation not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingReservation.organization_id,
+      existingReservation.hostel_id
+    )
 
     const reservation = await this.admissionsRepository.updateReservation(
       values.reservationId,
@@ -338,7 +399,7 @@ export class AdmissionsService {
     const values = createReservationPaymentSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     return this.admissionsRepository.createReservationPayment({
       organization_id: values.organizationId,
@@ -361,7 +422,19 @@ export class AdmissionsService {
     const values = verifyReservationPaymentSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingPayment = assertFound(
+      await this.admissionsRepository.getReservationPaymentById(
+        values.paymentId,
+        values.organizationId
+      ),
+      "Reservation payment not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingPayment.organization_id,
+      existingPayment.hostel_id
+    )
 
     try {
       const payment = await this.admissionsRepository.verifyReservationPaymentAtomic({
@@ -389,7 +462,19 @@ export class AdmissionsService {
     const values = convertReservationSchema.parse(input)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingReservation = assertFound(
+      await this.admissionsRepository.getReservationById(
+        values.reservationId,
+        values.organizationId
+      ),
+      "Reservation not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingReservation.organization_id,
+      existingReservation.hostel_id
+    )
 
     try {
       const resident = (await this.admissionsRepository.convertReservationAtomic({
@@ -431,7 +516,7 @@ export class AdmissionsService {
     const tenant = await this.resolveTenant(values.organizationId, values.hostelId)
     const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
 
-    this.authService.requireOrganizationAccess(context, tenant.organizationId)
+    this.authService.requireHostelAccess(context, tenant.organizationId, tenant.hostelId)
 
     return this.admissionsRepository.getAnalytics(tenant.organizationId, tenant.hostelId)
   }

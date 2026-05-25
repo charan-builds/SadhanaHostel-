@@ -1,7 +1,7 @@
 import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
-import { badRequest } from "@/lib/api/api-error"
+import { badRequest, notFound } from "@/lib/api/api-error"
 import {
   buildTenantCacheKey,
   getOrSetCache,
@@ -77,8 +77,20 @@ export class WebsiteService {
     const values = updateWebsiteSettingSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
     const publishedAt = values.status === "published" ? new Date().toISOString() : undefined
+    const existingSetting = await this.websiteRepository.getSettingById(
+      values.settingId,
+      values.organizationId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    if (!existingSetting) {
+      throw notFound("Website setting not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingSetting.organization_id,
+      existingSetting.hostel_id
+    )
 
     const setting = await this.websiteRepository.updateSetting(values.settingId, values.organizationId, {
       title: values.title,
@@ -122,12 +134,15 @@ export class WebsiteService {
     const values = createFacilitySchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const facility = await this.websiteRepository.createFacility({
       organization_id: values.organizationId,
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       name: values.name,
       slug: values.slug,
       description: values.description,
@@ -172,12 +187,15 @@ export class WebsiteService {
     const values = createGalleryItemSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const item = await this.websiteRepository.createGalleryItem({
       organization_id: values.organizationId,
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       document_id: values.documentId,
       title: values.title,
       description: values.description,
@@ -199,13 +217,17 @@ export class WebsiteService {
     const values = uploadGalleryImageSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
     this.validateGalleryFile(file)
 
     const storagePath = this.buildGalleryStoragePath(
       values.organizationId,
-      values.hostelId,
+      hostelId ?? undefined,
       file.name
     )
 
@@ -218,7 +240,7 @@ export class WebsiteService {
       const checksum = await this.calculateChecksum(file)
       const document = await this.uploadsRepository.createDocument({
         organization_id: values.organizationId,
-        hostel_id: values.hostelId,
+        hostel_id: hostelId,
         uploaded_by_user_id: context.authUser.id,
         document_type: "gallery_image",
         bucket_name: GALLERY_BUCKET,
@@ -234,7 +256,7 @@ export class WebsiteService {
       })
       const gallery = await this.websiteRepository.createGalleryItem({
         organization_id: values.organizationId,
-        hostel_id: values.hostelId,
+        hostel_id: hostelId,
         document_id: document.id,
         title: values.title,
         description: values.description,
@@ -257,6 +279,7 @@ export class WebsiteService {
         outcome: "success",
         details: {
           hostelId: values.hostelId,
+          effectiveHostelId: hostelId,
           documentId: document.id,
           bucketName: GALLERY_BUCKET,
           storagePath,

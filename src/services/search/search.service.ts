@@ -1,5 +1,6 @@
 import "server-only"
 
+import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { globalSearchSchema } from "@/validations/search.validation"
@@ -24,10 +25,16 @@ export class SearchService {
 
   async search(input: unknown) {
     const values = globalSearchSchema.parse(input)
-    const context = await this.authService.getCurrentContext()
+    const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    return this.searchRepository.search(values)
+    return this.searchRepository.search({
+      ...values,
+      hostelId,
+    })
   }
 }

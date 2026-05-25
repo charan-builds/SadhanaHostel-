@@ -58,11 +58,17 @@ export function getResidentOnboardingStatus(resident: ResidentWithOnboarding) {
     return resident.onboarding_status
   }
 
-  return resident.status === "active" ? "verified" : "profile_incomplete"
+  return "profile_incomplete"
 }
 
 export function isResidentOperationallyVerified(resident: ResidentWithOnboarding) {
   const status = getResidentOnboardingStatus(resident)
 
-  return status === "verified" && resident.status === "active"
+  return (
+    status === "verified" &&
+    resident.status === "active" &&
+    resident.is_active !== false &&
+    Boolean(resident.user_id) &&
+    !resident.checkout_on
+  )
 }

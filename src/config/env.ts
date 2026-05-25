@@ -21,6 +21,7 @@ const PLACEHOLDER_ENV_MARKERS = [
   "your-staging-supabase-anon-key",
   "your-supabase-service-role-key",
   "your-staging-supabase-service-role-key",
+  "redacted",
 ]
 
 export function isPlaceholderEnvValue(value: string) {

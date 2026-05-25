@@ -3,9 +3,18 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import Link from "next/link"
 import type { Route } from "next"
-import { AlertTriangle, Copy, Download, Loader2, QrCode, UploadCloud } from "lucide-react"
-import { useState } from "react"
-import { useForm } from "react-hook-form"
+import {
+  AlertTriangle,
+  Copy,
+  Download,
+  Loader2,
+  MessageCircle,
+  QrCode,
+  Smartphone,
+  UploadCloud,
+} from "lucide-react"
+import { useMemo, useState } from "react"
+import { useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -15,6 +24,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
+import { hostelConfig } from "@/constants/hostel"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -37,6 +47,13 @@ import {
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import { formatCurrency, formatDateTime } from "@/lib/format"
+import { buildPaymentSupportMessage, buildWhatsappUrl } from "@/lib/operations/whatsapp"
+import {
+  buildHostelPaymentNote,
+  buildHostelPaymentReference,
+  buildUpiPaymentLink,
+  UPI_PAYMENT_APPS,
+} from "@/lib/payments/upi-links"
 import { useRealtimePayments } from "@/lib/realtime"
 import type { UploadProgress } from "@/sdk"
 
@@ -92,6 +109,7 @@ export function ResidentPaymentsClient() {
   const {
     register,
     handleSubmit,
+    control,
     setError,
     reset,
     formState: { errors, isSubmitting },
@@ -104,6 +122,63 @@ export function ResidentPaymentsClient() {
       isPartial: false,
       isAdvance: false,
     },
+  })
+  const watchedAmount = useWatch({ control, name: "amount" })
+  const watchedNotes = useWatch({ control, name: "notes" })
+  const currentPaymentAmount = isPaymentAmountValue(watchedAmount)
+    ? watchedAmount
+    : suggestedAmount
+  const paymentReference = useMemo(
+    () =>
+      buildHostelPaymentReference({
+        admissionNumber: resident.data?.admission_number,
+        idempotencyKey: paymentIdempotencyKey,
+      }),
+    [paymentIdempotencyKey, resident.data?.admission_number]
+  )
+  const upiPaymentNote = useMemo(
+    () =>
+      buildHostelPaymentNote({
+        hostelName: paymentSettings.data?.account_name ?? hostelConfig.name,
+        residentName: resident.data?.full_name,
+        admissionNumber: resident.data?.admission_number,
+        reference: paymentReference,
+        notes: typeof watchedNotes === "string" ? watchedNotes : undefined,
+      }),
+    [
+      paymentReference,
+      paymentSettings.data?.account_name,
+      resident.data?.admission_number,
+      resident.data?.full_name,
+      watchedNotes,
+    ]
+  )
+  const upiPaymentLink = useMemo(
+    () =>
+      buildUpiPaymentLink({
+        upiId: paymentSettings.data?.upi_id,
+        payeeName: paymentSettings.data?.account_name,
+        amount: currentPaymentAmount,
+        transactionReference: paymentReference,
+        note: upiPaymentNote,
+      }),
+    [
+      paymentReference,
+      paymentSettings.data?.account_name,
+      paymentSettings.data?.upi_id,
+      currentPaymentAmount,
+      upiPaymentNote,
+    ]
+  )
+  const paymentSupportUrl = buildWhatsappUrl({
+    phone: hostelConfig.contact.whatsapp,
+    message: buildPaymentSupportMessage({
+      residentName: resident.data?.full_name,
+      admissionNumber: resident.data?.admission_number,
+      amount: currentPaymentAmount,
+      reference: paymentReference,
+      issue: rejectedPayments.length ? "Payment was rejected, I need correction help." : undefined,
+    }),
   })
 
   if (!organizationId) {
@@ -221,6 +296,41 @@ export function ResidentPaymentsClient() {
                 <p className="mt-2 text-sm text-muted-foreground">Loading payment instructions...</p>
               ) : paymentSettings.data ? (
                 <div className="mt-3 grid gap-3">
+                  {upiPaymentLink ? (
+                    <div className="grid gap-3 rounded-lg border bg-background p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Smartphone className="size-4" aria-hidden="true" />
+                        Pay directly with UPI app
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {UPI_PAYMENT_APPS.map((app) => (
+                          <Button key={app.id} asChild size="sm" variant="outline">
+                            <a
+                              href={upiPaymentLink}
+                              onClick={() => toast.info("Complete payment in your UPI app, then upload the screenshot and UTR here.")}
+                            >
+                              {app.label}
+                            </a>
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <span className="break-all">Payment note: {upiPaymentNote}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(paymentReference)
+                            toast.success("Payment reference copied.")
+                          }}
+                        >
+                          <Copy className="size-3.5" aria-hidden="true" />
+                          Copy reference
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                   {paymentSettings.data.qrImageSignedUrl ? (
                     // Signed URLs are short-lived and generated server-side.
                     // eslint-disable-next-line @next/next/no-img-element
@@ -357,6 +467,14 @@ export function ResidentPaymentsClient() {
                   Ask finance
                 </Link>
               </Button>
+              {paymentSupportUrl ? (
+                <Button asChild variant="outline" size="sm" className="bg-background">
+                  <a href={paymentSupportUrl} target="_blank" rel="noreferrer">
+                    <MessageCircle className="size-3.5" aria-hidden="true" />
+                    WhatsApp finance
+                  </a>
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -414,4 +532,16 @@ function Summary({ label, value }: { label: string; value: string | number }) {
       <p className="mt-2 text-2xl font-semibold">{value}</p>
     </div>
   )
+}
+
+function isPaymentAmountValue(value: unknown): value is string | number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0
+  }
+
+  return false
 }

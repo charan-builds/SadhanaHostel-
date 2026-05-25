@@ -179,6 +179,22 @@ export class StaffAccessRepository {
     return data
   }
 
+  async getRoleAssignmentById(roleAssignmentId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("user_roles")
+      .select("*")
+      .eq("id", roleAssignmentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load staff role assignment.")
+    }
+
+    return data
+  }
+
   async countActivePrivileged(organizationId: string, excludeUserId?: string) {
     let query = this.db
       .from("user_roles")

@@ -6,7 +6,9 @@ export const createResidentInviteSchema = z.object({
   organizationId: uuidSchema,
   residentId: uuidSchema,
   expiresInHours: z.coerce.number().int().min(1).max(24 * 14).default(72),
-  deliveryChannel: z.enum(["copy_link", "email", "whatsapp", "sms_ready"]).default("copy_link"),
+  deliveryChannel: z
+    .enum(["copy_link", "email", "whatsapp", "sms_ready", "temp_password"])
+    .default("copy_link"),
 })
 
 export const listResidentInvitesSchema = z.object({

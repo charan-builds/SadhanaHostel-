@@ -11,6 +11,7 @@ describe("resident validation", () => {
       hostelId: TEST_HOSTEL_ID,
       admissionNumber: "SBH-001",
       fullName: "New Resident",
+      phone: "+91 90000 01001",
     })
 
     expect(result.monthlyFeeAmount).toBe(0)
@@ -24,6 +25,7 @@ describe("resident validation", () => {
       hostelId: TEST_HOSTEL_ID,
       admissionNumber: "SBH-001",
       fullName: "New Resident",
+      phone: "+91 90000 01001",
       parentEmail: "not-an-email",
     })
 

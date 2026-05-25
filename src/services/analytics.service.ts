@@ -19,6 +19,12 @@ import {
 } from "@/validations/analytics.validation"
 
 import { AuthService } from "./auth.service"
+import {
+  buildResidentLifecycleSummary,
+  isResidentEligibleForAnalytics,
+  isResidentEligibleForBilling,
+  isResidentEligibleForOccupancy,
+} from "./analytics/operational-metrics"
 
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const OWNER_ANALYTICS_CACHE_TTL_MS = 60_000
@@ -41,12 +47,15 @@ export class AnalyticsService {
   async getAdminDashboard(input: unknown) {
     const values = dashboardAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
-
-    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const cacheKey = buildTenantCacheKey({
       organizationId: values.organizationId,
-      hostelId: values.hostelId,
+      hostelId: hostelId ?? undefined,
       scope: "analytics",
       identifier: "admin-dashboard",
     })
@@ -65,10 +74,10 @@ export class AnalyticsService {
             slowMs: 800,
             tags: {
               organizationId: values.organizationId,
-              hostelId: values.hostelId,
+              hostelId: hostelId ?? undefined,
             },
           },
-          async () => this.loadAdminDashboard(values.organizationId, values.hostelId)
+          async () => this.loadAdminDashboard(values.organizationId, hostelId ?? undefined)
         )
     )
   }
@@ -76,13 +85,16 @@ export class AnalyticsService {
   async getAdvancedAnalytics(input: unknown) {
     const values = advancedAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
-
-    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const range = normalizeAnalyticsRange(values.fromDate, values.toDate)
     const cacheKey = buildTenantCacheKey({
       organizationId: values.organizationId,
-      hostelId: values.hostelId,
+      hostelId: hostelId ?? undefined,
       scope: "analytics",
       identifier: `advanced:${range.fromDate}:${range.toDate}`,
     })
@@ -101,7 +113,7 @@ export class AnalyticsService {
             slowMs: 1200,
             tags: {
               organizationId: values.organizationId,
-              hostelId: values.hostelId,
+              hostelId: hostelId ?? undefined,
             },
           },
           () =>
@@ -109,7 +121,7 @@ export class AnalyticsService {
               values.organizationId,
               range.fromDate,
               range.toDate,
-              values.hostelId
+              hostelId ?? undefined
             )
         )
     )
@@ -118,13 +130,16 @@ export class AnalyticsService {
   async getOwnerDashboard(input: unknown) {
     const values = ownerAnalyticsSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "finance"])
-
-    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     const range = normalizeAnalyticsRange(values.fromDate, values.toDate)
     const cacheKey = buildTenantCacheKey({
       organizationId: values.organizationId,
-      hostelId: values.hostelId,
+      hostelId: hostelId ?? undefined,
       scope: "analytics",
       identifier: `owner:${range.fromDate}:${range.toDate}`,
     })
@@ -143,7 +158,7 @@ export class AnalyticsService {
             slowMs: 1500,
             tags: {
               organizationId: values.organizationId,
-              hostelId: values.hostelId,
+              hostelId: hostelId ?? undefined,
             },
           },
           () =>
@@ -151,7 +166,7 @@ export class AnalyticsService {
               values.organizationId,
               range.fromDate,
               range.toDate,
-              values.hostelId
+              hostelId ?? undefined
             )
         )
     )
@@ -183,39 +198,80 @@ export class AnalyticsService {
     const now = new Date()
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
     const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+    const today = now.toISOString().slice(0, 10)
     const [
-      totalResidents,
+      residentLifecycleRows,
       capacity,
-      occupiedBeds,
+      activeAllocations,
       monthlyRevenue,
-      pendingDues,
+      pendingDuesRecords,
+      pendingPayments,
+      activeLeaves,
+      newAdmissions,
+      pendingInvites,
       recentPayments,
       recentLeaves,
     ] = await Promise.all([
-      this.analyticsRepository.countActiveResidents(organizationId, hostelId),
+      this.analyticsRepository.listResidentLifecycleRows(organizationId, hostelId),
       this.analyticsRepository.getRoomCapacity(organizationId, hostelId),
-      this.analyticsRepository.countActiveRoomAllocations(organizationId, hostelId),
+      this.analyticsRepository.listActiveRoomAllocationsForOccupancy(organizationId, hostelId),
       this.analyticsRepository.getVerifiedRevenue(
         organizationId,
         monthStart.toISOString(),
         nextMonthStart.toISOString(),
         hostelId
       ),
-      this.analyticsRepository.getPendingDues(organizationId, hostelId),
+      this.analyticsRepository.listPendingDuesRecords(organizationId, hostelId),
+      this.analyticsRepository.countPendingPaymentRequests(organizationId, hostelId),
+      this.analyticsRepository.countActiveLeaves(organizationId, today, hostelId),
+      this.analyticsRepository.countNewAdmissionLeads(organizationId, hostelId),
+      this.analyticsRepository.countPendingInvites(organizationId, now.toISOString(), hostelId),
       this.analyticsRepository.listRecentPayments(organizationId, hostelId),
       this.analyticsRepository.listRecentLeaves(organizationId, hostelId),
     ])
+    const residentLifecycle = buildResidentLifecycleSummary(residentLifecycleRows)
+    const occupancyEligibleResidentIds = new Set(
+      residentLifecycleRows
+        .filter(isResidentEligibleForOccupancy)
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const billingEligibleResidentIds = new Set(
+      residentLifecycleRows
+        .filter(isResidentEligibleForBilling)
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const occupiedBeds = activeAllocations.filter(
+      (allocation) =>
+        allocation.resident_id && occupancyEligibleResidentIds.has(allocation.resident_id)
+    ).length
+    const pendingDues = sum(
+      pendingDuesRecords
+        .filter((record) => billingEligibleResidentIds.has(record.resident_id))
+        .map((record) => record.balance_amount)
+    )
+    const vacantBeds = Math.max(0, capacity - occupiedBeds)
 
     return {
-      totalResidents,
+      totalResidents: residentLifecycle.registeredResidents,
+      residentLifecycle,
       occupancy: {
         occupiedBeds,
         capacity,
+        vacantBeds,
         occupancyRate: capacity === 0 ? 0 : Number(((occupiedBeds / capacity) * 100).toFixed(2)),
       },
       finance: {
         monthlyRevenue,
         pendingDues,
+        pendingPayments,
+      },
+      operations: {
+        activeLeaves,
+        newAdmissions,
+        pendingInvites,
+        pendingVerification: residentLifecycle.pendingVerification,
       },
       recentPayments,
       recentLeaves,
@@ -230,7 +286,7 @@ export class AnalyticsService {
     hostelId?: string
   ) {
     const months = buildMonthBuckets(fromDate, toDate)
-    const [capacity, payments, feeRecords, allocations, leaves, residents] =
+    const [capacity, payments, rawFeeRecords, allocations, leaves, residents] =
       await Promise.all([
         this.analyticsRepository.getRoomCapacity(organizationId, hostelId),
         this.analyticsRepository.listPaymentsInRange(
@@ -264,6 +320,15 @@ export class AnalyticsService {
           hostelId
         ),
       ])
+    const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
+    const analyticsEligibleResidentIds = new Set(
+      operationalResidents
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const feeRecords = rawFeeRecords.filter((record) =>
+      analyticsEligibleResidentIds.has(record.resident_id)
+    )
 
     const paymentTrends = months.map((month) => {
       const monthPayments = payments.filter(
@@ -293,8 +358,16 @@ export class AnalyticsService {
     })
 
     const occupancyTrends = months.map((month) => {
-      const occupied = allocations.filter((allocation) =>
-        allocationOverlapsMonth(allocation.allocated_from, allocation.allocated_to, month.start, month.end)
+      const occupied = allocations.filter(
+        (allocation) =>
+          allocation.resident_id &&
+          analyticsEligibleResidentIds.has(allocation.resident_id) &&
+          allocationOverlapsMonth(
+            allocation.allocated_from,
+            allocation.allocated_to,
+            month.start,
+            month.end
+          )
       ).length
 
       return {
@@ -321,11 +394,12 @@ export class AnalyticsService {
       const created = residents.filter(
         (resident) => monthKey(resident.created_at) === month.key
       )
+      const activeCreated = created.filter(isResidentEligibleForAnalytics)
 
       return {
         month: month.key,
         newResidents: created.length,
-        activeResidents: created.filter((resident) => resident.status === "active").length,
+        activeResidents: activeCreated.length,
       }
     })
 
@@ -371,12 +445,25 @@ export class AnalyticsService {
     ])
 
     const activeRooms = rooms.filter((room) => room.status === "active")
-    const activeAllocations = allocations.filter((allocation) => allocation.status === "active")
-    const totalBeds =
-      capacitySnapshot?.total_beds ??
-      activeRooms.reduce((total, room) => total + room.capacity, 0)
+    const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
+    const analyticsEligibleResidentIds = new Set(
+      operationalResidents
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const activeAllocations = allocations.filter(
+      (allocation) =>
+        allocation.status === "active" &&
+        allocation.resident_id &&
+        analyticsEligibleResidentIds.has(allocation.resident_id)
+    )
+    const operationalFeeRecords = feeRecords.filter((record) =>
+      analyticsEligibleResidentIds.has(record.resident_id)
+    )
+    const configuredBeds = activeRooms.reduce((total, room) => total + room.capacity, 0)
+    const totalBeds = configuredBeds || capacitySnapshot?.total_beds || 0
     const occupiedBeds =
-      capacitySnapshot?.occupied_beds ?? activeAllocations.length
+      activeAllocations.length
     const reservedBeds =
       capacitySnapshot?.reserved_beds ??
       reservations
@@ -385,11 +472,10 @@ export class AnalyticsService {
     const maintenanceBlockedBeds = capacitySnapshot?.maintenance_blocked_beds ?? 0
     const availableBeds = Math.max(
       0,
-      capacitySnapshot?.available_beds ??
-        totalBeds - occupiedBeds - reservedBeds - maintenanceBlockedBeds
+      totalBeds - occupiedBeds - reservedBeds - maintenanceBlockedBeds
     )
     const verifiedPayments = payments.filter((payment) => payment.status === "verified")
-    const pendingFeeRecords = feeRecords.filter((record) =>
+    const pendingFeeRecords = operationalFeeRecords.filter((record) =>
       ["pending", "partial", "overdue"].includes(record.status)
     )
     const unpaidResidentIds = new Set(
@@ -400,26 +486,24 @@ export class AnalyticsService {
     const overdueRecords = pendingFeeRecords.filter(
       (record) => record.due_date < now.toISOString().slice(0, 10)
     )
-    const completedOnboarding = residents.filter(
-      (resident) => resident.onboarding_status === "verified" || resident.status === "active"
-    ).length
+    const completedOnboarding = operationalResidents.length
     const checkedOutInRange = residents.filter((resident) =>
       isDateInRange(resident.checkout_on, fromDate, toDate)
     ).length
-    const joinedResidents = residents.filter((resident) => resident.joined_on)
+    const joinedResidents = operationalResidents.filter((resident) => resident.joined_on)
     const roomUtilization = buildRoomUtilization(activeRooms, activeAllocations)
     const monthly = months.map((month) =>
       buildMonthlyOwnerBucket(month, {
         totalBeds,
-        residents,
+        residents: operationalResidents,
         reservations,
         payments,
-        feeRecords,
-        allocations,
+        feeRecords: operationalFeeRecords,
+        allocations: activeAllocations,
       })
     )
     const revenue = sum(verifiedPayments.map((payment) => payment.amount))
-    const billed = sum(feeRecords.map((record) => record.total_amount))
+    const billed = sum(operationalFeeRecords.map((record) => record.total_amount))
     const pendingDues = sum(pendingFeeRecords.map((record) => record.balance_amount))
     const paymentConversion =
       payments.length === 0
@@ -438,7 +522,7 @@ export class AnalyticsService {
       currentOccupied: occupiedBeds,
       totalBeds,
       monthly,
-      residents,
+      residents: operationalResidents,
       fromDate: now.toISOString(),
     })
     const insights = buildOwnerInsights({

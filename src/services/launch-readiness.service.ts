@@ -16,6 +16,11 @@ import type {
 } from "@/types/launch"
 
 import { AuthService } from "./auth.service"
+import {
+  buildResidentLifecycleSummary,
+  isResidentEligibleForBilling,
+  isResidentEligibleForOccupancy,
+} from "./analytics/operational-metrics"
 
 export class LaunchReadinessService {
   private readonly authService: AuthService
@@ -60,25 +65,25 @@ export class LaunchReadinessService {
     }
 
     this.authService.requireHostelAccess(context, organizationId, hostelId)
+    const generatedAt = new Date()
 
     const [
       envCheck,
       storageCheck,
       cronFailures,
       supportOpen,
-      activeResidents,
+      residentLifecycleRows,
       invitedResidents,
       activatedInvites,
       pendingInvites,
       expiredInvites,
-      onboardingVerified,
       onboardingPending,
       paymentsVerified,
       paymentsPending,
       paymentsRejected,
-      capacity,
+      activeAllocations,
       roomCapacity,
-      pendingDues,
+      pendingDuesRecords,
     ] = await Promise.all([
       this.checkEnv(),
       this.checkStorage(),
@@ -94,12 +99,7 @@ export class LaunchReadinessService {
         hostelId,
         in: { status: ["open", "in_progress", "waiting_on_resident"] },
       }),
-      this.operationsRepository.count("residents", {
-        organizationId,
-        hostelId,
-        equals: { status: "active" },
-        deletedAtNull: true,
-      }),
+      this.analyticsRepository.listResidentLifecycleRows(organizationId, hostelId ?? undefined),
       this.operationsRepository.count("residents", {
         organizationId,
         hostelId,
@@ -111,21 +111,15 @@ export class LaunchReadinessService {
         hostelId,
         equals: { status: "used" },
       }),
-      this.operationsRepository.count("resident_invites", {
+      this.analyticsRepository.countPendingInvites(
         organizationId,
-        hostelId,
-        equals: { status: "pending" },
-      }),
+        generatedAt.toISOString(),
+        hostelId ?? undefined
+      ),
       this.operationsRepository.count("resident_invites", {
         organizationId,
         hostelId,
         equals: { status: "expired" },
-      }),
-      this.operationsRepository.count("residents", {
-        organizationId,
-        hostelId,
-        equals: { onboarding_status: "verified" },
-        deletedAtNull: true,
       }),
       this.operationsRepository.count("residents", {
         organizationId,
@@ -160,12 +154,34 @@ export class LaunchReadinessService {
         in: { status: ["rejected", "failed"] },
         deletedAtNull: true,
       }),
-      this.analyticsRepository.countActiveRoomAllocations(organizationId, hostelId ?? undefined),
+      this.analyticsRepository.listActiveRoomAllocationsForOccupancy(organizationId, hostelId ?? undefined),
       this.analyticsRepository.getRoomCapacity(organizationId, hostelId ?? undefined),
-      this.analyticsRepository.getPendingDues(organizationId, hostelId ?? undefined),
+      this.analyticsRepository.listPendingDuesRecords(organizationId, hostelId ?? undefined),
     ])
 
     const launchConfig = getLaunchConfigSnapshot()
+    const residentLifecycle = buildResidentLifecycleSummary(residentLifecycleRows)
+    const occupancyEligibleResidentIds = new Set(
+      residentLifecycleRows
+        .filter(isResidentEligibleForOccupancy)
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const billingEligibleResidentIds = new Set(
+      residentLifecycleRows
+        .filter(isResidentEligibleForBilling)
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
+    const activeResidents = residentLifecycle.activeResidents
+    const onboardingVerified = residentLifecycle.verifiedResidents
+    const capacity = activeAllocations.filter(
+      (allocation) =>
+        allocation.resident_id && occupancyEligibleResidentIds.has(allocation.resident_id)
+    ).length
+    const pendingDues = pendingDuesRecords
+      .filter((record) => billingEligibleResidentIds.has(record.resident_id))
+      .reduce((total, record) => total + record.balance_amount, 0)
     const activationRate = rate(activatedInvites, activatedInvites + pendingInvites + expiredInvites)
     const onboardingCompletionRate = rate(onboardingVerified, onboardingVerified + onboardingPending)
     const paymentSuccessRate = rate(paymentsVerified, paymentsVerified + paymentsPending + paymentsRejected)
@@ -259,7 +275,7 @@ export class LaunchReadinessService {
     ]
 
     return {
-      generatedAt: new Date().toISOString(),
+      generatedAt: generatedAt.toISOString(),
       organizationId,
       hostelId,
       launchConfig,

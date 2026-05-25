@@ -2,7 +2,7 @@ import "server-only"
 
 import type { User } from "@supabase/supabase-js"
 
-import { ADMIN_PORTAL_ROLES, ADMIN_ROLES, AUTH_REDIRECTS, type AppRole } from "@/constants/auth"
+import { ADMIN_PORTAL_ROLES, ADMIN_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES, type AppRole } from "@/constants/auth"
 import {
   forbidden,
   notFound,
@@ -13,11 +13,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
 import { UsersRepository, type UserRoleRow, type UserRow } from "@/repositories/users.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { maskPhone } from "@/lib/security"
 import {
   adminOnboardingSchema,
   loginSchema,
   residentOnboardingSchema,
+  requestResidentPhoneOtpSchema,
   resetPasswordSchema,
+  verifyResidentPhoneOtpSchema,
 } from "@/validations/auth.validation"
 
 const ROLE_PRIORITY: Record<AppRole, number> = {
@@ -164,7 +167,7 @@ export class AuthService {
           password: values.password,
         }
       : {
-          phone: values.phone ?? identifier,
+          phone: normalizePhoneForAuth(values.phone ?? identifier),
           password: values.password,
         }
     const { error } = await this.db.auth.signInWithPassword({
@@ -172,10 +175,54 @@ export class AuthService {
     })
 
     if (error) {
-      throw unauthorized("Invalid email or password.")
+      throw unauthorized("Invalid phone/email or password.")
     }
 
     const context = await this.getCurrentContext()
+
+    return this.toSessionOverview(context)
+  }
+
+  async requestResidentPhoneOtp(input: unknown) {
+    const values = requestResidentPhoneOtpSchema.parse(input)
+    const phone = normalizePhoneForAuth(values.phone)
+    const { error } = await this.db.auth.signInWithOtp({
+      phone,
+      options: {
+        shouldCreateUser: false,
+      },
+    })
+
+    if (error) {
+      throw unauthorized(
+        "We could not send an OTP for this phone. Ask the hostel office to resend your activation link or temporary password."
+      )
+    }
+
+    return {
+      phone: maskPhone(phone) ?? "your phone",
+      expiresInSeconds: 300,
+    }
+  }
+
+  async verifyResidentPhoneOtp(input: unknown): Promise<SessionOverview> {
+    const values = verifyResidentPhoneOtpSchema.parse(input)
+    const { error } = await this.db.auth.verifyOtp({
+      phone: normalizePhoneForAuth(values.phone),
+      token: values.token,
+      type: "sms",
+    })
+
+    if (error) {
+      throw unauthorized("Invalid or expired OTP. Request a fresh code and try again.")
+    }
+
+    const context = await this.getCurrentContext()
+
+    if (!context.roles.some((role) => (RESIDENT_ROLES as readonly AppRole[]).includes(role))) {
+      await this.db.auth.signOut()
+      throw forbidden("This phone number is not assigned to resident portal access.")
+    }
 
     return this.toSessionOverview(context)
   }
@@ -250,8 +297,16 @@ export class AuthService {
   ) {
     this.requireOrganizationAccess(context, organizationId)
 
-    if (!hostelId || context.roles.includes("super_admin")) {
+    if (context.roles.includes("super_admin")) {
       return
+    }
+
+    if (!hostelId) {
+      if (this.hasOrganizationWideAccess(context, organizationId)) {
+        return
+      }
+
+      throw forbidden("Your account is not assigned organization-wide access.")
     }
 
     const scopedRoleMatches = context.roleAssignments.some(
@@ -266,12 +321,38 @@ export class AuthService {
     }
   }
 
+  resolveHostelScope(
+    context: AuthContext,
+    organizationId: string,
+    requestedHostelId?: string | null
+  ) {
+    this.requireOrganizationAccess(context, organizationId)
+
+    if (requestedHostelId) {
+      this.requireHostelAccess(context, organizationId, requestedHostelId)
+      return requestedHostelId
+    }
+
+    if (this.hasOrganizationWideAccess(context, organizationId)) {
+      return null
+    }
+
+    const scopedHostelId = context.hostelIds[0]
+
+    if (!scopedHostelId) {
+      throw forbidden("Your account is not assigned to a hostel.")
+    }
+
+    this.requireHostelAccess(context, organizationId, scopedHostelId)
+    return scopedHostelId
+  }
+
   async onboardResident(input: unknown) {
     const values = residentOnboardingSchema.parse(input)
     const context = await this.requireAdmin()
     const { data: resident, error: residentError } = await this.db
       .from("residents")
-      .select("organization_id")
+      .select("organization_id, hostel_id")
       .eq("id", values.residentId)
       .is("deleted_at", null)
       .maybeSingle()
@@ -284,7 +365,7 @@ export class AuthService {
       throw notFound("Resident not found.")
     }
 
-    this.requireOrganizationAccess(context, resident.organization_id)
+    this.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
 
     const adminDb = createSupabaseAdminClient()
     const { data, error } = await adminDb.rpc("onboard_resident", {
@@ -302,8 +383,12 @@ export class AuthService {
   async onboardAdmin(input: unknown) {
     const values = adminOnboardingSchema.parse(input)
     const context = await this.requireAdmin()
+    const targetHostelId = this.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.requireOrganizationAccess(context, values.organizationId)
 
     if (!(ADMIN_ROLES as readonly AppRole[]).includes(values.role)) {
       throw forbidden("Only owner/admin roles can be onboarded through this workflow.")
@@ -313,7 +398,7 @@ export class AuthService {
     const { data, error } = await adminDb.rpc("onboard_admin", {
       target_user_id: values.userId,
       target_organization_id: values.organizationId,
-      target_hostel_id: values.hostelId,
+      target_hostel_id: targetHostelId ?? undefined,
       target_role: values.role,
     })
 
@@ -335,6 +420,33 @@ export class AuthService {
     })
 
     return [...roles].sort((a, b) => ROLE_PRIORITY[b] - ROLE_PRIORITY[a])
+  }
+
+  private hasOrganizationWideAccess(context: AuthContext, organizationId: string) {
+    if (context.roles.includes("super_admin")) {
+      return true
+    }
+
+    const hasOrganizationWideAssignment = context.roleAssignments.some(
+      (assignment) =>
+        assignment.organization_id === organizationId &&
+        assignment.status === "active" &&
+        !assignment.hostel_id
+    )
+
+    if (hasOrganizationWideAssignment) {
+      return true
+    }
+
+    const hasOrganizationRoleAssignments = context.roleAssignments.some(
+      (assignment) => assignment.organization_id === organizationId
+    )
+
+    return (
+      !hasOrganizationRoleAssignments &&
+      context.profile.organization_id === organizationId &&
+      (context.primaryRole === "owner" || context.primaryRole === "admin")
+    )
   }
 
   private toSessionOverview(context: AuthContext): SessionOverview {
@@ -385,6 +497,22 @@ function getAccountStatus(metadata: unknown) {
   const status = (metadata as Record<string, unknown>).account_status
 
   return typeof status === "string" ? status : "active"
+}
+
+function normalizePhoneForAuth(phone: string) {
+  const trimmed = phone.trim()
+
+  if (trimmed.startsWith("+")) {
+    return `+${trimmed.replace(/\D/g, "")}`
+  }
+
+  const digits = trimmed.replace(/\D/g, "")
+
+  if (digits.length === 10) {
+    return `+91${digits}`
+  }
+
+  return `+${digits}`
 }
 
 export function assertFound<T>(value: T | null | undefined, message: string): T {

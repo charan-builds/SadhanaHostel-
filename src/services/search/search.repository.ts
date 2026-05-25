@@ -23,6 +23,7 @@ type SearchRpcClient = {
     fn: "search_tenant_records",
     args: {
       p_organization_id: string
+      p_hostel_id?: string | null
       p_query: string
       p_types: string[]
       p_limit: number
@@ -36,6 +37,7 @@ export class SearchRepository {
 
   async search(input: PaginationParams & {
     organizationId: string
+    hostelId?: string | null
     query: string
     types: SearchEntityType[]
   }) {
@@ -43,6 +45,7 @@ export class SearchRepository {
     const rpc = this.db as unknown as SearchRpcClient
     const { data, error } = await rpc.rpc("search_tenant_records", {
       p_organization_id: input.organizationId,
+      p_hostel_id: input.hostelId ?? null,
       p_query: input.query,
       p_types: input.types,
       p_limit: pageSize,

@@ -126,7 +126,10 @@ describe("tenant isolation and security hardening contracts", () => {
 
     expect(uploadValidation).toMatch(/expiresInSeconds[\s\S]*max\(3600\)[\s\S]*default\(900\)/)
     expect(invoiceValidation).toMatch(/expiresInSeconds[\s\S]*max\(3600\)[\s\S]*default\(900\)/)
-    expect(paymentsService).toMatch(/createSignedUrl\(\s*"payment-qr-codes"[\s\S]*900\s*\)/)
+    expect(paymentsService).toMatch(/expiresInSeconds\s*=\s*900/i)
+    expect(paymentsService).toMatch(
+      /createSignedUrl\(\s*"payment-qr-codes"[\s\S]*expiresInSeconds\s*\)/i
+    )
     expect(uploadsRepository).toMatch(/Math\.min\([\s\S]*3600[\s\S]*createSignedUrl\(storagePath,\s*safeExpiresIn\)/)
     expect(invoiceStorage).toMatch(/Math\.min\([\s\S]*3600[\s\S]*safeExpiresInSeconds/)
   })
@@ -157,13 +160,13 @@ describe("tenant isolation and security hardening contracts", () => {
     const residentsService = projectFile("src/services/residents.service.ts")
 
     expect(authService).toMatch(
-      /async\s+onboardResident[\s\S]*requireAdmin\(\)[\s\S]*requireOrganizationAccess[\s\S]*createSupabaseAdminClient\(\)[\s\S]*onboard_resident/
+      /async\s+onboardResident[\s\S]*requireAdmin\(\)[\s\S]*requireHostelAccess[\s\S]*createSupabaseAdminClient\(\)[\s\S]*onboard_resident/
     )
     expect(authService).toMatch(
-      /async\s+onboardAdmin[\s\S]*requireAdmin\(\)[\s\S]*requireOrganizationAccess[\s\S]*createSupabaseAdminClient\(\)[\s\S]*onboard_admin/
+      /async\s+onboardAdmin[\s\S]*requireAdmin\(\)[\s\S]*resolveHostelScope[\s\S]*createSupabaseAdminClient\(\)[\s\S]*onboard_admin/
     )
     expect(residentsService).toMatch(
-      /async\s+onboardResident[\s\S]*requireAdmin\(\)[\s\S]*requireOrganizationAccess[\s\S]*createSupabaseAdminClient\(\)\.rpc\("onboard_resident"/
+      /async\s+onboardResident[\s\S]*requireAdmin\(\)[\s\S]*requireHostelAccess[\s\S]*createSupabaseAdminClient\(\)\.rpc\("onboard_resident"/
     )
   })
 
@@ -179,8 +182,8 @@ describe("tenant isolation and security hardening contracts", () => {
     expect(authService).toMatch(/requireHostelAccess\(/)
     expect(paymentsService).toMatch(/verifyPayment[\s\S]*requireHostelAccess/)
     expect(paymentsService).toMatch(/savePaymentSettings[\s\S]*requireHostelAccess/)
-    expect(analyticsService).toMatch(/getOwnerDashboard[\s\S]*requireHostelAccess/)
-    expect(reportBuilder).toMatch(/build[\s\S]*requireHostelAccess/)
+    expect(analyticsService).toMatch(/getOwnerDashboard[\s\S]*resolveHostelScope/)
+    expect(reportBuilder).toMatch(/build[\s\S]*resolveHostelScope/)
     expect(automationService).toMatch(/run[\s\S]*requireHostelAccess/)
     expect(consistencyService).toMatch(/repair[\s\S]*requireHostelAccess/)
     expect(jobsRoute).toMatch(/requireHostelAccess\(context,\s*values\.organizationId,\s*values\.hostelId\)/)

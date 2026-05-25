@@ -8,8 +8,8 @@ test.describe("operational recovery and automation surfaces", () => {
 
     await page.goto("/support")
     await expect(page.getByRole("heading", { name: /support center/i })).toBeVisible()
-    await expect(page.getByText(/expired invite/i)).toBeVisible()
-    await expect(page.getByText(/rejected payment/i)).toBeVisible()
+    await expect(page.getByText(/expired invite/i).first()).toBeVisible()
+    await expect(page.getByText(/rejected payment/i).first()).toBeVisible()
     await expect(page.getByRole("link", { name: /whatsapp support/i })).toBeVisible()
 
     expect(errors).toEqual([])

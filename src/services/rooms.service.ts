@@ -35,17 +35,23 @@ export class RoomsService {
   async listRooms(input: unknown) {
     const values = roomListSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    return this.roomsRepository.list(values)
+    return this.roomsRepository.list({
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
   }
 
   async createRoom(input: unknown) {
     const values = createRoomSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const room = await this.roomsRepository.create({
       organization_id: values.organizationId,
@@ -72,16 +78,17 @@ export class RoomsService {
   async getRoom(roomId: string, organizationId: string) {
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, organizationId)
-
     const [room, occupancy, allocations] = await Promise.all([
       this.roomsRepository.getById(roomId, organizationId),
       this.roomsRepository.getOccupancy(roomId, organizationId),
       this.roomsRepository.listAllocations(roomId, organizationId),
     ])
+    const existingRoom = assertFound(room, "Room not found.")
+
+    this.authService.requireHostelAccess(context, existingRoom.organization_id, existingRoom.hostel_id)
 
     return {
-      room: assertFound(room, "Room not found."),
+      room: existingRoom,
       occupancy,
       allocations,
     }
@@ -91,7 +98,16 @@ export class RoomsService {
     const values = updateRoomSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const existingRoom = assertFound(
+      await this.roomsRepository.getById(values.roomId, values.organizationId),
+      "Room not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingRoom.organization_id,
+      existingRoom.hostel_id
+    )
 
     const room = await this.roomsRepository.update(values.roomId, values.organizationId, {
       room_name: values.roomName,
@@ -116,7 +132,7 @@ export class RoomsService {
     const values = allocateRoomSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     try {
       const allocation = await this.roomsRepository.allocateRoomAtomic({
@@ -144,7 +160,7 @@ export class RoomsService {
     const values = transferRoomSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     try {
       const allocation = await this.roomsRepository.transferRoomAtomic({

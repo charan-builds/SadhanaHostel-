@@ -181,6 +181,22 @@ test.describe("credential-gated operational surfaces", () => {
       await expect(page.getByRole("heading", { name: route.heading })).toBeVisible()
     }
   })
+
+  test("admin dashboard uses owner-friendly lifecycle and occupancy labels", async ({
+    page,
+  }) => {
+    await login(page, "/admin/login", adminCredentials!)
+
+    await page.goto("/admin/dashboard")
+    await expect(
+      page.getByRole("heading", { name: /admin dashboard/i })
+    ).toBeVisible()
+    await expect(page.getByText(/registered residents/i)).toBeVisible()
+    await expect(page.getByText(/draft \/ onboarding/i)).toBeVisible()
+    await expect(page.getByText(/occupied beds/i)).toBeVisible()
+    await expect(page.getByText(/vacant beds/i)).toBeVisible()
+    await expect(page.getByText(/pending verification/i)).toBeVisible()
+  })
 })
 
 type Credentials = {

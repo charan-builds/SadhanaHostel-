@@ -19,11 +19,22 @@ export type ConsistencyFinding = {
   title: string
   description: string
   count: number
+  details?: Array<{
+    tableName: string
+    recordId: string | null
+    anomalyType: string
+    expectedOrganizationId?: string | null
+    actualOrganizationId?: string | null
+    expectedHostelId?: string | null
+    actualHostelId?: string | null
+    recommendation: string
+  }>
   repairAction:
     | "expire_reservations"
     | "expire_invites"
     | "cleanup_uploads"
     | "recalculate_occupancy"
+    | "repair_tenant_linkage"
     | "generate_fees"
     | "run_consistency_scan"
     | "review_manually"

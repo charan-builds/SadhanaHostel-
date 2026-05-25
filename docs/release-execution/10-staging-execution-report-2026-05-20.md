@@ -134,14 +134,14 @@ Populate with real staging-only values:
 
 ```env
 NEXT_PUBLIC_APP_URL=https://<vercel-staging-domain>
-NEXT_PUBLIC_SUPABASE_URL=https://gdpildiullmtfpbetqpu.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<staging-service-role-key>
+NEXT_PUBLIC_SUPABASE_URL=https://REDACTED_STAGING_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=REDACTED_STAGING_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=REDACTED_STAGING_SUPABASE_SERVICE_ROLE_KEY
 NEXT_PUBLIC_SENTRY_DSN=<staging-sentry-dsn>
 SENTRY_DSN=<staging-sentry-dsn>
 SENTRY_ENVIRONMENT=staging
-RESEND_API_KEY=<staging-resend-api-key>
-CRON_SECRET=<staging-only-random-secret>
+RESEND_API_KEY=REDACTED_STAGING_RESEND_API_KEY
+CRON_SECRET=REDACTED_STAGING_CRON_SECRET
 STAGING_SEED_ORGANIZATION_ID=<from migrated/seeded organization>
 STAGING_SEED_HOSTEL_ID=<from migrated/seeded hostel>
 LOAD_TEST_BASE_URL=https://<vercel-staging-domain>

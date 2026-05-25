@@ -1,6 +1,7 @@
 import type { PostgrestError } from "@supabase/supabase-js"
 
 import type { Tables } from "@/types/database"
+import type { ResidentLifecycleRow } from "@/services/analytics/operational-metrics"
 
 import { throwRepositoryError, type AppSupabaseClient } from "./types"
 
@@ -24,12 +25,14 @@ export type OwnerAllocation = Pick<
   "room_id" | "resident_id" | "allocated_from" | "allocated_to" | "status"
 >
 
-export type OwnerResident = {
+export type OwnerResident = ResidentLifecycleRow & {
   id: string
   created_at: string
   joined_on: string | null
   checkout_on: string | null
   status: string
+  is_active: boolean | null
+  user_id: string | null
   monthly_fee_amount: number
   onboarding_status: string | null
 }
@@ -48,6 +51,21 @@ export type OwnerFeeRecord = Pick<
   "resident_id" | "period_month" | "due_date" | "total_amount" | "paid_amount" | "balance_amount" | "status"
 >
 
+export type ResidentGrowthRow = ResidentLifecycleRow & {
+  id: string
+  created_at: string
+}
+
+export type DashboardFeeRecord = Pick<
+  Tables<"monthly_fee_records">,
+  "resident_id" | "balance_amount" | "status"
+>
+
+export type ActiveRoomAllocation = Pick<
+  Tables<"room_allocations">,
+  "id" | "room_id" | "resident_id" | "allocated_from" | "allocated_to" | "status"
+>
+
 export type OwnerCapacity = {
   total_beds: number
   occupied_beds: number
@@ -60,12 +78,14 @@ export type OwnerCapacity = {
 type QueryResult<T> = {
   data: T | null
   error: PostgrestError | null
+  count?: number | null
 }
 
 type GenericAnalyticsQueryBuilder = {
-  select(columns?: string): GenericAnalyticsQueryBuilder
+  select(columns?: string, options?: { count?: "exact"; head?: boolean }): GenericAnalyticsQueryBuilder
   eq(column: string, value: unknown): GenericAnalyticsQueryBuilder
   is(column: string, value: boolean | null): GenericAnalyticsQueryBuilder
+  in(column: string, values: unknown[]): GenericAnalyticsQueryBuilder
   gte(column: string, value: unknown): GenericAnalyticsQueryBuilder
   lte(column: string, value: unknown): GenericAnalyticsQueryBuilder
   order(column: string, options?: { ascending?: boolean }): GenericAnalyticsQueryBuilder
@@ -100,6 +120,27 @@ export class AnalyticsRepository {
     }
 
     return count ?? 0
+  }
+
+  async listResidentLifecycleRows(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("residents")
+      .select("id,status,is_active,user_id,checkout_on,onboarding_status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident lifecycle metrics.")
+    }
+
+    return (data ?? []) as unknown as ResidentLifecycleRow[]
   }
 
   async getRoomCapacity(organizationId: string, hostelId?: string) {
@@ -144,6 +185,27 @@ export class AnalyticsRepository {
     return count ?? 0
   }
 
+  async listActiveRoomAllocationsForOccupancy(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("room_allocations")
+      .select("id,room_id,resident_id,allocated_from,allocated_to,status")
+      .eq("organization_id", organizationId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load room allocations.")
+    }
+
+    return (data ?? []) as ActiveRoomAllocation[]
+  }
+
   async getVerifiedRevenue(organizationId: string, fromDate: string, toDate: string, hostelId?: string) {
     let query = this.db
       .from("payments")
@@ -186,6 +248,125 @@ export class AnalyticsRepository {
     }
 
     return (data ?? []).reduce((sum, feeRecord) => sum + feeRecord.balance_amount, 0)
+  }
+
+  async listPendingDuesRecords(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("monthly_fee_records")
+      .select("resident_id,balance_amount,status")
+      .eq("organization_id", organizationId)
+      .in("status", ["pending", "partial", "overdue"])
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load pending dues.")
+    }
+
+    return (data ?? []) as DashboardFeeRecord[]
+  }
+
+  async countPendingPaymentRequests(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("payments")
+      .select("id", { count: "exact" })
+      .eq("organization_id", organizationId)
+      .in("status", ["initiated", "pending"])
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { count, error } = await query.range(0, 0)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to count pending payment requests.")
+    }
+
+    return count ?? 0
+  }
+
+  async countActiveLeaves(organizationId: string, date: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("leave_requests")
+      .select("id", { count: "exact" })
+      .eq("organization_id", organizationId)
+      .eq("status", "approved")
+      .lte("from_date", date)
+      .gte("to_date", date)
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { count, error } = await query.range(0, 0)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to count active leaves.")
+    }
+
+    return count ?? 0
+  }
+
+  async countNewAdmissionLeads(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("leads")
+      .select("id", { count: "exact" })
+      .eq("organization_id", organizationId)
+      .in("status", ["new_inquiry", "called", "interested"])
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { count, error } = await query.range(0, 0)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to count new admission inquiries.")
+    }
+
+    return count ?? 0
+  }
+
+  async countPendingInvites(organizationId: string, now: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("resident_invites")
+      .select("resident_id")
+      .eq("organization_id", organizationId)
+      .eq("status", "pending")
+      .gte("expires_at", now)
+      .is("used_at", null)
+      .is("revoked_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to count pending resident invites.")
+    }
+
+    return new Set(
+      (data ?? [])
+        .map((invite) =>
+          typeof invite === "object" &&
+          invite !== null &&
+          "resident_id" in invite
+            ? invite.resident_id
+            : null
+        )
+        .filter((residentId): residentId is string => typeof residentId === "string")
+    ).size
   }
 
   async listRecentPayments(organizationId: string, hostelId?: string, limit = 5) {
@@ -267,7 +448,7 @@ export class AnalyticsRepository {
   ) {
     let query = this.db
       .from("monthly_fee_records")
-      .select("period_month,total_amount,paid_amount,balance_amount,status")
+      .select("resident_id,period_month,total_amount,paid_amount,balance_amount,status")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .gte("period_month", fromDate)
@@ -294,7 +475,7 @@ export class AnalyticsRepository {
   ) {
     let query = this.db
       .from("room_allocations")
-      .select("allocated_from,allocated_to,status")
+      .select("resident_id,allocated_from,allocated_to,status")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .lte("allocated_from", toDate)
@@ -346,9 +527,9 @@ export class AnalyticsRepository {
     toDate: string,
     hostelId?: string
   ) {
-    let query = this.db
+    let query = this.analyticsDb()
       .from("residents")
-      .select("created_at,status")
+      .select("id,created_at,status,is_active,user_id,checkout_on,onboarding_status")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .gte("created_at", fromDate)
@@ -358,13 +539,13 @@ export class AnalyticsRepository {
       query = query.eq("hostel_id", hostelId)
     }
 
-    const { data, error } = await query
+    const { data, error } = await query.range(0, 50_000)
 
     if (error) {
       throwRepositoryError(error, "Unable to load resident growth analytics.")
     }
 
-    return data ?? []
+    return (data ?? []) as unknown as ResidentGrowthRow[]
   }
 
   async getHostelCapacitySnapshot(organizationId: string, hostelId?: string) {
@@ -434,7 +615,7 @@ export class AnalyticsRepository {
   async listOwnerResidents(organizationId: string, hostelId?: string) {
     let query = this.analyticsDb()
       .from("residents")
-      .select("id,created_at,joined_on,checkout_on,status,monthly_fee_amount,onboarding_status")
+      .select("id,created_at,joined_on,checkout_on,status,is_active,user_id,monthly_fee_amount,onboarding_status")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
 

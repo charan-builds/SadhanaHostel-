@@ -58,7 +58,16 @@ export class LeavesService {
       })
     }
 
-    return this.leavesRepository.list(values)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
+
+    return this.leavesRepository.list({
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
   }
 
   async createLeave(input: unknown) {
@@ -76,6 +85,14 @@ export class LeavesService {
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only apply leave for themselves.")
+    }
+
+    if (isAdmin) {
+      this.authService.requireHostelAccess(
+        context,
+        existingResident.organization_id,
+        existingResident.hostel_id
+      )
     }
 
     if (!isAdmin && !isResidentOperationallyVerified(existingResident)) {
@@ -112,6 +129,12 @@ export class LeavesService {
       values.organizationId
     )
     const existingLeave = assertFound(leaveRequest, "Leave request not found.")
+
+    this.authService.requireHostelAccess(
+      context,
+      existingLeave.organization_id,
+      existingLeave.hostel_id
+    )
 
     if (existingLeave.status !== "pending") {
       throw conflict("Only pending leave requests can be reviewed.")

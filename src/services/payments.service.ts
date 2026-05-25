@@ -15,6 +15,7 @@ import type {
   PaymentSettingRow,
   PaymentSettingView,
 } from "@/types/payment-operations"
+import type { Json } from "@/types/database"
 import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
@@ -79,8 +80,16 @@ export class PaymentsService {
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
     if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
-      this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
-      return this.paymentsRepository.list(values)
+      const hostelId = this.authService.resolveHostelScope(
+        context,
+        values.organizationId,
+        values.hostelId
+      )
+
+      return this.paymentsRepository.list({
+        ...values,
+        ...(hostelId ? { hostelId } : {}),
+      })
     }
 
     {
@@ -454,9 +463,10 @@ export class PaymentsService {
       : await this.paymentSettingsRepository.getActive(values.organizationId, values.hostelId)
     const rotate = Boolean(values.rotate && previousSetting)
     const qrReplaced = Boolean(
-      previousSetting?.qr_image_path &&
-        values.qrImagePath &&
-        previousSetting.qr_image_path !== values.qrImagePath
+      values.qrReplaced ||
+        (previousSetting?.qr_image_path &&
+          values.qrImagePath &&
+          previousSetting.qr_image_path !== values.qrImagePath)
     )
 
     const setting = await this.paymentSettingsRepository.upsert({
@@ -608,7 +618,7 @@ export class PaymentsService {
     }
   }
 
-  async uploadPaymentQr(input: unknown, file: File) {
+  async uploadPaymentQr(input: unknown, file: File, auditContext?: PaymentSettingsAuditContext) {
     const values = paymentQrUploadSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
@@ -623,11 +633,35 @@ export class PaymentsService {
       cacheControl: "60",
     })
 
+    const expiresInSeconds = 900
+    const signedUrlExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
     const signedUrl = await this.uploadsRepository.createSignedUrl(
       "payment-qr-codes",
       storagePath,
-      900
+      expiresInSeconds
     )
+
+    await this.recordPaymentSettingsAuditLog({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      actorUserId: context.authUser.id,
+      tableName: "storage.objects",
+      recordId: null,
+      action: "payment_settings.qr_uploaded",
+      oldValues: null,
+      newValues: {
+        bucketName: "payment-qr-codes",
+        storagePath,
+        contentType: file.type,
+        size: file.size,
+        signedUrlExpiresAt,
+      },
+      metadata: {
+        bucketName: "payment-qr-codes",
+        storagePath,
+      },
+      auditContext,
+    })
 
     logPaymentEvent({
       action: "payment_qr_uploaded",
@@ -642,8 +676,13 @@ export class PaymentsService {
     return {
       bucketName: "payment-qr-codes" as const,
       storagePath,
-      signedUrl,
-      expiresInSeconds: 900,
+      signedUrl: appendQrPreviewCacheBust(signedUrl, {
+        storagePath,
+        qrVersion: 0,
+        updatedAt: signedUrlExpiresAt,
+      }),
+      expiresInSeconds,
+      signedUrlExpiresAt,
     }
   }
 
@@ -1007,17 +1046,29 @@ export class PaymentsService {
       return {
         ...setting,
         qrImageSignedUrl: null,
+        qrImageSignedUrlExpiresAt: null,
+        qrImagePreviewError: null,
       }
     }
 
     try {
+      const expiresInSeconds = 900
+      const signedUrlExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
+      const signedUrl = await this.uploadsRepository.createSignedUrl(
+        "payment-qr-codes",
+        setting.qr_image_path,
+        expiresInSeconds
+      )
+
       return {
         ...setting,
-        qrImageSignedUrl: await this.uploadsRepository.createSignedUrl(
-          "payment-qr-codes",
-          setting.qr_image_path,
-          900
-        ),
+        qrImageSignedUrl: appendQrPreviewCacheBust(signedUrl, {
+          storagePath: setting.qr_image_path,
+          qrVersion: setting.qr_version,
+          updatedAt: setting.qr_replaced_at ?? setting.updated_at,
+        }),
+        qrImageSignedUrlExpiresAt: signedUrlExpiresAt,
+        qrImagePreviewError: null,
       }
     } catch (error) {
       logError(error, {
@@ -1025,11 +1076,71 @@ export class PaymentsService {
         organizationId: setting.organization_id,
         hostelId: setting.hostel_id,
       })
+      await this.recordPaymentSettingsAuditLog({
+        organizationId: setting.organization_id,
+        hostelId: setting.hostel_id,
+        actorUserId: setting.updated_by ?? setting.created_by,
+        tableName: "payment_settings",
+        recordId: setting.id,
+        action: "payment_settings.qr_preview_failed",
+        oldValues: null,
+        newValues: null,
+        metadata: {
+          bucketName: "payment-qr-codes",
+          storagePath: setting.qr_image_path,
+          error: error instanceof Error ? error.message : "Unknown signed URL error",
+        },
+      })
 
       return {
         ...setting,
         qrImageSignedUrl: null,
+        qrImageSignedUrlExpiresAt: null,
+        qrImagePreviewError:
+          "QR image is saved, but the preview link could not be generated. Retry preview or check storage access.",
       }
+    }
+  }
+
+  private async recordPaymentSettingsAuditLog(input: {
+    organizationId: string
+    hostelId: string | null
+    actorUserId?: string | null
+    tableName: string
+    recordId: string | null
+    action: string
+    oldValues: unknown
+    newValues: unknown
+    metadata?: Record<string, unknown>
+    auditContext?: PaymentSettingsAuditContext
+  }) {
+    try {
+      await this.paymentSettingsRepository.createAuditLog({
+        organization_id: input.organizationId,
+        hostel_id: input.hostelId,
+        actor_user_id: input.actorUserId ?? null,
+        table_name: input.tableName,
+        record_id: input.recordId,
+        action: input.action,
+        old_values: input.oldValues as Json,
+        new_values: input.newValues as Json,
+        ip_address: input.auditContext?.ipAddress ?? null,
+        user_agent: input.auditContext?.userAgent ?? null,
+        request_id: input.auditContext?.requestId ?? getRequestId(),
+        metadata: (input.metadata ?? {}) as Json,
+        created_by: input.actorUserId ?? null,
+        updated_by: input.actorUserId ?? null,
+      })
+    } catch (error) {
+      logError(error, {
+        event: "payment_settings.audit_log_failed",
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        metadata: {
+          action: input.action,
+          tableName: input.tableName,
+        },
+      })
     }
   }
 
@@ -1080,4 +1191,22 @@ export class PaymentsService {
       throw badRequest("QR image must be a JPEG, PNG, or WebP file.")
     }
   }
+}
+
+function appendQrPreviewCacheBust(
+  signedUrl: string,
+  input: {
+    storagePath: string
+    qrVersion: number
+    updatedAt: string | null
+  }
+) {
+  const updatedAt = input.updatedAt ? Date.parse(input.updatedAt) : Date.now()
+  const cacheKey = [
+    `qr_version=${encodeURIComponent(String(input.qrVersion))}`,
+    `qr_updated=${encodeURIComponent(String(Number.isFinite(updatedAt) ? updatedAt : Date.now()))}`,
+    `qr_path=${encodeURIComponent(input.storagePath)}`,
+  ].join("&")
+
+  return `${signedUrl}${signedUrl.includes("?") ? "&" : "?"}${cacheKey}`
 }

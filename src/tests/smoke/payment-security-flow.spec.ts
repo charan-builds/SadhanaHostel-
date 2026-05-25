@@ -30,7 +30,8 @@ test.describe("payment security finance console", () => {
     await expect(page.getByText(/payment.*saved|rotated safely/i)).toBeVisible()
   })
 
-  test("admin can replace QR and resident payment settings refresh is still reachable", async ({
+  test("admin can replace QR, refresh, and keep the signed preview visible", async ({
+    browser,
     page,
   }) => {
     await page.goto("/admin/login")
@@ -41,6 +42,34 @@ test.describe("payment security finance console", () => {
     await page.goto("/admin/finance/payment-security")
     await expect(page.getByRole("heading", { name: /payment security/i })).toBeVisible()
     await expect(page.getByLabel(/replace qr image/i)).toBeVisible()
+
+    await page.getByLabel(/replace qr image/i).setInputFiles({
+      name: `payment-qr-${Date.now()}.png`,
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64"
+      ),
+    })
+    await expect(page.getByAltText(/selected payment qr preview/i)).toBeVisible()
+    await expect(page.getByText(/selected locally/i)).toBeVisible()
+    await expect(page.getByText(/selected, not live/i)).toBeVisible()
+
+    await page.getByRole("button", { name: /upload.*save/i }).click()
+    await expect(page.getByText(/payment.*saved|rotated safely/i)).toBeVisible()
+    await expect(page.getByAltText(/current active payment qr/i)).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByAltText(/current active payment qr/i)).toBeVisible()
+
+    const secondAdmin = await browser.newPage()
+    await secondAdmin.goto("/admin/login")
+    await secondAdmin.getByLabel(/email or phone/i).fill(adminEmail!)
+    await secondAdmin.getByLabel(/^password$/i).fill(adminPassword!)
+    await secondAdmin.getByRole("button", { name: /^sign in$/i }).click()
+    await secondAdmin.goto("/admin/finance/payment-security")
+    await expect(secondAdmin.getByAltText(/current active payment qr/i)).toBeVisible()
+    await secondAdmin.close()
 
     const response = await page.request.get("/api/auth/session")
     expect(response.ok()).toBe(true)

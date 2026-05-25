@@ -38,11 +38,14 @@ export type ResidentInviteSafe = {
 
 export type ResidentInviteCreated = {
   invite: ResidentInviteRow
-  activationLink: string
+  activationLink: string | null
+  loginLink: string
   whatsappShareUrl: string | null
   delivery: {
     emailQueued: boolean
     whatsappReady: boolean
+    accessMode: "activation_link" | "temporary_password"
+    temporaryPassword?: string | null
   }
 }
 

@@ -14,11 +14,19 @@ export const residentInviteExpiryJob: JobDefinition<ResidentInviteExpiryPayload>
     ["resident_invite_expiry", payload.organizationId, payload.hostelId ?? "all"].join(":"),
   async run(payload, context) {
     const repository = new ResidentInvitesRepository(context.db)
-    const processed = await repository.expireDue({
-      organizationId: payload.organizationId,
-      hostelId: payload.hostelId,
-      limit: payload.limit ?? 500,
-    })
+    const [expiredStale, expiredDuplicates] = await Promise.all([
+      repository.expireDue({
+        organizationId: payload.organizationId,
+        hostelId: payload.hostelId,
+        limit: payload.limit ?? 500,
+      }),
+      repository.expireDuplicateActiveForResidents({
+        organizationId: payload.organizationId,
+        hostelId: payload.hostelId,
+        limit: payload.limit ?? 1000,
+      }),
+    ])
+    const processed = expiredStale + expiredDuplicates
 
     return {
       status: "completed",
@@ -29,6 +37,8 @@ export const residentInviteExpiryJob: JobDefinition<ResidentInviteExpiryPayload>
       metadata: {
         organizationId: payload.organizationId,
         hostelId: payload.hostelId,
+        expiredStale,
+        expiredDuplicates,
       },
     }
   },

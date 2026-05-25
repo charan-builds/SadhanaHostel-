@@ -139,12 +139,12 @@ export class SupportService {
     const values = supportRequestUpdateSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
     const previous = assertFound(
       await this.supportRepository.getById(values.requestId, values.organizationId),
       "Support request not found."
     )
+    this.authService.requireHostelAccess(context, previous.organization_id, previous.hostel_id)
+
     const now = new Date().toISOString()
     const nextStatus = values.status ?? previous.status
     const request = await this.supportRepository.update(
@@ -190,7 +190,7 @@ export class SupportService {
       ]
     }
 
-    this.authService.requireOrganizationAccess(context, organizationId)
+    this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     const alerts: OperationalAlert[] = []
     const [
@@ -337,12 +337,20 @@ export class SupportService {
     }
 
     if (consistency.summaries.critical > 0 || consistency.summaries.high > 0) {
+      const priorityFindings = consistency.findings
+        .filter((finding) => finding.severity === "critical" || finding.severity === "high")
+        .slice(0, 3)
+      const findingSummary = priorityFindings.length
+        ? priorityFindings
+            .map((finding) => `${finding.title} (${finding.count})`)
+            .join("; ")
+        : "Review the latest consistency findings."
+
       alerts.push({
         id: "operations.consistency",
         severity: consistency.summaries.critical > 0 ? "critical" : "high",
-        title: "Operational consistency needs repair",
-        description:
-          "Consistency scan found orphan data, invalid occupancy, invoice gaps, or payment mismatches.",
+        title: priorityFindings[0]?.title ?? "Operational consistency needs repair",
+        description: findingSummary,
         count: consistency.summaries.critical + consistency.summaries.high,
         href: "/admin/operations/automation",
         ctaLabel: "Open automation",
@@ -379,14 +387,16 @@ export class SupportService {
       throw badRequest("Organization setup is required before support requests can be created.")
     }
 
-    this.authService.requireOrganizationAccess(context, organizationId)
-
     const isAdmin = context.roles.some((role) =>
       (ADMIN_PORTAL_ROLES as readonly string[]).includes(role)
     )
 
     if (isAdmin) {
-      const hostelId = input.hostelId ?? context.hostelIds[0]
+      const hostelId = this.authService.resolveHostelScope(
+        context,
+        organizationId,
+        input.hostelId ?? context.hostelIds[0]
+      )
 
       if (!hostelId) {
         throw badRequest("Hostel setup is required before support requests can be managed.")

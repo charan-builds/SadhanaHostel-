@@ -54,6 +54,7 @@ export const consistencyRepairSchema = z.object({
     "expire_invites",
     "cleanup_uploads",
     "recalculate_occupancy",
+    "repair_tenant_linkage",
     "generate_fees",
     "run_consistency_scan",
   ]),

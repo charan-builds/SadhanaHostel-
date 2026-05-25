@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type FormEvent, type ReactNode } from "react"
-import { CalendarCheck, Loader2, Plus, Search } from "lucide-react"
+import { CalendarCheck, Loader2, MessageCircle, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -447,6 +447,7 @@ function ReservationActionDialog({
   const convertReservation = useConvertReservation()
   const createInvite = useCreateResidentInvite()
   const [activationLink, setActivationLink] = useState<string | null>(null)
+  const [whatsappShareUrl, setWhatsappShareUrl] = useState<string | null>(null)
   const pending =
     confirmReservation.isPending ||
     cancelReservation.isPending ||
@@ -491,11 +492,12 @@ function ReservationActionDialog({
     const invite = await createInvite.mutateAsync({
       organizationId,
       residentId: resident.id,
-      deliveryChannel: "copy_link",
+      deliveryChannel: "whatsapp",
       expiresInHours: 72,
     })
     setActivationLink(invite.activationLink)
-    toast.success("Reservation converted and resident invite generated.")
+    setWhatsappShareUrl(invite.whatsappShareUrl)
+    toast.success("Admission approved and resident activation invite generated.")
   }
 
   async function copyLink() {
@@ -513,6 +515,7 @@ function ReservationActionDialog({
       onOpenChange={(open) => {
         if (!open) {
           setActivationLink(null)
+          setWhatsappShareUrl(null)
         }
         onOpenChange(open)
       }}
@@ -542,15 +545,24 @@ function ReservationActionDialog({
           <div className="rounded-lg border bg-emerald-50 p-4 text-sm text-emerald-950">
             <p className="font-semibold">Resident invite generated</p>
             <p className="mt-2 break-all text-xs">{activationLink}</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              onClick={() => void copyLink()}
-            >
-              Copy invite link
-            </Button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void copyLink()}
+              >
+                Copy invite link
+              </Button>
+              {whatsappShareUrl ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={whatsappShareUrl} target="_blank" rel="noreferrer">
+                    <MessageCircle className="size-3.5" aria-hidden="true" />
+                    WhatsApp invite
+                  </a>
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -577,7 +589,7 @@ function ReservationActionDialog({
               disabled={pending || !reservation || !canConvert(reservation)}
               onClick={() => void convert()}
             >
-              Convert & invite
+              Approve & invite
             </Button>
           </div>
         </DialogFooter>

@@ -3,12 +3,18 @@
 import Link from "next/link"
 import type { Route } from "next"
 import {
+  AlertTriangle,
   BarChart3,
+  BedDouble,
   Building2,
   CalendarDays,
   CreditCard,
+  FileCheck2,
   IndianRupee,
+  KeyRound,
   Plus,
+  UserCheck,
+  UserRoundPlus,
   Users,
 } from "lucide-react"
 
@@ -30,11 +36,15 @@ import {
 } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
+import { useRealtimeAdmissions, useRealtimeLeaves, useRealtimePayments } from "@/lib/realtime"
 import { useDashboardAnalytics, useLeaves, usePayments, useResidents, useRooms } from "@/hooks"
 
 export function AdminDashboardClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
+  useRealtimeAdmissions({ enabled: Boolean(organizationId) })
+  useRealtimePayments({ enabled: Boolean(organizationId) })
+  useRealtimeLeaves({ enabled: Boolean(organizationId) })
   const analytics = useDashboardAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
@@ -88,12 +98,24 @@ export function AdminDashboardClient() {
   }
 
   const metrics = analytics.data
+  const lifecycle = metrics?.residentLifecycle
+  const operationalAlerts = buildOperationalAlerts({
+    registeredResidents: metrics?.totalResidents ?? residents.data?.meta.total ?? 0,
+    onboardingResidents: lifecycle?.onboardingResidents ?? 0,
+    pendingVerification: metrics?.operations.pendingVerification ?? 0,
+    pendingPayments: metrics?.finance.pendingPayments ?? 0,
+    newAdmissions: metrics?.operations.newAdmissions ?? 0,
+    pendingInvites: metrics?.operations.pendingInvites ?? 0,
+    vacantBeds: metrics?.occupancy.vacantBeds ?? 0,
+    capacity: metrics?.occupancy.capacity ?? 0,
+    roomsConfigured: rooms.data?.meta.total ?? 0,
+  })
 
   return (
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Admin Dashboard"
-        description="Live overview of residents, occupancy, collections, pending dues, and leave activity."
+        description="Operational overview for resident lifecycle, occupied beds, payments, admissions, and verification work."
         actions={
           <>
             <Button asChild>
@@ -112,34 +134,48 @@ export function AdminDashboardClient() {
         }
       />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Total Residents"
+          title="Registered Residents"
           value={metrics?.totalResidents ?? residents.data?.meta.total ?? 0}
-          description="Residents in this tenant"
+          description="All non-deleted resident records"
           icon={Users}
           tone="info"
         />
         <StatCard
-          title="Rooms"
-          value={rooms.data?.meta.total ?? 0}
-          description="Configured room inventory"
-          icon={Building2}
+          title="Active Residents"
+          value={lifecycle?.activeResidents ?? 0}
+          description="Verified residents in active lifecycle"
+          icon={UserCheck}
+          tone="success"
+        />
+        <StatCard
+          title="Draft / Onboarding"
+          value={lifecycle?.onboardingResidents ?? 0}
+          description="Need invite, profile, or document action"
+          icon={UserRoundPlus}
+          tone={lifecycle?.onboardingResidents ? "warning" : "success"}
+        />
+        <StatCard
+          title="Occupied Beds"
+          value={`${metrics?.occupancy.occupiedBeds ?? 0}/${metrics?.occupancy.capacity ?? 0}`}
+          description={`${Math.round(metrics?.occupancy.occupancyRate ?? 0)}% active occupancy`}
+          icon={BedDouble}
           tone="info"
         />
         <StatCard
-          title="Occupancy"
-          value={`${Math.round(metrics?.occupancy.occupancyRate ?? 0)}%`}
-          description={`${metrics?.occupancy.occupiedBeds ?? 0}/${metrics?.occupancy.capacity ?? 0} beds occupied`}
+          title="Vacant Beds"
+          value={metrics?.occupancy.vacantBeds ?? 0}
+          description={`${rooms.data?.meta.total ?? 0} configured rooms`}
           icon={Building2}
-          tone="success"
+          tone={(metrics?.occupancy.vacantBeds ?? 0) > 2 ? "success" : "warning"}
         />
         <StatCard
-          title="Monthly Revenue"
-          value={formatCurrency(metrics?.finance.monthlyRevenue ?? 0)}
-          description="Verified collection"
-          icon={IndianRupee}
-          tone="success"
+          title="Pending Verification"
+          value={metrics?.operations.pendingVerification ?? 0}
+          description="Documents or onboarding need review"
+          icon={FileCheck2}
+          tone={metrics?.operations.pendingVerification ? "warning" : "success"}
         />
         <StatCard
           title="Pending Dues"
@@ -149,13 +185,62 @@ export function AdminDashboardClient() {
           tone="warning"
         />
         <StatCard
-          title="Recent Leaves"
-          value={leaves.data?.meta.total ?? 0}
-          description="Leave records visible to admin"
+          title="Pending Payments"
+          value={metrics?.finance.pendingPayments ?? 0}
+          description="UPI proofs waiting for finance review"
+          icon={CreditCard}
+          tone={metrics?.finance.pendingPayments ? "warning" : "success"}
+        />
+        <StatCard
+          title="Monthly Revenue"
+          value={formatCurrency(metrics?.finance.monthlyRevenue ?? 0)}
+          description="Verified collections this month"
+          icon={IndianRupee}
+          tone="success"
+        />
+        <StatCard
+          title="Active Leaves"
+          value={metrics?.operations.activeLeaves ?? 0}
+          description="Approved residents currently away"
           icon={CalendarDays}
-          tone="warning"
+          tone={metrics?.operations.activeLeaves ? "warning" : "success"}
+        />
+        <StatCard
+          title="New Admissions"
+          value={metrics?.operations.newAdmissions ?? 0}
+          description="Open leads that need follow-up"
+          icon={UserRoundPlus}
+          tone={metrics?.operations.newAdmissions ? "warning" : "success"}
+        />
+        <StatCard
+          title="Pending Invites"
+          value={metrics?.operations.pendingInvites ?? 0}
+          description="Residents not activated yet"
+          icon={KeyRound}
+          tone={metrics?.operations.pendingInvites ? "warning" : "success"}
         />
       </section>
+
+      {operationalAlerts.length > 0 ? (
+        <section className="grid gap-3 rounded-lg border bg-background p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-4 text-amber-600" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-foreground">Operational Attention</h2>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {operationalAlerts.map((alert) => (
+              <Link
+                key={alert.title}
+                href={alert.href as Route}
+                className="rounded-md border p-3 text-sm transition-colors hover:bg-muted/60"
+              >
+                <p className="font-medium text-foreground">{alert.title}</p>
+                <p className="mt-1 text-muted-foreground">{alert.description}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <DataTableShell
@@ -236,4 +321,84 @@ export function AdminDashboardClient() {
       </section>
     </ResponsiveContainer>
   )
+}
+
+function buildOperationalAlerts(input: {
+  registeredResidents: number
+  onboardingResidents: number
+  pendingVerification: number
+  pendingPayments: number
+  newAdmissions: number
+  pendingInvites: number
+  vacantBeds: number
+  capacity: number
+  roomsConfigured: number
+}) {
+  const alerts: Array<{ title: string; description: string; href: string }> = []
+
+  if (input.roomsConfigured === 0 || input.capacity === 0) {
+    alerts.push({
+      title: "Room inventory is not configured",
+      description: "Create rooms and bed capacity before admitting residents.",
+      href: "/admin/rooms",
+    })
+  }
+
+  if (input.onboardingResidents > 0) {
+    alerts.push({
+      title: `${input.onboardingResidents} resident${input.onboardingResidents === 1 ? "" : "s"} in onboarding`,
+      description: "Draft or invited residents are registered but do not count as occupied beds yet.",
+      href: "/admin/residents",
+    })
+  }
+
+  if (input.pendingVerification > 0) {
+    alerts.push({
+      title: `${input.pendingVerification} verification review${input.pendingVerification === 1 ? "" : "s"} pending`,
+      description: "Review documents so verified residents can access full hostel workflows.",
+      href: "/admin/residents/verification",
+    })
+  }
+
+  if (input.pendingPayments > 0) {
+    alerts.push({
+      title: `${input.pendingPayments} payment request${input.pendingPayments === 1 ? "" : "s"} pending`,
+      description: "Open the finance queue to approve, reject, or request corrected proof.",
+      href: "/admin/payments",
+    })
+  }
+
+  if (input.newAdmissions > 0) {
+    alerts.push({
+      title: `${input.newAdmissions} admission lead${input.newAdmissions === 1 ? "" : "s"} need follow-up`,
+      description: "Contact inquiries before desired joining dates pass.",
+      href: "/admin/leads",
+    })
+  }
+
+  if (input.pendingInvites > 0) {
+    alerts.push({
+      title: `${input.pendingInvites} resident invite${input.pendingInvites === 1 ? "" : "s"} pending`,
+      description: "Follow up with residents who have not activated access yet.",
+      href: "/admin/residents",
+    })
+  }
+
+  if (input.capacity > 0 && input.vacantBeds <= 2) {
+    alerts.push({
+      title: "Low vacancy",
+      description: `${input.vacantBeds} vacant bed${input.vacantBeds === 1 ? "" : "s"} remain. Review reservations before confirming more joins.`,
+      href: "/admin/vacancy",
+    })
+  }
+
+  if (input.registeredResidents === 0 && input.roomsConfigured > 0) {
+    alerts.push({
+      title: "No residents registered yet",
+      description: "Add a resident after admission approval or convert a confirmed reservation.",
+      href: "/admin/residents/new",
+    })
+  }
+
+  return alerts
 }

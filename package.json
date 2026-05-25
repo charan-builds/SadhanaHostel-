@@ -15,6 +15,8 @@
     "test:security": "vitest run src/tests/security",
     "test:smoke": "playwright test",
     "test:coverage": "vitest run --coverage",
+    "security:secrets": "node scripts/security/secret-scan.mjs",
+    "security:secrets:staged": "node scripts/security/secret-scan.mjs --staged",
     "load:k6": "k6 run scripts/load-testing/sadhana-hostel.load.js",
     "staging:seed": "tsx scripts/staging-seed.ts",
     "ci:bundle-budget": "tsx scripts/ci/bundle-budget.ts",

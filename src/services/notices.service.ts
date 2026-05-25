@@ -1,6 +1,7 @@
 import "server-only"
 
 import { ADMIN_ROLES } from "@/constants/auth"
+import { notFound } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { NoticesRepository } from "@/repositories/notices.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -35,9 +36,13 @@ export class NoticesService {
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
     const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const hostelId = isAdmin
+      ? this.authService.resolveHostelScope(context, values.organizationId, values.hostelId)
+      : values.hostelId
 
     return this.noticesRepository.list({
       ...values,
+      ...(hostelId ? { hostelId } : {}),
       status: isAdmin ? values.status : "published",
       activeOnly: isAdmin ? values.activeOnly : true,
     })
@@ -47,12 +52,15 @@ export class NoticesService {
     const values = createNoticeSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     return this.noticesRepository.create({
       organization_id: values.organizationId,
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       title: values.title,
       body: values.body,
       status: values.status,
@@ -71,11 +79,32 @@ export class NoticesService {
     const values = updateNoticeSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
     const publishedAt = values.status === "published" ? new Date().toISOString() : undefined
+    const existingNotice = await this.noticesRepository.getById(
+      values.noticeId,
+      values.organizationId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    if (!existingNotice) {
+      throw notFound("Notice not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingNotice.organization_id,
+      existingNotice.hostel_id
+    )
+
+    const hostelId =
+      values.hostelId === undefined
+        ? undefined
+        : this.authService.resolveHostelScope(
+            context,
+            values.organizationId,
+            values.hostelId
+          )
 
     return this.noticesRepository.update(values.noticeId, values.organizationId, {
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       title: values.title,
       body: values.body,
       status: values.status,

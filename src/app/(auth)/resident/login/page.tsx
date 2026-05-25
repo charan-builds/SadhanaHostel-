@@ -18,7 +18,7 @@ export default function ResidentLoginPage() {
   return (
     <AuthShell
       title="Resident portal"
-      description="Access fee status, invoices, leave requests, notices, and profile updates."
+      description="Use your phone number, temporary password, OTP, or invite link to access onboarding and resident services."
     >
       <Suspense fallback={<GlobalLoader label="Loading resident login..." />}>
         <LoginForm expectedArea="resident" />
@@ -26,8 +26,9 @@ export default function ResidentLoginPage() {
       <div className="mt-6 rounded-lg border bg-muted/30 p-4">
         <h2 className="text-sm font-semibold">Need hostel access?</h2>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          Resident accounts are invite-only. Contact the hostel office after admission approval,
-          or use the secure invite link/code shared by administration.
+          Resident accounts are created by hostel administration. If you were admitted recently,
+          use the WhatsApp activation link, invite code, OTP, or temporary password shared by the
+          office. Email can be added later during onboarding.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <Button asChild variant="outline" size="sm">

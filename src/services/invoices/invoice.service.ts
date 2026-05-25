@@ -129,8 +129,15 @@ export class InvoicesService {
   async generateMonthlyFeeInvoice(input: unknown) {
     const values = generateInvoiceSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const feeRecord = assertFound(
+      await this.invoicesRepository.getFeeRecord(
+        values.monthlyFeeRecordId,
+        values.organizationId
+      ),
+      "Monthly fee record not found."
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.authService.requireHostelAccess(context, values.organizationId, feeRecord.hostel_id)
 
     return measureAsync(
       {
@@ -181,6 +188,10 @@ export class InvoicesService {
       await this.invoicesRepository.getById(values.invoiceId, values.organizationId),
       "Invoice not found."
     )
+
+    if (context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+      this.authService.requireHostelAccess(context, invoice.organization_id, invoice.hostel_id)
+    }
 
     if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
       const resident = await this.invoicesRepository.getResident(

@@ -184,12 +184,15 @@ export class ResidentOnboardingService {
   async listVerificationQueue(input: unknown) {
     const values = onboardingQueueSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
     return this.residentsRepository.listOnboardingQueue({
       organizationId: values.organizationId,
-      hostelId: values.hostelId,
+      hostelId: hostelId ?? undefined,
       search: values.search,
       page: values.page,
       pageSize: values.pageSize,
@@ -203,7 +206,12 @@ export class ResidentOnboardingService {
     const values = onboardingReviewSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
+    const resident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    this.authService.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
 
     const updated = await this.residentsRepository.transitionOnboarding({
       organizationId: values.organizationId,

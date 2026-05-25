@@ -102,7 +102,7 @@ Use sandbox/test recipients first:
 
 ```text
 NOTIFICATIONS_SEND_ENABLED=false
-RESEND_API_KEY=<staging key>
+RESEND_API_KEY=REDACTED_RESEND_API_KEY
 EMAIL_FROM=Sadhana Boys Hostel Staging <onboarding@resend.dev>
 EMAIL_REPLY_TO=ops-staging@example.com
 ```

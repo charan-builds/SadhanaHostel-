@@ -600,6 +600,22 @@ export class AdmissionsRepository {
     return data as ReservationPaymentRow
   }
 
+  async getReservationPaymentById(paymentId: string, organizationId: string) {
+    const { data, error } = await this.admissionDb()
+      .from("reservation_payments")
+      .select("*")
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load reservation payment.")
+    }
+
+    return data as ReservationPaymentRow | null
+  }
+
   async verifyReservationPaymentAtomic(values: {
     organizationId: string
     paymentId: string

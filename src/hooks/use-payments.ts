@@ -134,6 +134,13 @@ export function useSavePaymentSettings() {
   return useMutation({
     mutationFn: (input: PaymentSettingsInput) => paymentsSdk.saveSettings(input),
     onSuccess: (setting) => {
+      queryClient.setQueryData(
+        queryKeys.payments.settings({
+          organizationId: setting.organization_id,
+          hostelId: setting.hostel_id,
+        }),
+        setting
+      )
       void queryClient.invalidateQueries({
         queryKey: queryKeys.payments.settings({
           organizationId: setting.organization_id,

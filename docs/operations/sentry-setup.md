@@ -60,7 +60,7 @@ SENTRY_ENVIRONMENT=staging
 SENTRY_TRACES_SAMPLE_RATE=0.2
 SENTRY_ORG=<sentry-org-slug>
 SENTRY_PROJECT=<staging-project-slug>
-SENTRY_AUTH_TOKEN=<ci-source-map-upload-token>
+SENTRY_AUTH_TOKEN=REDACTED_SENTRY_AUTH_TOKEN
 ```
 
 ## Production
@@ -79,7 +79,7 @@ SENTRY_ENVIRONMENT=production
 SENTRY_TRACES_SAMPLE_RATE=0.1
 SENTRY_ORG=<sentry-org-slug>
 SENTRY_PROJECT=<production-project-slug>
-SENTRY_AUTH_TOKEN=<ci-source-map-upload-token>
+SENTRY_AUTH_TOKEN=REDACTED_SENTRY_AUTH_TOKEN
 ```
 
 ## Sampling Policy

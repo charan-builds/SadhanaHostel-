@@ -3,6 +3,8 @@ import { expect, type Page, test } from "@playwright/test"
 const adminCredentials = getCredentials("E2E_ADMIN")
 const residentCredentials = getCredentials("E2E_RESIDENT")
 const runCredentialFlows = process.env.E2E_AUTH_RUN_REAL_FLOWS === "true"
+const activationInvite = getActivationInvite()
+const runActivationFlow = process.env.E2E_AUTH_RUN_ACTIVATION_FLOW === "true"
 
 test.describe("public authentication pages", () => {
   test("login entry pages render without runtime errors", async ({ page }) => {
@@ -44,7 +46,7 @@ test.describe("public authentication pages", () => {
     await page.getByLabel(/^password$/i).fill("DefinitelyWrong123!")
     await page.getByRole("button", { name: /^sign in$/i }).click()
 
-    await expect(page.getByText(/invalid email or password/i)).toBeVisible()
+    await expect(page.getByText(/invalid phone\/email or password/i)).toBeVisible()
   })
 })
 
@@ -79,6 +81,36 @@ test.describe("server-side auth guards", () => {
 
     await expect(page).toHaveURL(/\/login\?next=%2Fadmin%2Fdashboard/)
     await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible()
+  })
+})
+
+test.describe("resident invite activation", () => {
+  test("invalid activation links show resident-safe recovery guidance", async ({ page }) => {
+    await page.goto(
+      `/activate?token=${encodeURIComponent(
+        "v1.invalidinvalidinvalidinvalidinvalidinvalid.invalidinvalidinvalidinvalidinvalid"
+      )}`
+    )
+
+    await expect(page.getByText(/invite unavailable/i)).toBeVisible()
+    await expect(page.getByRole("link", { name: /get invite help/i })).toBeVisible()
+    await expect(page.getByRole("link", { name: /enter invite code/i })).toBeVisible()
+  })
+
+  test("resident can activate a fresh invite and land in onboarding", async ({ page }) => {
+    test.skip(
+      !runActivationFlow || !activationInvite,
+      "Set E2E_AUTH_RUN_ACTIVATION_FLOW=true plus E2E_RESIDENT_INVITE_TOKEN/E2E_RESIDENT_ACTIVATION_PASSWORD with a fresh one-time invite."
+    )
+
+    await page.goto(`/activate?token=${encodeURIComponent(activationInvite!.token)}`)
+
+    await expect(page.getByText(/invite verified/i)).toBeVisible()
+    await page.getByLabel(/create password/i).fill(activationInvite!.password)
+    await page.getByLabel(/confirm password/i).fill(activationInvite!.password)
+    await page.getByRole("button", { name: /activate resident account/i }).click()
+
+    await expect(page).toHaveURL(/\/resident\/onboarding|\/resident\/dashboard/)
   })
 })
 
@@ -150,6 +182,30 @@ test.describe("resident credential flow", () => {
 
     await expect(page.getByText(/does not have admin portal access/i)).toBeVisible()
   })
+
+  test("resident payment page exposes direct UPI app launch actions", async ({ page }) => {
+    await login(page, "/resident/login", residentCredentials!)
+    await page.goto("/resident/payments")
+
+    await expect(page.getByRole("heading", { name: /^payments$/i })).toBeVisible()
+
+    const phonePeLink = page.getByRole("link", { name: /phonepe/i })
+    test.skip(
+      (await phonePeLink.count()) === 0,
+      "Resident has no active UPI payment account configured in this environment."
+    )
+
+    await expect(phonePeLink).toBeVisible()
+    await expect(page.getByRole("link", { name: /google pay/i })).toBeVisible()
+    await expect(page.getByRole("link", { name: /paytm/i })).toBeVisible()
+    await expect(page.getByRole("link", { name: /bhim/i })).toBeVisible()
+
+    const href = await phonePeLink.getAttribute("href")
+    expect(href).toContain("upi://pay?")
+    expect(href).toContain("pa=")
+    expect(href).toContain("am=")
+    expect(href).toContain("tn=")
+  })
 })
 
 type Credentials = {
@@ -162,6 +218,13 @@ function getCredentials(prefix: "E2E_ADMIN" | "E2E_RESIDENT"): Credentials | nul
   const password = process.env[`${prefix}_PASSWORD`]?.trim()
 
   return email && password ? { email, password } : null
+}
+
+function getActivationInvite(): { token: string; password: string } | null {
+  const token = process.env.E2E_RESIDENT_INVITE_TOKEN?.trim()
+  const password = process.env.E2E_RESIDENT_ACTIVATION_PASSWORD?.trim()
+
+  return token && password ? { token, password } : null
 }
 
 async function login(page: Page, path: string, credentials: Credentials) {

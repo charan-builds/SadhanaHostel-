@@ -1,6 +1,7 @@
 import { InvoicesRepository } from "@/repositories/invoices.repository"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { NotificationService } from "@/services/notifications"
+import { isResidentOperationallyVerified } from "@/services/onboarding/resident-onboarding.policy"
 
 import type { JobDefinition, OrganizationJobPayload } from "./types"
 
@@ -43,7 +44,7 @@ export const paymentReminderJob: JobDefinition<PaymentReminderPayload> = {
         payload.organizationId
       )
 
-      if (!resident) {
+      if (!resident || !isResidentOperationallyVerified(resident)) {
         skipped += 1
         continue
       }

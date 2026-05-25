@@ -22,6 +22,12 @@ export function useRealtimeLeaves(options?: { enabled?: boolean }) {
         hostelId: defaultHostelId,
       }),
     })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.analytics.dashboard({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
+    })
   }, [defaultHostelId, organizationId, queryClient])
 
   useRealtimeChannel({

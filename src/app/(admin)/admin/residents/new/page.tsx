@@ -6,8 +6,8 @@ export default function NewResidentPage() {
   return (
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
-        title="Add Resident"
-        description="Create a new resident profile with room, guardian, fee, and contact details."
+        title="Quick Resident Admission"
+        description="Create a draft resident with only name, phone, type, and optional room or fee details. The resident completes the full profile from their activation link."
       />
       <ResidentForm />
     </ResponsiveContainer>

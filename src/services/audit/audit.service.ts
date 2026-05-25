@@ -30,9 +30,15 @@ export class AuditService {
     const category = auditCategorySchema.parse(categoryInput)
     const values = auditListSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    return this.auditRepository.list(category, values)
+    return this.auditRepository.list(category, {
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
   }
 }

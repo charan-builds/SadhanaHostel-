@@ -11,6 +11,7 @@ export const searchEntitySchema = z.enum([
 
 export const globalSearchSchema = paginationSchema.extend({
   organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
   query: z.string().trim().min(2).max(120),
   types: z
     .string()

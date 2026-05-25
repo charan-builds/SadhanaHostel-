@@ -1,0 +1,21 @@
+title = "Sadhana Hostel secret scanning policy"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow explicit non-secret placeholders and lockfiles."
+paths = [
+  '''package-lock\.json''',
+  '''pnpm-lock\.yaml''',
+]
+regexes = [
+  '''REDACTED_[A-Z0-9_]+''',
+  '''redacted-[a-z0-9-]+''',
+  '''your-[a-z0-9-]+''',
+  '''ci-[a-z0-9-]+''',
+  '''test-[a-z0-9-]+''',
+  '''placeholder-[a-z0-9-]+''',
+  '''replace-with-[a-z0-9-]+''',
+  '''00000000-0000-4000-8000-000000000000''',
+]

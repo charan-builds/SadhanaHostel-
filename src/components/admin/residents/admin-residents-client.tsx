@@ -42,7 +42,7 @@ import {
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
-import { useCheckoutResident, useDeactivateResident, useResidents } from "@/hooks"
+import { useCheckoutResident, useDashboardAnalytics, useDeactivateResident, useResidents } from "@/hooks"
 import type { Tables } from "@/types/database"
 
 type ResidentStatusFilter = "all" | "draft" | "active" | "suspended" | "checked_out" | "archived"
@@ -62,6 +62,10 @@ export function AdminResidentsClient() {
   const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
   const deactivateResident = useDeactivateResident()
   const checkoutResident = useCheckoutResident()
+  const analytics = useDashboardAnalytics({
+    organizationId: organizationId ?? "",
+    hostelId,
+  })
   const query = useResidents({
     organizationId: organizationId ?? "",
     hostelId,
@@ -74,14 +78,28 @@ export function AdminResidentsClient() {
 
   const summary = useMemo(() => {
     const rows = query.data?.data ?? []
+    const lifecycle = analytics.data?.residentLifecycle
 
     return {
-      total: query.data?.meta.total ?? 0,
-      active: rows.filter((resident) => resident.status === "active").length,
-      pendingDocs: rows.filter((resident) => !resident.aadhaar_document_id).length,
+      registered: analytics.data?.totalResidents ?? query.data?.meta.total ?? 0,
+      active: lifecycle?.activeResidents ?? rows.filter((resident) => resident.status === "active").length,
+      onboarding:
+        lifecycle?.onboardingResidents ??
+        rows.filter((resident) => resident.status === "draft").length,
+      verified:
+        lifecycle?.verifiedResidents ?? rows.filter((resident) => resident.status === "active").length,
+      suspended:
+        lifecycle?.suspendedResidents ??
+        rows.filter((resident) => resident.status === "suspended").length,
+      checkedOut:
+        lifecycle?.checkedOutResidents ??
+        rows.filter((resident) => resident.status === "checked_out").length,
+      pendingVerification:
+        lifecycle?.pendingVerification ??
+        rows.filter((resident) => !resident.aadhaar_document_id).length,
       monthlyFees: rows.reduce((total, resident) => total + resident.monthly_fee_amount, 0),
     }
-  }, [query.data])
+  }, [analytics.data, query.data])
 
   async function confirmDeactivate() {
     if (!organizationId || !deactivateTarget) {
@@ -136,10 +154,14 @@ export function AdminResidentsClient() {
       />
 
       <section className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Total" value={summary.total} />
-        <SummaryCard label="Active on page" value={summary.active} />
-        <SummaryCard label="Missing Aadhaar" value={summary.pendingDocs} />
-        <SummaryCard label="Monthly fees on page" value={formatCurrency(summary.monthlyFees)} />
+        <SummaryCard label="Registered Residents" value={summary.registered} />
+        <SummaryCard label="Active Residents" value={summary.active} />
+        <SummaryCard label="Draft / Onboarding" value={summary.onboarding} />
+        <SummaryCard label="Verified Residents" value={summary.verified} />
+        <SummaryCard label="Pending Verification" value={summary.pendingVerification} />
+        <SummaryCard label="Suspended Residents" value={summary.suspended} />
+        <SummaryCard label="Checked-out Residents" value={summary.checkedOut} />
+        <SummaryCard label="Monthly Fees on This Page" value={formatCurrency(summary.monthlyFees)} />
       </section>
 
       {query.error ? (

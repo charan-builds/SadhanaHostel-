@@ -222,7 +222,7 @@ describe("payment API routes", () => {
 
   it("uploads payment QR images through PaymentsService", async () => {
     const uploadPaymentQr = vi.fn().mockResolvedValue({
-      storagePath: `${TEST_ORGANIZATION_ID}/${TEST_HOSTEL_ID}/payment-qr/qr.png`,
+      storagePath: `${TEST_ORGANIZATION_ID}/payment-settings/qr/${TEST_HOSTEL_ID}/current.png`,
     })
 
     vi.doMock("@/services/payments.service", () => ({
@@ -250,7 +250,10 @@ describe("payment API routes", () => {
         organizationId: TEST_ORGANIZATION_ID,
         hostelId: TEST_HOSTEL_ID,
       },
-      file
+      file,
+      expect.objectContaining({
+        requestId: expect.any(String),
+      })
     )
   })
 

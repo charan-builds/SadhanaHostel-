@@ -33,10 +33,38 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Environment and secret material.
+# Commit only redacted example contracts.
+.env
+.env.*
+*.env
+*.env.*
 !.env.example
 !.env.staging.example
+!.env.test.example
+!.env.*.example
+*.local
+*.secret
+*.secrets
+*.key
+*.keychain
+*.p8
+*.p12
+*.crt
+*.csr
+*.jks
+*.keystore
+service-role*.json
+supabase-service-role*.json
+firebase-service-account*.json
+google-credentials*.json
+gcloud-credentials*.json
+aws-credentials
+credentials.json
+secrets.json
+secret-scanning-report.*
+gitleaks-report.*
+detect-secrets.baseline
 
 # vercel
 .vercel
@@ -47,8 +75,5 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env.local
-.env.staging
-.env.production
 # Sentry Config File
 .env.sentry-build-plugin

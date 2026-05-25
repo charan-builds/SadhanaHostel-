@@ -122,6 +122,7 @@ export const paymentSettingsSchema = z.object({
   utrRegex: utrRegexSchema.default("^[A-Z0-9][A-Z0-9._/-]{5,63}$"),
   duplicateDetectionStrictness: z.enum(["standard", "strict"]).default("strict"),
   rotate: z.boolean().default(false),
+  qrReplaced: z.boolean().default(false),
 }).superRefine((value, context) => {
   if (
     value.paymentMethod === "upi" &&

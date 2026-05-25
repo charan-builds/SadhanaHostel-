@@ -47,6 +47,12 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
         payload.organizationId,
         resident.hostel_id
       )
+
+      if (!allocation) {
+        skipped += 1
+        continue
+      }
+
       const baseAmount = allocation?.monthly_fee_amount ?? resident.monthly_fee_amount
       const dueDate = buildDueDate(payload.periodMonth)
 

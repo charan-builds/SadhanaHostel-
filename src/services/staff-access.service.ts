@@ -76,10 +76,16 @@ export class StaffAccessService {
   async listStaff(input: unknown) {
     const values = listStaffUsersSchema.parse(input)
     const context = await this.requireIamManager()
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    const result = await this.staffRepository.listStaff(values)
+    const result = await this.staffRepository.listStaff({
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    })
 
     return {
       ...result,
@@ -91,12 +97,16 @@ export class StaffAccessService {
     const values = createStaffUserSchema.parse(input)
     const context = await this.requireIamManager()
     const permissions = this.resolvePermissions(values.role, values.permissions)
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
     const expiresAt = new Date(
       Date.now() +
         values.expiresInHours * 60 * 60 * 1000
     ).toISOString()
 
-    this.authService.requireOrganizationAccess(context, values.organizationId)
     this.assertCanAssignRole(context, values.role)
 
     const existingProfile = await this.staffRepository.getUserByEmail(values.email)
@@ -125,7 +135,7 @@ export class StaffAccessService {
 
     const roleAssignment = await this.staffRepository.createRoleAssignment({
       organization_id: values.organizationId,
-      hostel_id: values.hostelId,
+      hostel_id: hostelId,
       user_id: authResult.user.id,
       role: values.role,
       permissions: permissions satisfies Json,
@@ -152,14 +162,14 @@ export class StaffAccessService {
       temporaryPassword: authResult.temporaryPassword,
       expiresAt,
     })
-    await this.publish("staff.created", values.organizationId, values.hostelId, context, {
+    await this.publish("staff.created", values.organizationId, hostelId, context, {
       targetUserId: authResult.user.id,
       role: values.role,
       deliveryMode: values.deliveryMode,
     })
     this.audit("staff.created", context, values.organizationId, authResult.user.id, {
       role: values.role,
-      hostelId: values.hostelId,
+      hostelId,
       deliveryMode: values.deliveryMode,
     })
 
@@ -193,6 +203,32 @@ export class StaffAccessService {
       throw notFound("Staff role assignment not found.")
     }
 
+    const existingAssignment =
+      currentAssignment ??
+      (await this.staffRepository.getRoleAssignmentById(
+        roleAssignmentId,
+        values.organizationId
+      ))
+
+    if (!existingAssignment) {
+      throw notFound("Staff role assignment not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingAssignment.organization_id,
+      existingAssignment.hostel_id
+    )
+
+    const hasHostelUpdate = Object.prototype.hasOwnProperty.call(values, "hostelId")
+    const nextHostelId = hasHostelUpdate
+      ? this.authService.resolveHostelScope(
+          context,
+          values.organizationId,
+          values.hostelId
+        )
+      : undefined
+
     if (values.role) {
       this.assertCanAssignRole(context, values.role)
     }
@@ -218,7 +254,7 @@ export class StaffAccessService {
       roleAssignmentId,
       values.organizationId,
       {
-        hostel_id: values.hostelId ?? undefined,
+        hostel_id: hasHostelUpdate ? nextHostelId : undefined,
         role: values.role,
         permissions: nextPermissions as Json | undefined,
         status: values.status,
@@ -281,6 +317,21 @@ export class StaffAccessService {
     if (!user?.email) {
       throw badRequest("Staff user needs an email before password reset can be generated.")
     }
+
+    const assignment = await this.staffRepository.getPrimaryRoleAssignment(
+      values.targetUserId,
+      values.organizationId
+    )
+
+    if (!assignment) {
+      throw notFound("Staff role assignment not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      assignment.organization_id,
+      assignment.hostel_id
+    )
 
     const temporaryPassword = generateTemporaryPassword()
     const expiresAt = new Date(

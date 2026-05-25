@@ -41,6 +41,8 @@ export type PaymentSettingRow = {
 
 export type PaymentSettingView = PaymentSettingRow & {
   qrImageSignedUrl: string | null
+  qrImageSignedUrlExpiresAt: string | null
+  qrImagePreviewError: string | null
 }
 
 export type PaymentSettingTestResult = {
@@ -58,6 +60,7 @@ export type PaymentQrUploadResult = {
   storagePath: string
   signedUrl: string
   expiresInSeconds: number
+  signedUrlExpiresAt: string
 }
 
 export type ResidentPaymentLedger = {

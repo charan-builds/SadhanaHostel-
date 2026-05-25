@@ -53,6 +53,10 @@ export class AuditRepository {
       .eq("organization_id", filters.organizationId)
       .order("created_at", { ascending: false })
 
+    if (filters.hostelId) {
+      query = query.eq("hostel_id", filters.hostelId)
+    }
+
     if (filters.actorUserId) {
       query = query.eq("actor_user_id", filters.actorUserId)
     }

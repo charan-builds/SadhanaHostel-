@@ -17,14 +17,33 @@ export type OwnerAnalyticsExportInput = z.infer<typeof ownerAnalyticsExportSchem
 
 export type DashboardAnalytics = {
   totalResidents: number
+  residentLifecycle: {
+    registeredResidents: number
+    activeResidents: number
+    draftResidents: number
+    onboardingResidents: number
+    verifiedResidents: number
+    suspendedResidents: number
+    checkedOutResidents: number
+    archivedResidents: number
+    pendingVerification: number
+  }
   occupancy: {
     occupiedBeds: number
     capacity: number
+    vacantBeds: number
     occupancyRate: number
   }
   finance: {
     monthlyRevenue: number
     pendingDues: number
+    pendingPayments: number
+  }
+  operations: {
+    activeLeaves: number
+    newAdmissions: number
+    pendingInvites: number
+    pendingVerification: number
   }
   recentPayments: unknown[]
   recentLeaves: unknown[]

@@ -95,6 +95,22 @@ export class WebsiteRepository {
     return data
   }
 
+  async getSettingById(settingId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("website_settings")
+      .select("*")
+      .eq("id", settingId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load website setting.")
+    }
+
+    return data
+  }
+
   async listFacilities(
     filters: ListFacilitiesFilters
   ): Promise<PaginatedResult<FacilityRow>> {

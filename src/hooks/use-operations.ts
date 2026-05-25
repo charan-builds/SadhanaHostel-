@@ -81,6 +81,12 @@ export function useRepairConsistency() {
           hostelId: input.hostelId,
         }),
       })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.support.alerts({
+          organizationId: input.organizationId,
+          hostelId: input.hostelId,
+        }),
+      })
       if (input.action === "recalculate_occupancy") {
         const scope = { organizationId: input.organizationId, hostelId: input.hostelId }
 

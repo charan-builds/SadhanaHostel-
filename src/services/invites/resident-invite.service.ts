@@ -1,5 +1,7 @@
 import "server-only"
 
+import { randomBytes } from "node:crypto"
+
 import type { User } from "@supabase/supabase-js"
 
 import { AUTH_REDIRECTS } from "@/constants/auth"
@@ -11,6 +13,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { ResidentInvitesRepository } from "@/repositories/resident-invites.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
+import { RepositoryError } from "@/repositories/types"
 import { UsersRepository } from "@/repositories/users.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { EmailQueueService } from "@/services/email"
@@ -40,19 +43,36 @@ import { AuthService } from "../auth.service"
 
 const DEFAULT_INVITE_PERMISSIONS = ["resident.portal.access"]
 
+type ResidentInviteServiceDependencies = {
+  authService?: AuthService
+  residentsRepository?: ResidentsRepository
+  usersRepository?: UsersRepository
+  invitesRepository?: ResidentInvitesRepository
+  activationService?: Pick<ResidentInviteService, "activateInvite">
+  eventPublisher?: Pick<RealtimeEventPublisher, "publish">
+  emailQueue?: Pick<EmailQueueService, "sendTemplate">
+}
+
 export class ResidentInviteService {
   private readonly authService: AuthService
   private readonly residentsRepository: ResidentsRepository
   private readonly usersRepository: UsersRepository
   private readonly invitesRepository: ResidentInvitesRepository
-  private readonly eventPublisher = new RealtimeEventPublisher()
-  private readonly emailQueue = new EmailQueueService()
+  private readonly activationService?: Pick<ResidentInviteService, "activateInvite">
+  private readonly eventPublisher: Pick<RealtimeEventPublisher, "publish">
+  private readonly emailQueue: Pick<EmailQueueService, "sendTemplate">
 
-  constructor(private readonly db: AppSupabaseClient) {
-    this.authService = new AuthService(db)
-    this.residentsRepository = new ResidentsRepository(db)
-    this.usersRepository = new UsersRepository(db)
-    this.invitesRepository = new ResidentInvitesRepository(db)
+  constructor(
+    private readonly db: AppSupabaseClient,
+    dependencies: ResidentInviteServiceDependencies = {}
+  ) {
+    this.authService = dependencies.authService ?? new AuthService(db)
+    this.residentsRepository = dependencies.residentsRepository ?? new ResidentsRepository(db)
+    this.usersRepository = dependencies.usersRepository ?? new UsersRepository(db)
+    this.invitesRepository = dependencies.invitesRepository ?? new ResidentInvitesRepository(db)
+    this.activationService = dependencies.activationService
+    this.eventPublisher = dependencies.eventPublisher ?? new RealtimeEventPublisher()
+    this.emailQueue = dependencies.emailQueue ?? new EmailQueueService()
   }
 
   static async create() {
@@ -75,6 +95,17 @@ export class ResidentInviteService {
       return []
     }
 
+    const resident = await this.residentsRepository.getById(
+      values.residentId,
+      values.organizationId
+    )
+
+    if (!resident) {
+      throw notFound("Resident not found.")
+    }
+
+    this.authService.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
+
     return this.invitesRepository.listForResident(values.organizationId, values.residentId)
   }
 
@@ -85,6 +116,8 @@ export class ResidentInviteService {
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
     const resident = await this.getResidentForInvite(values.organizationId, values.residentId)
+
+    this.authService.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
 
     if (resident.user_id) {
       throw conflict("This resident already has an activated portal account.")
@@ -117,8 +150,46 @@ export class ResidentInviteService {
         permissions: DEFAULT_INVITE_PERMISSIONS,
       } satisfies Json,
     })
-    const activationLink = buildActivationLink(token)
-    const whatsappShareUrl = buildWhatsappShareUrl(resident.phone, activationLink, inviteCode)
+    const loginLink = buildResidentLoginLink(resident.phone)
+    let activationLink: string | null = buildActivationLink(token)
+    let accessMode: "activation_link" | "temporary_password" = "activation_link"
+    let temporaryPassword: string | null = null
+
+    if (values.deliveryChannel === "temp_password") {
+      temporaryPassword = generateTemporaryPassword()
+      accessMode = "temporary_password"
+
+      const activationService =
+        this.activationService ?? new ResidentInviteService(createSupabaseAdminClient())
+
+      await activationService.activateInvite({
+        token,
+        password: temporaryPassword,
+        confirmPassword: temporaryPassword,
+      })
+
+      const activatedInvite = await this.invitesRepository.getById(
+        invite.id,
+        invite.organization_id
+      )
+
+      if (activatedInvite) {
+        invite.status = activatedInvite.status
+        invite.used_at = activatedInvite.used_at
+        invite.updated_at = activatedInvite.updated_at
+        invite.updated_by = activatedInvite.updated_by
+      }
+
+      activationLink = null
+    }
+
+    const whatsappShareUrl = buildWhatsappShareUrl({
+      phone: resident.phone,
+      activationLink,
+      loginLink,
+      inviteCode,
+      temporaryPassword,
+    })
 
     await this.sendInviteEmail({
       invite,
@@ -147,10 +218,13 @@ export class ResidentInviteService {
     return {
       invite,
       activationLink,
+      loginLink,
       whatsappShareUrl,
       delivery: {
         emailQueued: Boolean(invite.email && values.deliveryChannel === "email"),
         whatsappReady: Boolean(whatsappShareUrl),
+        accessMode,
+        temporaryPassword,
       },
     }
   }
@@ -169,6 +243,8 @@ export class ResidentInviteService {
     if (!existing) {
       throw notFound("Resident invite not found.")
     }
+
+    this.authService.requireHostelAccess(context, existing.organization_id, existing.hostel_id)
 
     const nextInvite = await this.createResidentInvite({
       organizationId: existing.organization_id,
@@ -190,6 +266,17 @@ export class ResidentInviteService {
     const context = await this.authService.requireAdmin()
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const existing = await this.invitesRepository.getById(
+      values.inviteId,
+      values.organizationId
+    )
+
+    if (!existing) {
+      throw notFound("Resident invite not found.")
+    }
+
+    this.authService.requireHostelAccess(context, existing.organization_id, existing.hostel_id)
 
     const invite = await this.invitesRepository.revoke(
       values.inviteId,
@@ -218,11 +305,6 @@ export class ResidentInviteService {
     const invite = await this.resolveUsableInvite(values)
     const resident = await this.getResidentForInvite(invite.organization_id, invite.resident_id)
 
-    if (resident.user_id) {
-      await this.invitesRepository.revoke(invite.id, invite.organization_id, resident.user_id)
-      throw conflict("This resident account is already activated.")
-    }
-
     const authUser = await this.upsertAuthUserForInvite({
       invite,
       residentName: resident.full_name,
@@ -231,29 +313,16 @@ export class ResidentInviteService {
 
     await this.assertExistingUserIsSafe(authUser, invite)
 
-    const { error: syncError } = await this.db.rpc("sync_auth_user", {
-      target_user_id: authUser.id,
-    })
-
-    if (syncError) {
-      throw forbidden(syncError.message)
+    try {
+      await this.invitesRepository.activateInviteAtomic({
+        inviteId: invite.id,
+        inviteTokenHash: invite.invite_token_hash,
+        authUserId: authUser.id,
+      })
+    } catch (error) {
+      throw mapActivationBootstrapError(error)
     }
 
-    const { error: onboardError } = await this.db.rpc("onboard_resident", {
-      target_resident_id: invite.resident_id,
-      target_user_id: authUser.id,
-    })
-
-    if (onboardError) {
-      throw forbidden(onboardError.message)
-    }
-
-    await this.invitesRepository.markUsed(invite.id, invite.organization_id, authUser.id)
-    await this.invitesRepository.revokeActiveForResident(
-      invite.organization_id,
-      invite.resident_id,
-      authUser.id
-    )
     await this.publish("resident.invite_used", invite, authUser.id, {
       inviteId: invite.id,
       residentId: invite.resident_id,
@@ -272,9 +341,9 @@ export class ResidentInviteService {
     })
 
     return {
-      authenticatedIdentifier: invite.email ?? invite.phone ?? "",
+      authenticatedIdentifier: authUser.email ?? authUser.phone ?? invite.phone ?? invite.email ?? "",
       residentId: invite.resident_id,
-      redirectTo: AUTH_REDIRECTS.residentHome,
+      redirectTo: AUTH_REDIRECTS.residentOnboarding,
     }
   }
 
@@ -376,12 +445,13 @@ export class ResidentInviteService {
       await this.assertExistingUserIsSafe(existing, input.invite)
 
       const { data, error } = await this.db.auth.admin.updateUserById(existing.id, {
+        email: input.invite.email ?? undefined,
+        phone: normalizePhoneForAuth(input.invite.phone),
         password: input.password,
         email_confirm: Boolean(input.invite.email),
         phone_confirm: Boolean(input.invite.phone),
         user_metadata: {
           full_name: input.residentName,
-          resident_id: input.invite.resident_id,
           organization_id: input.invite.organization_id,
           activated_from_invite: true,
         },
@@ -396,13 +466,12 @@ export class ResidentInviteService {
 
     const { data, error } = await this.db.auth.admin.createUser({
       email: input.invite.email ?? undefined,
-      phone: input.invite.email ? undefined : input.invite.phone ?? undefined,
+      phone: normalizePhoneForAuth(input.invite.phone),
       password: input.password,
       email_confirm: Boolean(input.invite.email),
-      phone_confirm: Boolean(!input.invite.email && input.invite.phone),
+      phone_confirm: Boolean(input.invite.phone),
       user_metadata: {
         full_name: input.residentName,
-        resident_id: input.invite.resident_id,
         organization_id: input.invite.organization_id,
         activated_from_invite: true,
       },
@@ -432,7 +501,7 @@ export class ResidentInviteService {
       const user = data.users.find((candidate) => {
         return (
           (normalizedEmail && normalizeEmail(candidate.email) === normalizedEmail) ||
-          (normalizedPhone && normalizePhone(candidate.phone) === normalizedPhone)
+          (normalizedPhone && phoneNumbersMatch(candidate.phone, invite.phone))
         )
       })
 
@@ -472,10 +541,10 @@ export class ResidentInviteService {
   private async sendInviteEmail(input: {
     invite: ResidentInviteRow
     residentName: string
-    activationLink: string
+    activationLink: string | null
     deliveryChannel: string
   }) {
-    if (!input.invite.email || input.deliveryChannel !== "email") {
+    if (!input.invite.email || input.deliveryChannel !== "email" || !input.activationLink) {
       return
     }
 
@@ -541,20 +610,68 @@ function buildActivationLink(token: string) {
   return `${baseUrl}/activate?token=${encodeURIComponent(token)}`
 }
 
-function buildWhatsappShareUrl(phone: string | null, activationLink: string, inviteCode: string) {
-  const digits = phone?.replace(/\D/g, "")
+function buildResidentLoginLink(phone: string | null) {
+  const baseUrl = getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
+  const params = new URLSearchParams()
+
+  if (phone) {
+    params.set("phone", phone)
+  }
+
+  const query = params.toString()
+
+  return `${baseUrl}/resident/login${query ? `?${query}` : ""}`
+}
+
+function buildWhatsappShareUrl(input: {
+  phone: string | null
+  activationLink: string | null
+  loginLink: string
+  inviteCode: string
+  temporaryPassword: string | null
+}) {
+  const digits = input.phone?.replace(/\D/g, "")
 
   if (!digits) {
     return null
   }
 
-  const message =
-    `Your Sadhana Boys Hostel resident portal access is ready.\n\n` +
-    `Activate: ${activationLink}\n` +
-    `Invite code: ${inviteCode}\n\n` +
-    `This link is one-time use.`
+  const message = input.temporaryPassword
+    ? `Your Sadhana Boys Hostel resident portal access is ready.\n\n` +
+      `Login: ${input.loginLink}\n` +
+      `Phone: ${input.phone}\n` +
+      `Temporary password: ${input.temporaryPassword}\n\n` +
+      `Please sign in and set your permanent password during onboarding.`
+    : `Your Sadhana Boys Hostel resident portal access is ready.\n\n` +
+      `Activate: ${input.activationLink}\n` +
+      `Invite code: ${input.inviteCode}\n\n` +
+      `This link is one-time use.`
 
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
+}
+
+function generateTemporaryPassword() {
+  return `Sbh-${randomBytes(9).toString("base64url")}!7`
+}
+
+function normalizePhoneForAuth(phone?: string | null) {
+  const trimmed = phone?.trim()
+
+  if (!trimmed) {
+    return undefined
+  }
+
+  if (trimmed.startsWith("+")) {
+    return `+${trimmed.replace(/\D/g, "")}`
+  }
+
+  const digits = trimmed.replace(/\D/g, "")
+
+  if (digits.length === 10) {
+    return `+91${digits}`
+  }
+
+  return `+${digits}`
 }
 
 function normalizeEmail(email?: string | null) {
@@ -565,6 +682,22 @@ function normalizePhone(phone?: string | null) {
   return phone?.replace(/\D/g, "") || undefined
 }
 
+function phoneNumbersMatch(left?: string | null, right?: string | null) {
+  const leftDigits = normalizePhone(left)
+  const rightDigits = normalizePhone(right)
+
+  if (!leftDigits || !rightDigits) {
+    return false
+  }
+
+  return (
+    leftDigits === rightDigits ||
+    (leftDigits.length >= 10 &&
+      rightDigits.length >= 10 &&
+      leftDigits.slice(-10) === rightDigits.slice(-10))
+  )
+}
+
 function normalizeInviteCode(inviteCode?: string) {
   const value = inviteCode?.trim().toUpperCase()
 
@@ -573,4 +706,38 @@ function normalizeInviteCode(inviteCode?: string) {
   }
 
   return value
+}
+
+function mapActivationBootstrapError(error: unknown): never {
+  const message = error instanceof RepositoryError ? error.message : String(error)
+
+  if (message.includes("invite_not_found") || message.includes("Invalid invite token")) {
+    throw unauthorized("Invalid or expired invite.")
+  }
+
+  if (message.includes("invite_expired")) {
+    throw conflict("This invite has expired. Ask the hostel admin to resend access.")
+  }
+
+  if (message.includes("invite_already_used")) {
+    throw conflict("This invite was already used. Sign in with your resident account or ask the hostel office to resend access.")
+  }
+
+  if (message.includes("resident_already_linked")) {
+    throw conflict("This resident profile is already linked to another login account.")
+  }
+
+  if (message.includes("invite_identity_mismatch")) {
+    throw forbidden("Invite identity does not match this resident record.")
+  }
+
+  if (message.includes("auth_user_not_found")) {
+    throw forbidden("Unable to finish activation because the login account was not created.")
+  }
+
+  if (message.includes("resident_not_found")) {
+    throw notFound("Resident not found.")
+  }
+
+  throw error
 }

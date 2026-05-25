@@ -74,6 +74,25 @@ describe("static migration security checks", () => {
     )
   })
 
+  it("keeps resident invite activation bootstrap atomic and service-role only", () => {
+    const activation = migration("20260523007000_resident_activation_bootstrap.sql")
+
+    expect(activation).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.activate_resident_invite_atomic/i
+    )
+    expect(activation).toMatch(/from\s+public\.resident_invites[\s\S]*for\s+update/i)
+    expect(activation).toMatch(/from\s+public\.residents[\s\S]*for\s+update/i)
+    expect(activation).toMatch(/invite_token_hash\s+=\s+p_invite_token_hash/i)
+    expect(activation).toMatch(/status\s+=\s+'used'/i)
+    expect(activation).toMatch(/resident\.activation_bootstrap/i)
+    expect(activation).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.activate_resident_invite_atomic\(uuid,\s*text,\s*uuid\)\s+from\s+public,\s*anon,\s*authenticated/i
+    )
+    expect(activation).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.activate_resident_invite_atomic\(uuid,\s*text,\s*uuid\)\s+to\s+service_role/i
+    )
+  })
+
   it("keeps occupancy snapshots derived from active allocations and active residents", () => {
     const occupancy = migration("20260523002000_occupancy_consistency.sql")
 

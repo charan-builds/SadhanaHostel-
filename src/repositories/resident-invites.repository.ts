@@ -2,6 +2,7 @@ import type { PostgrestError } from "@supabase/supabase-js"
 
 import type { ResidentInviteRow } from "@/types/invites"
 import type { Json } from "@/types/database"
+import { selectDuplicateActiveInviteIds } from "@/services/invites/invite-dedupe"
 
 import {
   throwRepositoryError,
@@ -252,6 +253,27 @@ export class ResidentInvitesRepository {
     return data as ResidentInviteRow
   }
 
+  async activateInviteAtomic(input: {
+    inviteId: string
+    inviteTokenHash: string
+    authUserId: string
+  }) {
+    const { data, error } = await this.inviteDb().rpc(
+      "activate_resident_invite_atomic",
+      {
+        p_invite_id: input.inviteId,
+        p_invite_token_hash: input.inviteTokenHash,
+        p_auth_user_id: input.authUserId,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to activate resident invite.")
+    }
+
+    return data as unknown as { id: string; organization_id: string; hostel_id: string | null }
+  }
+
   async expireDue(input: {
     organizationId?: string
     hostelId?: string
@@ -270,6 +292,49 @@ export class ResidentInvitesRepository {
     const rows = (data ?? []) as Array<{ expired_count: number }>
 
     return rows[0]?.expired_count ?? 0
+  }
+
+  async expireDuplicateActiveForResidents(input: {
+    organizationId?: string
+    hostelId?: string
+    limit?: number
+  }) {
+    const now = new Date()
+    let query = this.inviteDb()
+      .from("resident_invites")
+      .select("*")
+      .eq("status", "pending")
+      .is("used_at", null)
+      .is("revoked_at", null)
+      .gt("expires_at", now.toISOString())
+      .order("created_at", { ascending: false })
+
+    if (input.organizationId) {
+      query = query.eq("organization_id", input.organizationId)
+    }
+
+    if (input.hostelId) {
+      query = query.eq("hostel_id", input.hostelId)
+    }
+
+    const { data, error } = await query.range(0, (input.limit ?? 1000) - 1)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load duplicate resident invites.")
+    }
+
+    const duplicateIds = selectDuplicateActiveInviteIds(
+      (data ?? []) as ResidentInviteRow[],
+      now
+    )
+    let expired = 0
+
+    for (const inviteId of duplicateIds) {
+      await this.markExpired(inviteId)
+      expired += 1
+    }
+
+    return expired
   }
 
   private inviteDb() {

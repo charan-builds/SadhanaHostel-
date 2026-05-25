@@ -160,6 +160,68 @@ export class ResidentsRepository {
     return data
   }
 
+  async findAdmissionDuplicate(input: {
+    organizationId: string
+    hostelId?: string
+    phone?: string
+    email?: string
+  }) {
+    const phone = input.phone?.trim()
+    const email = input.email?.trim().toLowerCase()
+
+    if (!phone && !email) {
+      return null
+    }
+
+    if (phone) {
+      const { data, error } = await this.db
+        .from("residents")
+        .select("*")
+        .eq("organization_id", input.organizationId)
+        .eq("phone", phone)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        throwRepositoryError(error, "Unable to check resident phone duplicates.")
+      }
+
+      if (data) {
+        return {
+          resident: data,
+          matchedFields: ["phone"] as const,
+        }
+      }
+    }
+
+    if (email) {
+      const { data, error } = await this.db
+        .from("residents")
+        .select("*")
+        .eq("organization_id", input.organizationId)
+        .eq("email", email)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        throwRepositoryError(error, "Unable to check resident email duplicates.")
+      }
+
+      if (data) {
+        return {
+          resident: data,
+          matchedFields: ["email"] as const,
+        }
+      }
+    }
+
+    return null
+  }
+
   async create(values: TablesInsert<"residents">) {
     const { data, error } = await this.db
       .from("residents")
@@ -331,11 +393,15 @@ export class ResidentsRepository {
   }
 
   async listActiveForBilling(organizationId: string, hostelId?: string) {
-    let query = this.db
+    let query = this.residentsDb()
       .from("residents")
       .select("*")
       .eq("organization_id", organizationId)
       .eq("status", "active")
+      .eq("is_active", true)
+      .eq("onboarding_status", "verified")
+      .not("user_id", "is", null)
+      .is("checkout_on", null)
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
 
@@ -343,13 +409,13 @@ export class ResidentsRepository {
       query = query.eq("hostel_id", hostelId)
     }
 
-    const { data, error } = await query
+    const { data, error } = await query.range(0, 50_000)
 
     if (error) {
       throwRepositoryError(error, "Unable to load residents for billing.")
     }
 
-    return data ?? []
+    return (data ?? []) as ResidentWithOnboarding[]
   }
 
   private residentsDb() {
@@ -367,6 +433,7 @@ type GenericResidentsQueryBuilder = {
   select(columns?: string, options?: { count?: "exact" }): GenericResidentsQueryBuilder
   update(values: unknown): GenericResidentsQueryBuilder
   eq(column: string, value: unknown): GenericResidentsQueryBuilder
+  not(column: string, operator: string, value: unknown): GenericResidentsQueryBuilder
   is(column: string, value: boolean | null): GenericResidentsQueryBuilder
   in(column: string, values: unknown[]): GenericResidentsQueryBuilder
   or(filters: string): GenericResidentsQueryBuilder

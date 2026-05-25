@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { AuthService } from "@/services/auth.service"
 import {
@@ -54,5 +54,51 @@ describe("AuthService tenant and hostel guards", () => {
         OTHER_HOSTEL_ID
       )
     ).not.toThrow()
+  })
+})
+
+describe("AuthService resident phone-first access", () => {
+  it("normalizes local resident phone numbers for password login", async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      data: { user: null },
+      error: { message: "Invalid credentials" },
+    })
+    const service = new AuthService({
+      auth: { signInWithPassword },
+    } as never)
+
+    await expect(
+      service.login({
+        identifier: "90000 00002",
+        password: "Temporary123!",
+      })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message: "Invalid phone/email or password.",
+    })
+
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      phone: "+919000000002",
+      password: "Temporary123!",
+    })
+  })
+
+  it("requests resident OTP without creating unaudited auth accounts", async () => {
+    const signInWithOtp = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const service = new AuthService({
+      auth: { signInWithOtp },
+    } as never)
+
+    await expect(
+      service.requestResidentPhoneOtp({ phone: "90000 00002" })
+    ).resolves.toEqual({
+      phone: "********0002",
+      expiresInSeconds: 300,
+    })
+
+    expect(signInWithOtp).toHaveBeenCalledWith({
+      phone: "+919000000002",
+      options: { shouldCreateUser: false },
+    })
   })
 })

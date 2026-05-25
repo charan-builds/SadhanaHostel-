@@ -72,13 +72,21 @@ export class ReportBuilderService {
     const type = reportTypeSchema.parse(typeInput)
     const values = reportRequestSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
 
-    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    const scopedValues = {
+      ...values,
+      ...(hostelId ? { hostelId } : {}),
+    }
 
     return {
-      fileName: this.fileName(type, values),
+      fileName: this.fileName(type, scopedValues),
       columns: REPORT_COLUMNS[type],
-      rows: this.rowsFor(type, values),
+      rows: this.rowsFor(type, scopedValues),
     }
   }
 

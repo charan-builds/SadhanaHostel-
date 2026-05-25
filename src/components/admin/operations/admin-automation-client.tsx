@@ -99,6 +99,26 @@ export function AdminAutomationClient() {
     }
   }
 
+  async function repairTenantLinkage() {
+    if (!organizationId) {
+      toast.error("Choose an organization before repairing tenant linkage.")
+      return
+    }
+
+    try {
+      const result = await repairConsistency.mutateAsync({
+        organizationId,
+        hostelId,
+        action: "repair_tenant_linkage",
+        dryRun: false,
+      })
+      await dashboard.refetch()
+      toast.success(result.message)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to repair tenant linkage.")
+    }
+  }
+
   if (!organizationId) {
     return (
       <EmptyState
@@ -152,7 +172,7 @@ export function AdminAutomationClient() {
         <div>
           <h2 className="text-sm font-semibold">Repair Occupancy</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Recompute vacancy from active residents, allocations, reservations, and maintenance blocks; flags orphan or duplicate occupancy records for review.
+            Close invalid active allocations, repair duplicate room assignments, and recompute vacancy from active residents, reservations, and maintenance blocks.
           </p>
         </div>
         <Button
@@ -214,8 +234,68 @@ export function AdminAutomationClient() {
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {finding.description}
                 </p>
+                {finding.details?.length ? (
+                  <div className="mt-3 space-y-2">
+                    {finding.details.slice(0, 5).map((detail, index) => (
+                      <div
+                        key={`${detail.tableName}-${detail.recordId ?? index}-${detail.anomalyType}`}
+                        className="rounded-md border bg-muted/30 p-3 text-xs"
+                      >
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 font-medium">
+                          <span>{detail.tableName}</span>
+                          <span>{detail.anomalyType}</span>
+                          <span className="font-mono">{detail.recordId ?? "record unavailable"}</span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">
+                          Expected hostel {detail.expectedHostelId ?? "unknown"}; actual hostel{" "}
+                          {detail.actualHostelId ?? "unknown"}.
+                        </p>
+                        <p className="mt-1 text-muted-foreground">{detail.recommendation}</p>
+                      </div>
+                    ))}
+                    {finding.details.length > 5 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {finding.details.length - 5} more record-level issue(s) are included in the audit log.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-              <Badge variant="outline">{humanizeEnum(finding.repairAction)}</Badge>
+              <div className="flex flex-col gap-2 md:items-end">
+                <Badge variant="outline">{humanizeEnum(finding.repairAction)}</Badge>
+                {finding.repairAction === "recalculate_occupancy" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={repairConsistency.isPending}
+                    onClick={() => void recalculateOccupancy()}
+                  >
+                    {repairConsistency.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RotateCcw className="size-3.5" aria-hidden="true" />
+                    )}
+                    Repair now
+                  </Button>
+                ) : null}
+                {finding.repairAction === "repair_tenant_linkage" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={repairConsistency.isPending}
+                    onClick={() => void repairTenantLinkage()}
+                  >
+                    {repairConsistency.isPending ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RotateCcw className="size-3.5" aria-hidden="true" />
+                    )}
+                    Repair safe links
+                  </Button>
+                ) : null}
+              </div>
             </article>
           ))}
         </div>

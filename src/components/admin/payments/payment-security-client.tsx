@@ -10,8 +10,9 @@ import {
   Save,
   ShieldCheck,
 } from "lucide-react"
-import type { ReactNode } from "react"
-import { useMemo, useState } from "react"
+import * as Sentry from "@sentry/nextjs"
+import type { ChangeEvent, ReactNode } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
@@ -88,12 +89,24 @@ type PaymentSecurityForm = {
   duplicateDetectionStrictness: "standard" | "strict"
 }
 
+type QrUploadLifecycleStatus =
+  | "idle"
+  | "selected"
+  | "uploading"
+  | "uploaded"
+  | "saving"
+  | "saved"
+  | "failed"
+
 export function PaymentSecurityClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [qrFile, setQrFile] = useState<File | null>(null)
+  const [qrUploadStatus, setQrUploadStatus] =
+    useState<QrUploadLifecycleStatus>("idle")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [failedQrPreviewUrl, setFailedQrPreviewUrl] = useState<string | null>(null)
   const [reactivateTarget, setReactivateTarget] = useState<PaymentSettingView | null>(null)
   const [validationResult, setValidationResult] =
     useState<PaymentSettingTestResult | null>(null)
@@ -129,8 +142,24 @@ export function PaymentSecurityClient() {
 
   const activeSetting = paymentSettings.data ?? null
   const activeSettingKey = activeSetting
-    ? `${activeSetting.id}:${activeSetting.updated_at}`
+    ? `${activeSetting.id}:${activeSetting.updated_at}:${activeSetting.qr_version}`
     : "new"
+  const qrFilePreviewUrl = useMemo(
+    () => (qrFile ? URL.createObjectURL(qrFile) : null),
+    [qrFile]
+  )
+  const qrPreviewFailed =
+    Boolean(activeSetting?.qrImageSignedUrl) &&
+    failedQrPreviewUrl === activeSetting?.qrImageSignedUrl
+  const canPreviewQr = Boolean(qrFilePreviewUrl || activeSetting?.qrImageSignedUrl)
+
+  useEffect(() => {
+    return () => {
+      if (qrFilePreviewUrl) {
+        URL.revokeObjectURL(qrFilePreviewUrl)
+      }
+    }
+  }, [qrFilePreviewUrl])
 
   if (formSourceKey !== activeSettingKey && !qrFile) {
     setForm(createDefaultForm(activeSetting))
@@ -192,25 +221,35 @@ export function PaymentSecurityClient() {
       return
     }
 
+    const selectedQrFile = qrFile
+
     try {
       let nextQrImagePath = payload.qrImagePath
 
-      if (qrFile) {
+      if (selectedQrFile) {
+        setQrUploadStatus("uploading")
         const uploaded = await uploadQr.mutateAsync({
           input: {
             organizationId: scopedOrganizationId,
             hostelId: scopedHostelId,
           },
-          file: qrFile,
+          file: selectedQrFile,
         })
+        setQrUploadStatus("uploaded")
+        toast.success("QR image uploaded. Saving payment configuration...")
         nextQrImagePath = uploaded.storagePath
+        setFailedQrPreviewUrl(null)
         setForm((current) => ({ ...current, qrImagePath: uploaded.storagePath }))
       }
 
+      if (selectedQrFile) {
+        setQrUploadStatus("saving")
+      }
       const saved = await saveSettings.mutateAsync({
         ...payload,
         qrImagePath: nextQrImagePath,
-        rotate: shouldRotate(activeSetting, form, qrFile),
+        rotate: shouldRotate(activeSetting, form, selectedQrFile),
+        qrReplaced: Boolean(selectedQrFile),
       })
 
       toast.success(
@@ -218,10 +257,37 @@ export function PaymentSecurityClient() {
           ? "Payment account rotated safely."
           : "Payment security settings saved."
       )
-      setQrFile(null)
+      if (selectedQrFile) {
+        setQrFile(null)
+        setQrUploadStatus("saved")
+      }
       setValidationResult(null)
       await Promise.all([paymentSettings.refetch(), history.refetch(), auditLogs.refetch()])
     } catch (error) {
+      if (selectedQrFile) {
+        setQrUploadStatus("failed")
+      }
+      Sentry.captureException(error, {
+        tags: {
+          feature: "payment-security",
+          operation: selectedQrFile ? "qr-upload-save" : "settings-save",
+        },
+        extra: {
+          organizationId: scopedOrganizationId,
+          hostelId: scopedHostelId,
+          fileName: selectedQrFile?.name,
+          fileType: selectedQrFile?.type,
+          fileSize: selectedQrFile?.size,
+        },
+      })
+      console.error("[payment-security] QR upload/save failed", {
+        organizationId: scopedOrganizationId,
+        hostelId: scopedHostelId,
+        fileName: selectedQrFile?.name,
+        fileType: selectedQrFile?.type,
+        fileSize: selectedQrFile?.size,
+        error,
+      })
       toast.error(error instanceof FrontendApiError ? error.message : "Unable to save payment security settings.")
     }
   }
@@ -260,7 +326,7 @@ export function PaymentSecurityClient() {
               ) : (
                 <Save className="size-4" aria-hidden="true" />
               )}
-              Save
+              {qrFile ? "Upload & Save" : "Save"}
             </Button>
           </div>
         }
@@ -336,13 +402,29 @@ export function PaymentSecurityClient() {
           >
             <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
               <div className="flex min-h-52 items-center justify-center rounded-lg border bg-muted/20 p-4">
-                {activeSetting?.qrImageSignedUrl ? (
+                {qrFilePreviewUrl ? (
+                  // Local object URLs are used only before upload so admins can verify the selected QR.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={qrFilePreviewUrl}
+                    src={qrFilePreviewUrl}
+                    alt="Selected payment QR preview"
+                    className="max-h-44 max-w-44 rounded-md object-contain"
+                  />
+                ) : activeSetting?.qrImageSignedUrl ? (
                   // Signed URLs are generated server-side and expire quickly.
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
+                    key={activeSetting.qrImageSignedUrl}
                     src={activeSetting.qrImageSignedUrl}
                     alt="Current active payment QR"
                     className="max-h-44 max-w-44 rounded-md object-contain"
+                    onError={() => setFailedQrPreviewUrl(activeSetting.qrImageSignedUrl)}
+                  />
+                ) : activeSetting?.qr_image_path ? (
+                  <QrPreviewUnavailable
+                    message={activeSetting.qrImagePreviewError}
+                    onRetry={() => void paymentSettings.refetch()}
                   />
                 ) : (
                   <div className="grid place-items-center gap-2 text-muted-foreground">
@@ -357,26 +439,60 @@ export function PaymentSecurityClient() {
                     id="qrFile"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    onChange={(event) => setQrFile(event.target.files?.[0] ?? null)}
+                    onChange={handleQrFileChange}
                   />
                 </Field>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!activeSetting?.qrImageSignedUrl}
+                    disabled={!canPreviewQr}
                     onClick={() => setPreviewOpen(true)}
                   >
                     <Eye className="size-4" aria-hidden="true" />
                     Preview QR
                   </Button>
                   {qrFile ? (
-                    <Badge variant="secondary">{qrFile.name}</Badge>
+                    <>
+                      <Badge variant="secondary">{qrFile.name}</Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setQrFile(null)
+                          setUploadProgress(0)
+                          setQrUploadStatus("idle")
+                        }}
+                      >
+                        Remove selected
+                      </Button>
+                    </>
+                  ) : null}
+                  {qrUploadStatus !== "idle" ? (
+                    <Badge variant={qrUploadStatus === "failed" ? "destructive" : "outline"}>
+                      {formatQrUploadStatus(qrUploadStatus)}
+                    </Badge>
                   ) : null}
                   {uploadQr.isPending ? (
                     <Badge variant="outline">{uploadProgress}% uploaded</Badge>
                   ) : null}
                 </div>
+                {qrFile ? (
+                  <p className="text-sm text-muted-foreground">
+                    This QR is selected locally and is not live for residents yet. Click Upload & Save to publish it and regenerate the signed preview.
+                  </p>
+                ) : null}
+                {qrPreviewFailed ? (
+                  <APIErrorState
+                    title="QR preview could not load"
+                    message="The saved QR exists, but this signed preview link failed or expired. Regenerate the preview and try again."
+                    onRetry={() => {
+                      setFailedQrPreviewUrl(null)
+                      void paymentSettings.refetch()
+                    }}
+                  />
+                ) : null}
                 <p className="text-sm text-muted-foreground">
                   Old QR references are retained in payment setting history and audit logs so pending payments remain reviewable after rotation.
                 </p>
@@ -533,9 +649,28 @@ export function PaymentSecurityClient() {
             <DialogDescription>Short-lived signed preview for the active hostel payment QR.</DialogDescription>
           </DialogHeader>
           <div className="flex justify-center rounded-lg border bg-muted/20 p-6">
-            {activeSetting?.qrImageSignedUrl ? (
+            {qrFilePreviewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={activeSetting.qrImageSignedUrl} alt="Payment QR preview" className="max-h-72 object-contain" />
+              <img
+                key={qrFilePreviewUrl}
+                src={qrFilePreviewUrl}
+                alt="Selected payment QR preview"
+                className="max-h-72 object-contain"
+              />
+            ) : activeSetting?.qrImageSignedUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={activeSetting.qrImageSignedUrl}
+                src={activeSetting.qrImageSignedUrl}
+                alt="Payment QR preview"
+                className="max-h-72 object-contain"
+                onError={() => setFailedQrPreviewUrl(activeSetting.qrImageSignedUrl)}
+              />
+            ) : activeSetting?.qr_image_path ? (
+              <QrPreviewUnavailable
+                message={activeSetting.qrImagePreviewError}
+                onRetry={() => void paymentSettings.refetch()}
+              />
             ) : null}
           </div>
         </DialogContent>
@@ -558,6 +693,47 @@ export function PaymentSecurityClient() {
   ) {
     setForm((current) => ({ ...current, [key]: value }))
     setValidationResult(null)
+  }
+
+  function handleQrFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.currentTarget.files?.[0] ?? null
+    setFailedQrPreviewUrl(null)
+    setUploadProgress(0)
+
+    if (!selectedFile) {
+      setQrFile(null)
+      setQrUploadStatus("idle")
+      return
+    }
+
+    const validationError = validateQrFileForClient(selectedFile)
+    if (validationError) {
+      event.currentTarget.value = ""
+      setQrFile(null)
+      setQrUploadStatus("failed")
+      Sentry.captureMessage("Invalid payment QR file selected", {
+        level: "warning",
+        tags: {
+          feature: "payment-security",
+          operation: "qr-file-select",
+        },
+        extra: {
+          organizationId: scopedOrganizationId,
+          hostelId: scopedHostelId,
+          fileName: selectedFile.name,
+          fileType: selectedFile.type,
+          fileSize: selectedFile.size,
+          validationError,
+        },
+      })
+      toast.error(validationError)
+      return
+    }
+
+    setQrFile(selectedFile)
+    setQrUploadStatus("selected")
+    setValidationResult(null)
+    toast.info("QR image selected. Click Upload & Save to publish it.")
   }
 }
 
@@ -644,6 +820,66 @@ function StatusPanel({
   )
 }
 
+function formatQrUploadStatus(status: QrUploadLifecycleStatus) {
+  switch (status) {
+    case "selected":
+      return "Selected, not live"
+    case "uploading":
+      return "Uploading"
+    case "uploaded":
+      return "Uploaded"
+    case "saving":
+      return "Saving"
+    case "saved":
+      return "Saved"
+    case "failed":
+      return "Failed"
+    case "idle":
+    default:
+      return "Ready"
+  }
+}
+
+function QrPreviewUnavailable({
+  message,
+  onRetry,
+}: {
+  message?: string | null
+  onRetry: () => void
+}) {
+  return (
+    <div className="grid place-items-center gap-3 text-center text-muted-foreground">
+      <AlertTriangle className="size-10 text-amber-600" aria-hidden="true" />
+      <div className="grid gap-1">
+        <p className="text-sm font-medium text-foreground">QR preview unavailable</p>
+        <p className="max-w-64 text-xs leading-5">
+          {message ??
+            "The QR image is saved, but the signed preview link could not be generated."}
+        </p>
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+        Regenerate preview
+      </Button>
+    </div>
+  )
+}
+
+function validateQrFileForClient(file: File) {
+  if (file.size === 0) {
+    return "Choose a non-empty QR image."
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    return "QR image must be 2 MB or smaller."
+  }
+
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    return "QR image must be a JPEG, PNG, or WebP file."
+  }
+
+  return null
+}
+
 function createDefaultForm(setting: PaymentSettingView | null): PaymentSecurityForm {
   return {
     accountName: setting?.account_name ?? "Sadhana Boys Hostel",
@@ -722,6 +958,7 @@ function buildPayload({
     utrRegex: form.utrRegex,
     duplicateDetectionStrictness: form.duplicateDetectionStrictness,
     rotate,
+    qrReplaced: false,
   }
 }
 
@@ -753,5 +990,6 @@ function settingToPayload(
     utrRegex: setting.utr_regex,
     duplicateDetectionStrictness: setting.duplicate_detection_strictness,
     rotate: false,
+    qrReplaced: false,
   }
 }
