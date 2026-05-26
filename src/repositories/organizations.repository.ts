@@ -147,6 +147,22 @@ export class OrganizationsRepository {
     return data ?? []
   }
 
+  async getHostelById(organizationId: string, hostelId: string) {
+    const { data, error } = await this.db
+      .from("hostels")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", hostelId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load hostel.")
+    }
+
+    return data
+  }
+
   async listActiveHostels(organizationId: string) {
     const { data, error } = await this.db
       .from("hostels")
@@ -242,6 +258,14 @@ export class OrganizationsRepository {
     }
 
     return data
+  }
+
+  async createAuditLog(values: TablesInsert<"audit_logs">) {
+    const { error } = await this.db.from("audit_logs").insert(values)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to record platform audit log.")
+    }
   }
 
   private operationalControlDb() {

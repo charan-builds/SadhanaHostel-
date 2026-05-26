@@ -2,7 +2,23 @@
 
 import type { Route } from "next"
 import Link from "next/link"
-import { Building2, Edit3, Loader2, Plus, Power, Save } from "lucide-react"
+import {
+  Bell,
+  Bot,
+  Building2,
+  CreditCard,
+  Edit3,
+  Globe,
+  KeyRound,
+  LifeBuoy,
+  Loader2,
+  Plus,
+  Power,
+  Save,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
+} from "lucide-react"
 import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
@@ -21,6 +37,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import {
   useCreateHostel,
@@ -47,6 +64,26 @@ const organizationFormSchema = z.object({
   primaryColor: z.string().trim().max(20).optional(),
 })
 
+const platformControlsSchema = z.object({
+  launchMode: z.enum(["setup", "staging", "soft_launch", "active"]),
+  maintenanceEnabled: z.boolean(),
+  maintenanceMessage: z.string().trim().max(240).optional(),
+  launchBanner: z.string().trim().max(240).optional(),
+  supportWhatsapp: z.string().trim().max(20).optional(),
+  financeWhatsapp: z.string().trim().max(20).optional(),
+  enquiryWhatsapp: z.string().trim().max(20).optional(),
+  inviteExpiryDays: z.coerce.number().int().min(1).max(90),
+  tempPasswordExpiryHours: z.coerce.number().int().min(1).max(168),
+  requireDocumentVerification: z.boolean(),
+  allowPaymentsBeforeVerification: z.boolean(),
+  autoResendInviteReminders: z.boolean(),
+  admissionsEnabled: z.boolean(),
+  paymentsEnabled: z.boolean(),
+  cmsEnabled: z.boolean(),
+  automationEnabled: z.boolean(),
+  staffAccessEnabled: z.boolean(),
+})
+
 const hostelFormSchema = z.object({
   name: z.string().trim().min(2).max(160),
   code: z.string().trim().min(2).max(24).regex(/^[A-Za-z0-9-]+$/),
@@ -61,8 +98,72 @@ const hostelFormSchema = z.object({
 })
 
 type OrganizationFormValues = z.infer<typeof organizationFormSchema>
+type PlatformControlsInput = z.input<typeof platformControlsSchema>
+type PlatformControlsValues = z.output<typeof platformControlsSchema>
 type HostelFormInput = z.input<typeof hostelFormSchema>
 type HostelFormValues = z.output<typeof hostelFormSchema>
+
+const operationLinks: Array<{
+  title: string
+  description: string
+  href: string
+  icon: LucideIcon
+}> = [
+  {
+    title: "Residents",
+    description: "Create, invite, verify, suspend, transfer, checkout, and repair residents.",
+    href: "/admin/residents",
+    icon: Users,
+  },
+  {
+    title: "Rooms and vacancy",
+    description: "Manage rooms, maintenance, allocation diagnostics, and live vacancy.",
+    href: "/admin/rooms",
+    icon: Building2,
+  },
+  {
+    title: "Payments",
+    description: "Review UPI proofs, reject or verify payments, and inspect dues.",
+    href: "/admin/payments",
+    icon: CreditCard,
+  },
+  {
+    title: "Payment security",
+    description: "Rotate QR, UPI IDs, instructions, and verification settings.",
+    href: "/admin/finance/payment-security",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Automation",
+    description: "Run consistency scans, dry-run repairs, execute repairs, and tune jobs.",
+    href: "/admin/operations/automation",
+    icon: Bot,
+  },
+  {
+    title: "Website CMS",
+    description: "Edit website content, gallery, notices, facilities, and public messaging.",
+    href: "/admin/website",
+    icon: Globe,
+  },
+  {
+    title: "Staff access",
+    description: "Create staff, assign roles, reset passwords, suspend, and revoke access.",
+    href: "/admin/settings/staff-access",
+    icon: KeyRound,
+  },
+  {
+    title: "Operational alerts",
+    description: "Resolve recovery requests, anomalies, failed jobs, and launch blockers.",
+    href: "/admin/alerts",
+    icon: LifeBuoy,
+  },
+  {
+    title: "Launch readiness",
+    description: "Check monitoring, storage, cron, signed URLs, safeguards, and rollout gates.",
+    href: "/admin/launch-readiness",
+    icon: Bell,
+  },
+]
 
 export function AdminSettingsClient() {
   const { organizationId } = useAuth()
@@ -90,6 +191,10 @@ export function AdminSettingsClient() {
       faviconUrl: "",
       primaryColor: "#0f766e",
     },
+  })
+  const platformControlsForm = useForm<PlatformControlsInput, unknown, PlatformControlsValues>({
+    resolver: zodResolver(platformControlsSchema),
+    defaultValues: defaultPlatformControls(),
   })
   const hostelForm = useForm<HostelFormInput, unknown, HostelFormValues>({
     resolver: zodResolver(hostelFormSchema),
@@ -147,7 +252,9 @@ export function AdminSettingsClient() {
       faviconUrl: stringFromRecord(branding, "faviconUrl") ?? "",
       primaryColor: stringFromRecord(branding, "primaryColor") ?? "#0f766e",
     })
-  }, [organizationForm, organizationQuery.data])
+
+    platformControlsForm.reset(readPlatformControls(settings))
+  }, [organizationForm, organizationQuery.data, platformControlsForm])
 
   const editingHostel = hostelsQuery.data?.find((hostel) => hostel.id === editingHostelId)
 
@@ -197,6 +304,58 @@ export function AdminSettingsClient() {
       },
     })
     toast.success("Organization settings saved.")
+  }
+
+  async function savePlatformControls(values: PlatformControlsValues) {
+    if (!organizationId || !organizationQuery.data) {
+      return
+    }
+
+    const currentSettings = recordFromJson(organizationQuery.data.settings)
+
+    await updateOrganization.mutateAsync({
+      organizationId,
+      legalName: undefined,
+      billingEmail: undefined,
+      contactPhone: undefined,
+      addressLine1: undefined,
+      addressLine2: undefined,
+      city: undefined,
+      state: undefined,
+      postalCode: undefined,
+      country: undefined,
+      settings: {
+        ...currentSettings,
+        operationalControls: {
+          launchMode: values.launchMode,
+          maintenance: {
+            enabled: values.maintenanceEnabled,
+            message: values.maintenanceMessage || undefined,
+            banner: values.launchBanner || undefined,
+          },
+          support: {
+            whatsapp: values.supportWhatsapp || undefined,
+            financeWhatsapp: values.financeWhatsapp || undefined,
+            enquiryWhatsapp: values.enquiryWhatsapp || undefined,
+          },
+          onboarding: {
+            inviteExpiryDays: values.inviteExpiryDays,
+            tempPasswordExpiryHours: values.tempPasswordExpiryHours,
+            requireDocumentVerification: values.requireDocumentVerification,
+            allowPaymentsBeforeVerification: values.allowPaymentsBeforeVerification,
+            autoResendInviteReminders: values.autoResendInviteReminders,
+          },
+          features: {
+            admissions: values.admissionsEnabled,
+            payments: values.paymentsEnabled,
+            cms: values.cmsEnabled,
+            automation: values.automationEnabled,
+            staffAccess: values.staffAccessEnabled,
+          },
+        },
+      },
+    })
+    toast.success("Operational controls saved.")
   }
 
   async function addHostel(values: HostelFormValues) {
@@ -318,6 +477,165 @@ export function AdminSettingsClient() {
               </div>
             </form>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Platform Operations</CardTitle>
+          <CardDescription>
+            Owner-managed business controls for launch state, support routing, onboarding, and
+            enabled modules. Infrastructure secrets, migrations, backups, and storage policies
+            remain outside the admin panel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {organizationQuery.isError ? (
+            <APIErrorState
+              title="Operational controls could not be loaded"
+              error={organizationQuery.error}
+              onRetry={() => void organizationQuery.refetch()}
+            />
+          ) : (
+            <form
+              className="grid gap-5"
+              onSubmit={platformControlsForm.handleSubmit(savePlatformControls)}
+            >
+              <div className="grid gap-4 md:grid-cols-3">
+                <NativeSelectField
+                  form={platformControlsForm}
+                  name="launchMode"
+                  label="Launch mode"
+                  options={[
+                    { value: "setup", label: "Setup" },
+                    { value: "staging", label: "Staging" },
+                    { value: "soft_launch", label: "Soft launch" },
+                    { value: "active", label: "Active operations" },
+                  ]}
+                />
+                <Field form={platformControlsForm} name="supportWhatsapp" label="Support WhatsApp" />
+                <Field form={platformControlsForm} name="financeWhatsapp" label="Finance WhatsApp" />
+                <Field form={platformControlsForm} name="enquiryWhatsapp" label="Enquiry WhatsApp" />
+                <Field
+                  form={platformControlsForm}
+                  name="inviteExpiryDays"
+                  label="Invite expiry days"
+                  type="number"
+                />
+                <Field
+                  form={platformControlsForm}
+                  name="tempPasswordExpiryHours"
+                  label="Temporary password hours"
+                  type="number"
+                />
+              </div>
+
+              <TextAreaField
+                form={platformControlsForm}
+                name="maintenanceMessage"
+                label="Maintenance guidance"
+              />
+              <TextAreaField
+                form={platformControlsForm}
+                name="launchBanner"
+                label="Launch banner"
+              />
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="maintenanceEnabled"
+                  label="Show business maintenance banner"
+                  description="Use this for owner communication. Environment maintenance mode remains the emergency traffic stop."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="requireDocumentVerification"
+                  label="Require document verification"
+                  description="Residents need admin approval before full portal access."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="allowPaymentsBeforeVerification"
+                  label="Allow payments before verification"
+                  description="Keep off for stricter onboarding-controlled finance."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="autoResendInviteReminders"
+                  label="Auto-remind pending invites"
+                  description="Automation can remind residents before invite expiry."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="admissionsEnabled"
+                  label="Admissions enabled"
+                  description="Leads, reservations, and invite onboarding are available."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="paymentsEnabled"
+                  label="Payments enabled"
+                  description="Residents can submit manual UPI payment proofs."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="cmsEnabled"
+                  label="Website CMS enabled"
+                  description="Admins can edit public website content and gallery."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="automationEnabled"
+                  label="Automation enabled"
+                  description="Admin automation controls and scheduled operational jobs are available."
+                />
+                <CheckboxField
+                  form={platformControlsForm}
+                  name="staffAccessEnabled"
+                  label="Staff access enabled"
+                  description="Owners can create, suspend, and reset staff accounts."
+                />
+              </div>
+
+              <div>
+                <Button disabled={updateOrganization.isPending} className="gap-2">
+                  {updateOrganization.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  Save operational controls
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Self-Service Operations Map</CardTitle>
+          <CardDescription>
+            Common hostel operations and where owners should perform them from the admin panel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {operationLinks.map((item) => {
+            const Icon = item.icon
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href as Route}
+                className="rounded-lg border p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <Icon className="size-5 text-primary" aria-hidden="true" />
+                <h2 className="mt-3 text-sm font-semibold">{item.title}</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.description}</p>
+              </Link>
+            )
+          })}
         </CardContent>
       </Card>
 
@@ -470,6 +788,96 @@ function stringFromRecord(record: Record<string, unknown>, key: string) {
   return typeof value === "string" ? value : undefined
 }
 
+function booleanFromRecord(
+  record: Record<string, unknown>,
+  key: string,
+  fallback = false
+) {
+  const value = record[key]
+
+  return typeof value === "boolean" ? value : fallback
+}
+
+function numberFromRecord(record: Record<string, unknown>, key: string, fallback: number) {
+  const value = record[key]
+
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function defaultPlatformControls(): PlatformControlsValues {
+  return {
+    launchMode: "soft_launch",
+    maintenanceEnabled: false,
+    maintenanceMessage: "",
+    launchBanner: "",
+    supportWhatsapp: "",
+    financeWhatsapp: "",
+    enquiryWhatsapp: "",
+    inviteExpiryDays: 7,
+    tempPasswordExpiryHours: 24,
+    requireDocumentVerification: true,
+    allowPaymentsBeforeVerification: false,
+    autoResendInviteReminders: true,
+    admissionsEnabled: true,
+    paymentsEnabled: true,
+    cmsEnabled: true,
+    automationEnabled: true,
+    staffAccessEnabled: true,
+  }
+}
+
+function readPlatformControls(settings: Record<string, unknown>): PlatformControlsValues {
+  const controls = recordFromJson(settings.operationalControls)
+  const maintenance = recordFromJson(controls.maintenance)
+  const support = recordFromJson(controls.support)
+  const onboarding = recordFromJson(controls.onboarding)
+  const features = recordFromJson(controls.features)
+  const launchMode = stringFromRecord(controls, "launchMode")
+  const defaults = defaultPlatformControls()
+
+  return {
+    launchMode:
+      launchMode === "setup" ||
+      launchMode === "staging" ||
+      launchMode === "soft_launch" ||
+      launchMode === "active"
+        ? launchMode
+        : defaults.launchMode,
+    maintenanceEnabled: booleanFromRecord(maintenance, "enabled", defaults.maintenanceEnabled),
+    maintenanceMessage: stringFromRecord(maintenance, "message") ?? "",
+    launchBanner: stringFromRecord(maintenance, "banner") ?? "",
+    supportWhatsapp: stringFromRecord(support, "whatsapp") ?? "",
+    financeWhatsapp: stringFromRecord(support, "financeWhatsapp") ?? "",
+    enquiryWhatsapp: stringFromRecord(support, "enquiryWhatsapp") ?? "",
+    inviteExpiryDays: numberFromRecord(onboarding, "inviteExpiryDays", defaults.inviteExpiryDays),
+    tempPasswordExpiryHours: numberFromRecord(
+      onboarding,
+      "tempPasswordExpiryHours",
+      defaults.tempPasswordExpiryHours
+    ),
+    requireDocumentVerification: booleanFromRecord(
+      onboarding,
+      "requireDocumentVerification",
+      defaults.requireDocumentVerification
+    ),
+    allowPaymentsBeforeVerification: booleanFromRecord(
+      onboarding,
+      "allowPaymentsBeforeVerification",
+      defaults.allowPaymentsBeforeVerification
+    ),
+    autoResendInviteReminders: booleanFromRecord(
+      onboarding,
+      "autoResendInviteReminders",
+      defaults.autoResendInviteReminders
+    ),
+    admissionsEnabled: booleanFromRecord(features, "admissions", defaults.admissionsEnabled),
+    paymentsEnabled: booleanFromRecord(features, "payments", defaults.paymentsEnabled),
+    cmsEnabled: booleanFromRecord(features, "cms", defaults.cmsEnabled),
+    automationEnabled: booleanFromRecord(features, "automation", defaults.automationEnabled),
+    staffAccessEnabled: booleanFromRecord(features, "staffAccess", defaults.staffAccessEnabled),
+  }
+}
+
 function Field<
   TFieldValues extends FieldValues,
   TTransformedValues extends FieldValues | undefined = undefined,
@@ -492,5 +900,89 @@ function Field<
       <Input id={String(name)} type={type} aria-invalid={Boolean(error)} {...form.register(name)} />
       {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
     </div>
+  )
+}
+
+function TextAreaField<
+  TFieldValues extends FieldValues,
+  TTransformedValues extends FieldValues | undefined = undefined,
+>({
+  form,
+  name,
+  label,
+}: {
+  form: UseFormReturn<TFieldValues, unknown, TTransformedValues>
+  name: Path<TFieldValues>
+  label: string
+}) {
+  const error = form.formState.errors[name]?.message
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={String(name)}>{label}</Label>
+      <Textarea id={String(name)} aria-invalid={Boolean(error)} {...form.register(name)} />
+      {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
+    </div>
+  )
+}
+
+function NativeSelectField<
+  TFieldValues extends FieldValues,
+  TTransformedValues extends FieldValues | undefined = undefined,
+>({
+  form,
+  name,
+  label,
+  options,
+}: {
+  form: UseFormReturn<TFieldValues, unknown, TTransformedValues>
+  name: Path<TFieldValues>
+  label: string
+  options: Array<{ value: string; label: string }>
+}) {
+  const error = form.formState.errors[name]?.message
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={String(name)}>{label}</Label>
+      <select
+        id={String(name)}
+        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+        aria-invalid={Boolean(error)}
+        {...form.register(name)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
+    </div>
+  )
+}
+
+function CheckboxField<
+  TFieldValues extends FieldValues,
+  TTransformedValues extends FieldValues | undefined = undefined,
+>({
+  form,
+  name,
+  label,
+  description,
+}: {
+  form: UseFormReturn<TFieldValues, unknown, TTransformedValues>
+  name: Path<TFieldValues>
+  label: string
+  description: string
+}) {
+  return (
+    <label className="flex min-h-28 gap-3 rounded-lg border p-4">
+      <input type="checkbox" className="mt-1 size-4" {...form.register(name)} />
+      <span>
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="mt-1 block text-sm leading-6 text-muted-foreground">{description}</span>
+      </span>
+    </label>
   )
 }

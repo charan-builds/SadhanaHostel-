@@ -3,6 +3,7 @@ import "server-only"
 import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { getRequestId } from "@/lib/tracing"
 import {
   OrganizationsRepository,
   type HostelRow,
@@ -124,7 +125,7 @@ export class PlatformService {
         } satisfies Record<string, unknown>)
       : undefined
 
-    return this.organizationsRepository.updateOrganization(values.organizationId, {
+    const organization = await this.organizationsRepository.updateOrganization(values.organizationId, {
       name: values.name,
       legal_name: values.legalName,
       billing_email: values.billingEmail,
@@ -138,6 +139,19 @@ export class PlatformService {
       settings: settings as Json | undefined,
       updated_by: context.authUser.id,
     })
+
+    await this.audit({
+      action: "platform.organization.updated",
+      organizationId: organization.id,
+      hostelId: null,
+      tableName: "organizations",
+      recordId: organization.id,
+      actorUserId: context.authUser.id,
+      oldValues: current,
+      newValues: organization,
+    })
+
+    return organization
   }
 
   async listHostels() {
@@ -185,6 +199,17 @@ export class PlatformService {
       updated_by: context.authUser.id,
     })
 
+    await this.audit({
+      action: "platform.hostel.created",
+      organizationId: values.organizationId,
+      hostelId: hostel.id,
+      tableName: "hostels",
+      recordId: hostel.id,
+      actorUserId: context.authUser.id,
+      oldValues: null,
+      newValues: hostel,
+    })
+
     return hostel
   }
 
@@ -193,6 +218,10 @@ export class PlatformService {
     const context = await this.authService.requireRole(ADMIN_ROLES)
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
+    const current = assertFound(
+      await this.organizationsRepository.getHostelById(values.organizationId, values.hostelId),
+      "Hostel not found."
+    )
 
     const hostel = await this.organizationsRepository.updateHostel(
       values.organizationId,
@@ -227,7 +256,47 @@ export class PlatformService {
       )
     }
 
+    await this.audit({
+      action: "platform.hostel.updated",
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      tableName: "hostels",
+      recordId: values.hostelId,
+      actorUserId: context.authUser.id,
+      oldValues: current,
+      newValues: hostel,
+    })
+
     return hostel
+  }
+
+  private async audit(input: {
+    action: string
+    organizationId: string
+    hostelId: string | null
+    tableName: string
+    recordId: string
+    actorUserId: string
+    oldValues: unknown
+    newValues: unknown
+  }) {
+    await this.organizationsRepository.createAuditLog({
+      organization_id: input.organizationId,
+      hostel_id: input.hostelId,
+      actor_user_id: input.actorUserId,
+      table_name: input.tableName,
+      record_id: input.recordId,
+      action: input.action,
+      old_values: input.oldValues as Json | null,
+      new_values: input.newValues as Json | null,
+      metadata: {
+        source: "admin_panel",
+        operational_self_service: true,
+      },
+      request_id: getRequestId(),
+      created_by: input.actorUserId,
+      updated_by: input.actorUserId,
+    })
   }
 }
 
