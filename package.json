@@ -23,6 +23,7 @@
     "ci:deployment-health": "tsx scripts/ci/deployment-health-check.ts",
     "release:staging:preflight": "tsx scripts/release/staging-preflight.ts",
     "release:soft-launch:validate": "tsx scripts/release/soft-launch-validation.ts",
+    "release:production:hardening": "tsx scripts/release/soft-launch-validation.ts --strict",
     "check": "npm run lint && npm run typecheck",
     "recovery:backup-check": "tsx scripts/recovery/backup-check.ts",
     "recovery:migration-verify": "tsx scripts/recovery/migration-verify.ts",

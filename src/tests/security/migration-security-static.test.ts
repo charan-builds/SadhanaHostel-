@@ -190,4 +190,19 @@ describe("static migration security checks", () => {
     expect(lifecycle).toMatch(/resident_already_activated/i)
     expect(lifecycle).toMatch(/duplicate_active_invite/i)
   })
+
+  it("keeps final loophole repairs tenant-guarded, locked, and audit-backed", () => {
+    const repairs = migration("20260525002000_operational_loophole_repair_framework.sql")
+
+    expect(repairs).toMatch(/repair_onboarding_access_consistency_atomic/i)
+    expect(repairs).toMatch(/reconcile_invalid_dues_atomic/i)
+    expect(repairs).toMatch(/repair_analytics_consistency_atomic/i)
+    expect(repairs).toMatch(/can_manage_organization\(p_organization_id,\s*p_hostel_id\)/i)
+    expect(repairs).toMatch(/can_manage_finance\(p_organization_id,\s*p_hostel_id\)/i)
+    expect(repairs).toMatch(/pg_advisory_xact_lock/i)
+    expect(repairs).toMatch(/for update skip locked/i)
+    expect(repairs).toMatch(/onboarding_access\.consistency_repair/i)
+    expect(repairs).toMatch(/dues\.consistency_reconciliation/i)
+    expect(repairs).toMatch(/analytics\.consistency_repair/i)
+  })
 })

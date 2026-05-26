@@ -1,6 +1,26 @@
 import type { JobResult } from "@/jobs/types"
 
-export type ConsistencySeverity = "critical" | "high" | "medium" | "low"
+export type ConsistencySeverity =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low"
+  | "informational"
+
+export type ConsistencyRepairAction =
+  | "expire_reservations"
+  | "expire_invites"
+  | "cleanup_uploads"
+  | "recalculate_occupancy"
+  | "repair_tenant_linkage"
+  | "dedupe_invites"
+  | "release_stale_allocations"
+  | "resync_auth_linkage"
+  | "repair_analytics"
+  | "reconcile_dues"
+  | "generate_fees"
+  | "run_consistency_scan"
+  | "review_manually"
 
 export type ConsistencyFinding = {
   id: string
@@ -22,22 +42,20 @@ export type ConsistencyFinding = {
   details?: Array<{
     tableName: string
     recordId: string | null
+    residentId?: string | null
+    organizationId?: string | null
+    hostelId?: string | null
     anomalyType: string
+    expectedState?: string | null
+    actualState?: string | null
     expectedOrganizationId?: string | null
     actualOrganizationId?: string | null
     expectedHostelId?: string | null
     actualHostelId?: string | null
+    recommendedRepairAction?: ConsistencyRepairAction
     recommendation: string
   }>
-  repairAction:
-    | "expire_reservations"
-    | "expire_invites"
-    | "cleanup_uploads"
-    | "recalculate_occupancy"
-    | "repair_tenant_linkage"
-    | "generate_fees"
-    | "run_consistency_scan"
-    | "review_manually"
+  repairAction: ConsistencyRepairAction
 }
 
 export type ConsistencyReport = {
@@ -51,6 +69,7 @@ export type ConsistencyReport = {
     high: number
     medium: number
     low: number
+    informational: number
     totalFindings: number
   }
 }

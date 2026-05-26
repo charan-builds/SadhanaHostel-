@@ -23,12 +23,14 @@ Use this guide during launch-impacting incidents.
 ## Rollback Procedure
 
 1. Enable `MAINTENANCE_MODE=true`.
-2. Confirm `/api/health/live` still returns `200`.
-3. Roll back Vercel to the previous healthy deployment.
-4. Do not roll back database migrations unless a documented backward migration exists.
-5. Run `DEPLOYMENT_URL=<url> npm run ci:deployment-health`.
-6. Run targeted smoke tests for auth, onboarding, payments, and admin route protection.
-7. Disable maintenance mode only after the incident lead approves.
+2. Set `CRON_JOBS_ENABLED=false` if scheduled jobs could worsen the incident.
+3. Set `OPERATIONAL_REPAIRS_ENABLED=false` if repair execution must be paused while preserving dry-run diagnostics.
+4. Confirm `/api/health/live` still returns `200`.
+5. Roll back Vercel to the previous healthy deployment.
+6. Do not roll back database migrations unless a documented backward migration exists.
+7. Run `DEPLOYMENT_URL=<url> npm run ci:deployment-health`.
+8. Run targeted smoke tests for auth, onboarding, payments, and admin route protection.
+9. Disable maintenance mode only after the incident lead approves.
 
 ## Evidence Collection
 

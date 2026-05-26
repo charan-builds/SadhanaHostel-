@@ -1,6 +1,7 @@
 import "server-only"
 
 import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
+import { areCronJobsEnabled, areOperationalRepairsEnabled } from "@/config/launch"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logError } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -333,6 +334,32 @@ export class SupportService {
         count: 1,
         href: "/admin/finance/payment-security",
         ctaLabel: "Configure payment",
+      })
+    }
+
+    if (!areCronJobsEnabled()) {
+      alerts.push({
+        id: "operations.cron_disabled",
+        severity: "high",
+        title: "Automation jobs are disabled",
+        description:
+          "Scheduled reminders, expiry cleanup, consistency scans, and occupancy refreshes will not run until cron is re-enabled.",
+        count: 1,
+        href: "/admin/launch-readiness",
+        ctaLabel: "Review launch controls",
+      })
+    }
+
+    if (!areOperationalRepairsEnabled()) {
+      alerts.push({
+        id: "operations.repairs_disabled",
+        severity: "medium",
+        title: "Emergency repair execution is paused",
+        description:
+          "Consistency dry runs still work, but operators cannot execute repair actions until the repair kill switch is enabled.",
+        count: 1,
+        href: "/admin/launch-readiness",
+        ctaLabel: "Review launch controls",
       })
     }
 

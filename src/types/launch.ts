@@ -36,6 +36,10 @@ export type LaunchDiagnostics = {
       supportWhatsAppConfigured: boolean
       ownerEmailConfigured: boolean
     }
+    safeguards: {
+      cronJobsEnabled: boolean
+      operationalRepairsEnabled: boolean
+    }
   }
   checks: LaunchReadinessCheck[]
   metrics: LaunchMetric[]

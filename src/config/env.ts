@@ -15,6 +15,10 @@ const optionalEnvString = (schema: z.ZodString = z.string()) =>
   z.preprocess(emptyStringToUndefined, schema.optional())
 
 const PLACEHOLDER_ENV_MARKERS = [
+  "00000000-0000-4000-8000-000000000000",
+  "changeme",
+  "example.com",
+  "placeholder",
   "your-project-ref",
   "your-staging-project-ref",
   "your-supabase-anon-key",
@@ -22,6 +26,8 @@ const PLACEHOLDER_ENV_MARKERS = [
   "your-supabase-service-role-key",
   "your-staging-supabase-service-role-key",
   "redacted",
+  "replace_me",
+  "todo",
 ]
 
 export function isPlaceholderEnvValue(value: string) {
@@ -63,6 +69,8 @@ const serverEnvSchema = publicEnvSchema.extend({
   LAUNCH_SUPPORT_WHATSAPP: optionalEnvString(),
   LAUNCH_OWNER_EMAIL: optionalEnvString(z.string().email()),
   RATE_LIMIT_ENABLED: booleanEnvSchema("true"),
+  CRON_JOBS_ENABLED: booleanEnvSchema("true"),
+  OPERATIONAL_REPAIRS_ENABLED: booleanEnvSchema("true"),
   NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),
   CRON_SECRET: optionalEnvString(z.string().min(16)),
   RESEND_API_KEY: optionalEnvString(z.string().min(1)),

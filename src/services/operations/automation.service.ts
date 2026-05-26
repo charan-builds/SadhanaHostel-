@@ -58,6 +58,7 @@ export class AutomationService {
             high: 0,
             medium: 0,
             low: 0,
+            informational: 0,
             totalFindings: 1,
           },
         },

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { badRequest } from "@/lib/api/api-error"
+import { areCronJobsEnabled } from "@/config/launch"
 import { logger } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -31,6 +32,24 @@ export async function executeVercelCron(
 
   if (!schedule) {
     throw badRequest("Unknown cron schedule.")
+  }
+
+  if (!areCronJobsEnabled()) {
+    logger.warn({
+      event: "cron.disabled",
+      message: "Scheduled cron execution skipped because CRON_JOBS_ENABLED=false.",
+      metadata: {
+        cronName,
+        source: auth.source,
+      },
+    })
+
+    return {
+      cronName,
+      source: auth.source,
+      organizationCount: 0,
+      results: [],
+    }
   }
 
   const now = new Date()

@@ -20,6 +20,7 @@ type GenericQueryBuilder = {
   is(column: string, value: boolean | null): GenericQueryBuilder
   in(column: string, values: unknown[]): GenericQueryBuilder
   lte(column: string, value: unknown): GenericQueryBuilder
+  gt(column: string, value: unknown): GenericQueryBuilder
   gte(column: string, value: unknown): GenericQueryBuilder
   order(column: string, options?: { ascending?: boolean }): GenericQueryBuilder
   limit(count: number): GenericQueryBuilder
@@ -99,6 +100,11 @@ export class OperationsRepository {
     select?: string
     equals?: Record<string, unknown>
     in?: Record<string, unknown[]>
+    isNull?: string[]
+    isNotNull?: string[]
+    lte?: Record<string, unknown>
+    gt?: Record<string, unknown>
+    gte?: Record<string, unknown>
     deletedAtNull?: boolean
     limit?: number
   }) {
@@ -121,6 +127,26 @@ export class OperationsRepository {
 
     Object.entries(input.in ?? {}).forEach(([column, values]) => {
       query = query.in(column, values)
+    })
+
+    input.isNull?.forEach((column) => {
+      query = query.is(column, null)
+    })
+
+    input.isNotNull?.forEach((column) => {
+      query = query.neq(column, null)
+    })
+
+    Object.entries(input.lte ?? {}).forEach(([column, value]) => {
+      query = query.lte(column, value)
+    })
+
+    Object.entries(input.gt ?? {}).forEach(([column, value]) => {
+      query = query.gt(column, value)
+    })
+
+    Object.entries(input.gte ?? {}).forEach(([column, value]) => {
+      query = query.gte(column, value)
     })
 
     const { data, error } = await query.limit(input.limit ?? 1000).range(0, (input.limit ?? 1000) - 1)
@@ -433,6 +459,82 @@ export class OperationsRepository {
       documentsRepaired?: number
       hostelsRecalculated?: number
     } | null
+  }
+
+  async repairOnboardingAccessConsistency(input: {
+    organizationId: string
+    hostelId?: string | null
+    limit?: number
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "repair_onboarding_access_consistency_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_limit: input.limit ?? 500,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to repair onboarding access consistency.")
+    }
+
+    return data as {
+      expiredCount?: number
+      activatedInvitesRevokedCount?: number
+      duplicateInvitesRevokedCount?: number
+      authProfilesSyncedCount?: number
+      deadlockResidentsAdvancedCount?: number
+    } | null
+  }
+
+  async reconcileInvalidDues(input: {
+    organizationId: string
+    hostelId?: string | null
+    limit?: number
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "reconcile_invalid_dues_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_limit: input.limit ?? 500,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to reconcile invalid dues.")
+    }
+
+    return data as {
+      feeRecordsCancelled?: number
+      invoicesCancelled?: number
+    } | null
+  }
+
+  async repairAnalyticsConsistency(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId?: string | null
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "repair_analytics_consistency_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_actor_user_id: input.actorUserId ?? null,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to repair analytics consistency.")
+    }
+
+    return data as { hostelsRecalculated?: number } | null
   }
 
   private operationsDb() {

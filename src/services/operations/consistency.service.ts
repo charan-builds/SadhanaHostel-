@@ -1,5 +1,6 @@
 import "server-only"
 
+import { areOperationalRepairsEnabled } from "@/config/launch"
 import { ADMIN_PORTAL_ROLES, ADMIN_ROLES } from "@/constants/auth"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
@@ -7,6 +8,7 @@ import type { AppSupabaseClient } from "@/repositories/types"
 import type {
   ConsistencyFinding,
   ConsistencyReport,
+  ConsistencyRepairAction,
   ConsistencySeverity,
 } from "@/types/operations"
 import {
@@ -82,14 +84,42 @@ export class ConsistencyService {
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     if (values.dryRun) {
+      const report = await scanConsistency(this.repository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+      })
+      const repairableCount = report.findings.filter(
+        (finding) =>
+          finding.repairAction !== "review_manually" &&
+          (values.action === "run_consistency_scan" || finding.repairAction === values.action)
+      ).length
+
       return {
         repaired: 0,
         dryRun: true,
-        message: "Dry run completed. No records were changed.",
+        message: `Dry run completed. ${repairableCount} matching repairable finding(s) would be reviewed. No records were changed.`,
+        report,
       }
     }
 
-    if (values.action === "recalculate_occupancy") {
+    if (!areOperationalRepairsEnabled()) {
+      const report = await scanConsistency(this.repository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+      })
+
+      return {
+        repaired: 0,
+        dryRun: true,
+        message:
+          "Emergency repair execution is disabled by OPERATIONAL_REPAIRS_ENABLED=false. Dry-run diagnostics were returned and no records were changed.",
+        report,
+      }
+    }
+
+    if (values.action === "recalculate_occupancy" || values.action === "release_stale_allocations") {
       if (values.hostelId) {
         const repair = await this.repository.repairOccupancyConsistency({
           organizationId: values.organizationId,
@@ -122,6 +152,84 @@ export class ConsistencyService {
         repaired: 0,
         dryRun: false,
         message: "Choose a hostel before recalculating capacity.",
+      }
+    }
+
+    if (values.action === "dedupe_invites" || values.action === "resync_auth_linkage") {
+      const repair = await this.repository.repairOnboardingAccessConsistency({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId ?? null,
+        actorUserId: context.authUser.id,
+      })
+      const report = await scanConsistency(this.repository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+        persist: true,
+      })
+      const repaired =
+        (repair?.expiredCount ?? 0) +
+        (repair?.activatedInvitesRevokedCount ?? 0) +
+        (repair?.duplicateInvitesRevokedCount ?? 0) +
+        (repair?.authProfilesSyncedCount ?? 0) +
+        (repair?.deadlockResidentsAdvancedCount ?? 0)
+
+      return {
+        repaired,
+        dryRun: false,
+        message:
+          `Onboarding access repaired: ${repair?.expiredCount ?? 0} expired invite(s), ` +
+          `${repair?.activatedInvitesRevokedCount ?? 0} stale invite(s) revoked, ` +
+          `${repair?.duplicateInvitesRevokedCount ?? 0} duplicate invite(s) revoked, ` +
+          `${repair?.authProfilesSyncedCount ?? 0} auth profile(s) resynced, ` +
+          `${repair?.deadlockResidentsAdvancedCount ?? 0} partial activation state(s) advanced.`,
+        report,
+      }
+    }
+
+    if (values.action === "reconcile_dues") {
+      const repair = await this.repository.reconcileInvalidDues({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId ?? null,
+        actorUserId: context.authUser.id,
+      })
+      const report = await scanConsistency(this.repository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+        persist: true,
+      })
+      const repaired =
+        (repair?.feeRecordsCancelled ?? 0) + (repair?.invoicesCancelled ?? 0)
+
+      return {
+        repaired,
+        dryRun: false,
+        message:
+          `Dues reconciled: ${repair?.feeRecordsCancelled ?? 0} invalid fee record(s) cancelled, ` +
+          `${repair?.invoicesCancelled ?? 0} unpaid invoice(s) cancelled.`,
+        report,
+      }
+    }
+
+    if (values.action === "repair_analytics") {
+      const repair = await this.repository.repairAnalyticsConsistency({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId ?? null,
+        actorUserId: context.authUser.id,
+      })
+      const report = await scanConsistency(this.repository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+        persist: true,
+      })
+
+      return {
+        repaired: repair?.hostelsRecalculated ?? 0,
+        dryRun: false,
+        message: `Analytics repaired: ${repair?.hostelsRecalculated ?? 0} hostel snapshot(s) recalculated.`,
+        report,
       }
     }
 
@@ -213,6 +321,13 @@ export async function scanConsistency(
     verifiedPaymentWithoutReference,
     invoiceWithoutPdf,
     activeAllocationsPastEndDate,
+    staleReservationRows,
+    expiredInviteRows,
+    staleUploadRows,
+    staleOnboardingRows,
+    unreconciledPaymentRows,
+    invoiceWithoutPdfRows,
+    activeAllocationsPastEndDateRows,
   ] = await Promise.all([
     repository.count("reservations", {
       organizationId: input.organizationId,
@@ -276,6 +391,74 @@ export async function scanConsistency(
       lte: { allocated_to: now.toISOString().slice(0, 10) },
       deletedAtNull: true,
     }),
+    repository.list("reservations", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,lead_id,converted_resident_id,status,reserved_until",
+      in: { status: ["pending", "reserved", "confirmed"] },
+      lte: { reserved_until: now.toISOString() },
+      deletedAtNull: true,
+      limit: 20,
+    }),
+    repository.list("resident_invites", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,expires_at,used_at,revoked_at",
+      equals: { status: "pending" },
+      lte: { expires_at: now.toISOString() },
+      limit: 20,
+    }),
+    repository.list("documents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,payment_id,invoice_id,status,created_at",
+      equals: { status: "pending" },
+      lte: { created_at: staleUploadCutoff },
+      deletedAtNull: true,
+      limit: 20,
+    }),
+    repository.list("residents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,status,onboarding_status,user_id,updated_at",
+      in: {
+        onboarding_status: [
+          "invited",
+          "activated",
+          "profile_incomplete",
+          "documents_pending",
+          "rejected",
+        ],
+      },
+      lte: { updated_at: onboardingCutoff },
+      deletedAtNull: true,
+      limit: 20,
+    }),
+    repository.list("payments", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,method,invoice_id,transaction_id",
+      equals: { status: "verified" },
+      deletedAtNull: true,
+      limit: 40,
+    }),
+    repository.list("invoices", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,pdf_document_id",
+      isNull: ["pdf_document_id"],
+      deletedAtNull: true,
+      limit: 20,
+    }),
+    repository.list("room_allocations", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,room_id,status,allocated_to",
+      equals: { status: "active" },
+      lte: { allocated_to: now.toISOString().slice(0, 10) },
+      deletedAtNull: true,
+      limit: 20,
+    }),
   ])
 
   if (staleReservations > 0) {
@@ -287,7 +470,15 @@ export async function scanConsistency(
         "Expired reservations still hold beds",
         "Reservations past reserved_until can block public vacancy and overstate reserved beds.",
         staleReservations,
-        "expire_reservations"
+        "expire_reservations",
+        rowDetails(staleReservationRows, {
+          tableName: "reservations",
+          anomalyType: "expired_reservation_holding_bed",
+          expectedState: "reservation expired or released after reserved_until",
+          actualState: "pending/reserved/confirmed after reserved_until",
+          repairAction: "expire_reservations",
+          recommendation: "Run reservation expiry automation to release stale reserved beds.",
+        })
       )
     )
   }
@@ -301,7 +492,15 @@ export async function scanConsistency(
         "Expired resident invites are still pending",
         "Pending expired invites should be marked expired to prevent stale activation recovery confusion.",
         expiredInvites,
-        "expire_invites"
+        "expire_invites",
+        rowDetails(expiredInviteRows, {
+          tableName: "resident_invites",
+          anomalyType: "expired_invite_pending",
+          expectedState: "status expired once expires_at passes",
+          actualState: "pending after expires_at",
+          repairAction: "dedupe_invites",
+          recommendation: "Run onboarding access repair to expire stale invites and keep only one active invite per resident.",
+        })
       )
     )
   }
@@ -315,7 +514,15 @@ export async function scanConsistency(
         "Stale uploads need cleanup",
         "Pending upload metadata older than 24 hours can indicate interrupted document or proof uploads.",
         staleUploads,
-        "cleanup_uploads"
+        "cleanup_uploads",
+        rowDetails(staleUploadRows, {
+          tableName: "documents",
+          anomalyType: "stale_pending_upload",
+          expectedState: "upload verified, rejected, or cleaned up within 24 hours",
+          actualState: "pending upload metadata older than 24 hours",
+          repairAction: "cleanup_uploads",
+          recommendation: "Run stale upload cleanup or ask the resident/admin to retry the failed upload.",
+        })
       )
     )
   }
@@ -329,7 +536,15 @@ export async function scanConsistency(
         "Resident onboarding is aging",
         "Incomplete onboarding older than 7 days needs reminder, admin follow-up, or suspension review.",
         staleOnboarding,
-        "review_manually"
+        "review_manually",
+        rowDetails(staleOnboardingRows, {
+          tableName: "residents",
+          anomalyType: "stale_onboarding_state",
+          expectedState: "onboarding progresses or is followed up within 7 days",
+          actualState: "incomplete onboarding older than 7 days",
+          repairAction: "review_manually",
+          recommendation: "Contact the resident, resend activation, or suspend/reject stale onboarding from the admin queue.",
+        })
       )
     )
   }
@@ -343,7 +558,27 @@ export async function scanConsistency(
         "Payment reconciliation mismatch",
         "Verified UPI payments must have invoice linkage and transaction references for audit safety.",
         verifiedPaymentWithoutInvoice + verifiedPaymentWithoutReference,
-        "review_manually"
+        "reconcile_dues",
+        rowDetails(
+          unreconciledPaymentRows.filter((payment) => {
+            const status = stringValue(payment, "status")
+            const method = stringValue(payment, "method")
+
+            return (
+              status === "verified" &&
+              (!stringValue(payment, "invoice_id") ||
+                (method === "upi" && !stringValue(payment, "transaction_id")))
+            )
+          }),
+          {
+            tableName: "payments",
+            anomalyType: "verified_payment_reconciliation_mismatch",
+            expectedState: "verified payment has invoice and UPI transaction reference",
+            actualState: "verified payment missing invoice_id or transaction_id",
+            repairAction: "reconcile_dues",
+            recommendation: "Reconcile the ledger and manually review verified payments missing audit references.",
+          }
+        )
       )
     )
   }
@@ -357,7 +592,15 @@ export async function scanConsistency(
         "Invoices missing PDFs",
         "Invoice records without PDF documents can block resident downloads and audit exports.",
         invoiceWithoutPdf,
-        "review_manually"
+        "review_manually",
+        rowDetails(invoiceWithoutPdfRows, {
+          tableName: "invoices",
+          anomalyType: "invoice_pdf_missing",
+          expectedState: "invoice has generated PDF document",
+          actualState: "invoice pdf_document_id is missing",
+          repairAction: "review_manually",
+          recommendation: "Regenerate invoice PDFs before resident download or owner export.",
+        })
       )
     )
   }
@@ -371,15 +614,26 @@ export async function scanConsistency(
         "Room allocations ended but remain active",
         "Active allocations with past end dates can inflate occupied beds and dues generation.",
         activeAllocationsPastEndDate,
-        "recalculate_occupancy"
+        "release_stale_allocations",
+        rowDetails(activeAllocationsPastEndDateRows, {
+          tableName: "room_allocations",
+          anomalyType: "active_allocation_past_end_date",
+          expectedState: "allocation completed when allocated_to has passed",
+          actualState: "active allocation with allocated_to in the past",
+          repairAction: "release_stale_allocations",
+          recommendation: "Run occupancy repair to close stale allocations and recompute vacancy.",
+        })
       )
     )
   }
 
   findings.push(...await detectDuplicateResidents(repository, input))
+  findings.push(...await detectDuplicateInviteAnomalies(repository, input, now))
+  findings.push(...await detectOnboardingAuthDeadlocks(repository, input))
   findings.push(...await detectResidentAllocationAnomalies(repository, input))
   findings.push(...await detectOverCapacityRooms(repository, input))
   findings.push(...await detectCapacitySnapshotAnomalies(repository, input))
+  findings.push(...await detectInvalidDuesAnomalies(repository, input))
   findings.push(...await detectBusinessTenantLinkageAnomalies(repository, input))
   findings.push(...await detectSecurityAnomalies(repository, input))
 
@@ -453,6 +707,11 @@ async function detectDuplicateResidents(
     [...phones.values()].filter((count) => count > 1).length +
     [...emails.values()].filter((count) => count > 1).length +
     [...aadhaarIdentity.values()].filter((count) => count > 1).length
+  const details: ConsistencyFindingDetail[] = [
+    ...duplicateIdentityDetails(phones, "phone"),
+    ...duplicateIdentityDetails(emails, "email"),
+    ...duplicateIdentityDetails(aadhaarIdentity, "name_aadhaar_last4"),
+  ]
 
   return duplicateCount > 0
     ? [
@@ -463,10 +722,210 @@ async function detectDuplicateResidents(
           "Duplicate production resident identities detected",
           "Active, suspended, or portal-linked residents share phone, email, or name plus Aadhaar-last-4. Draft admissions are ignored until activation.",
           duplicateCount,
-          "review_manually"
+          "review_manually",
+          details.slice(0, 20)
         ),
       ]
     : []
+}
+
+async function detectDuplicateInviteAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput,
+  now: Date
+): Promise<ConsistencyFinding[]> {
+  const activeInvites = await repository.list("resident_invites", {
+    organizationId: input.organizationId,
+    hostelId: input.hostelId,
+    select: "id,organization_id,hostel_id,resident_id,status,expires_at,used_at,revoked_at,created_at",
+    equals: { status: "pending" },
+    isNull: ["used_at", "revoked_at"],
+    gt: { expires_at: now.toISOString() },
+    limit: 5000,
+  })
+  const countByResident = new Map<string, number>()
+
+  activeInvites.forEach((invite) => {
+    const residentId = stringValue(invite, "resident_id")
+
+    if (residentId) {
+      countByResident.set(residentId, (countByResident.get(residentId) ?? 0) + 1)
+    }
+  })
+
+  const duplicateResidentIds = [...countByResident.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([residentId]) => residentId)
+  const duplicateInvites = activeInvites.filter((invite) => {
+    const residentId = stringValue(invite, "resident_id")
+
+    return Boolean(residentId && duplicateResidentIds.includes(residentId))
+  })
+
+  return duplicateResidentIds.length > 0
+    ? [
+        finding(
+          "invites.duplicate_active",
+          "invite",
+          "high",
+          "Residents have duplicate active invites",
+          "Each resident should have only one usable activation path. Duplicate active invites can cause replay confusion and stale onboarding links.",
+          duplicateResidentIds.length,
+          "dedupe_invites",
+          rowDetails(duplicateInvites.slice(0, 20), {
+            tableName: "resident_invites",
+            anomalyType: "duplicate_active_invite",
+            expectedState: "one pending active invite per resident",
+            actualState: "multiple pending unexpired invites for the same resident",
+            repairAction: "dedupe_invites",
+            recommendation: "Run onboarding access repair to revoke older active invites and retain the newest activation path.",
+          })
+        ),
+      ]
+    : []
+}
+
+async function detectOnboardingAuthDeadlocks(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const [residents, users, invites] = await Promise.all([
+    repository.list("residents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,user_id,status,onboarding_status,full_name,phone,email,deleted_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("users", {
+      organizationId: input.organizationId,
+      select: "id,organization_id,is_active,default_role,metadata,deleted_at",
+      limit: 5000,
+    }),
+    repository.list("resident_invites", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,used_at,revoked_at,expires_at",
+      limit: 5000,
+    }),
+  ])
+  const userById = indexById(users)
+  const pendingInviteResidentIds = new Set(
+    invites
+      .filter((invite) => stringValue(invite, "status") === "pending")
+      .map((invite) => stringValue(invite, "resident_id"))
+      .filter((residentId): residentId is string => Boolean(residentId))
+  )
+  const verifiedWithoutAuth = residents.filter(
+    (resident) =>
+      stringValue(resident, "onboarding_status") === "verified" &&
+      !stringValue(resident, "user_id")
+  )
+  const linkedWithoutUserProfile = residents.filter((resident) => {
+    const userId = stringValue(resident, "user_id")
+
+    return Boolean(userId && !userById.has(userId))
+  })
+  const draftWithAuthStillInvited = residents.filter((resident) => {
+    const onboardingStatus = stringValue(resident, "onboarding_status")
+
+    return Boolean(
+      stringValue(resident, "user_id") &&
+        stringValue(resident, "status") === "draft" &&
+        (onboardingStatus === "invited" || onboardingStatus === "rejected")
+    )
+  })
+  const noInviteAndNoAuth = residents.filter((resident) => {
+    const status = stringValue(resident, "status")
+    const onboardingStatus = stringValue(resident, "onboarding_status")
+    const residentId = stringValue(resident, "id")
+
+    return Boolean(
+      residentId &&
+        !stringValue(resident, "user_id") &&
+        (status === "draft" || onboardingStatus === "invited") &&
+        !pendingInviteResidentIds.has(residentId)
+    )
+  })
+  const findings: ConsistencyFinding[] = []
+
+  if (verifiedWithoutAuth.length > 0) {
+    findings.push(
+      finding(
+        "onboarding.verified_without_auth",
+        "onboarding",
+        "critical",
+        "Verified residents are missing auth linkage",
+        "Residents cannot be operationally verified without a linked Supabase auth user and app user profile.",
+        verifiedWithoutAuth.length,
+        "resync_auth_linkage",
+        rowDetails(verifiedWithoutAuth, {
+          tableName: "residents",
+          anomalyType: "verified_resident_missing_user_id",
+          expectedState: "verified resident has user_id and active app user profile",
+          actualState: "onboarding_status verified but user_id is missing",
+          repairAction: "review_manually",
+          recommendation: "Reopen activation or relink the resident from the onboarding review queue before granting dashboard access.",
+        })
+      )
+    )
+  }
+
+  if (linkedWithoutUserProfile.length > 0 || draftWithAuthStillInvited.length > 0) {
+    findings.push(
+      finding(
+        "onboarding.auth_linkage_deadlock",
+        "onboarding",
+        "high",
+        "Resident auth linkage needs resync",
+        "Some residents have partial activation state: auth user linked but app profile metadata or onboarding status is stale.",
+        linkedWithoutUserProfile.length + draftWithAuthStillInvited.length,
+        "resync_auth_linkage",
+        [
+          ...rowDetails(linkedWithoutUserProfile, {
+            tableName: "residents",
+            anomalyType: "linked_user_profile_missing",
+            expectedState: "resident.user_id has active public.users profile in same organization",
+            actualState: "resident.user_id set but public.users profile missing or out of scope",
+            repairAction: "resync_auth_linkage",
+            recommendation: "Run auth linkage repair to recreate/sync the app profile from the auth user when the auth identity exists.",
+          }),
+          ...rowDetails(draftWithAuthStillInvited, {
+            tableName: "residents",
+            anomalyType: "partial_activation_still_invited",
+            expectedState: "draft resident with auth user moves to activated onboarding state",
+            actualState: "resident has user_id but onboarding remains invited/rejected",
+            repairAction: "resync_auth_linkage",
+            recommendation: "Run auth linkage repair to advance partial activation to the activated onboarding state.",
+          }),
+        ].slice(0, 20)
+      )
+    )
+  }
+
+  if (noInviteAndNoAuth.length > 0) {
+    findings.push(
+      finding(
+        "onboarding.no_access_path",
+        "onboarding",
+        "medium",
+        "Draft residents are missing an access path",
+        "Draft or invited residents without auth linkage and without a pending invite can become onboarding deadlocks.",
+        noInviteAndNoAuth.length,
+        "review_manually",
+        rowDetails(noInviteAndNoAuth, {
+          tableName: "residents",
+          anomalyType: "draft_resident_missing_invite",
+          expectedState: "draft resident has pending invite, temp password, or activation link",
+          actualState: "no auth user and no pending invite",
+          repairAction: "review_manually",
+          recommendation: "Resend activation or create a fresh onboarding invite from the resident profile.",
+        })
+      )
+    )
+  }
+
+  return findings
 }
 
 async function detectOverCapacityRooms(
@@ -505,9 +964,10 @@ async function detectOverCapacityRooms(
     }
   })
 
-  const overCapacityCount = [...activeByRoom.entries()].filter(
+  const overCapacityRoomIds = [...activeByRoom.entries()].filter(
     ([roomId, activeCount]) => activeCount > (capacityByRoom.get(roomId) ?? 0)
-  ).length
+  ).map(([roomId]) => roomId)
+  const overCapacityCount = overCapacityRoomIds.length
 
   return overCapacityCount > 0
     ? [
@@ -518,7 +978,22 @@ async function detectOverCapacityRooms(
           "Rooms exceed configured capacity",
           "Active allocations exceed room capacity. Run occupancy recalculation and manually inspect affected rooms.",
           overCapacityCount,
-          "recalculate_occupancy"
+          "release_stale_allocations",
+          overCapacityRoomIds.slice(0, 20).map((roomId) => ({
+            tableName: "rooms",
+            recordId: roomId,
+            organizationId: input.organizationId,
+            hostelId: input.hostelId ?? null,
+            anomalyType: "room_over_capacity",
+            expectedState: `active allocations <= capacity ${capacityByRoom.get(roomId) ?? 0}`,
+            actualState: `active allocations ${activeByRoom.get(roomId) ?? 0}`,
+            expectedOrganizationId: input.organizationId,
+            actualOrganizationId: input.organizationId,
+            expectedHostelId: input.hostelId ?? null,
+            actualHostelId: input.hostelId ?? null,
+            recommendedRepairAction: "release_stale_allocations",
+            recommendation: "Run occupancy repair, then manually transfer or release residents if the room remains over capacity.",
+          }))
         ),
       ]
     : []
@@ -571,7 +1046,123 @@ async function detectCapacitySnapshotAnomalies(
           "Vacancy snapshot is stale",
           "Stored hostel capacity no longer matches live allocation and reservation counts. Run Repair Occupancy to resync dashboard and vacancy metrics.",
           mismatchCount,
-          "recalculate_occupancy"
+          "repair_analytics",
+          rowDetails(
+            liveVacancy
+              .filter((live) => {
+                const hostelId = stringValue(live, "hostel_id")
+                const snapshot = hostelId ? snapshotByHostel.get(hostelId) : null
+
+                return (
+                  !snapshot ||
+                  numberValue(snapshot, "occupied_beds") !== numberValue(live, "occupied_beds") ||
+                  numberValue(snapshot, "reserved_beds") !== numberValue(live, "reserved_beds") ||
+                  numberValue(snapshot, "available_beds") !== numberValue(live, "available_beds")
+                )
+              })
+              .slice(0, 20),
+            {
+              tableName: "hostel_capacity",
+              anomalyType: "capacity_snapshot_mismatch",
+              expectedState: "stored snapshot equals live hostel_vacancy_view",
+              actualState: "stored occupied/reserved/available beds differ from live vacancy",
+              repairAction: "repair_analytics",
+              recommendation: "Run analytics repair to refresh hostel capacity and room capacity snapshots from live occupancy views.",
+            }
+          )
+        ),
+      ]
+    : []
+}
+
+async function detectInvalidDuesAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const [residents, feeRecords, invoices] = await Promise.all([
+    repository.list("residents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,status,is_active,user_id,checkout_on,onboarding_status,deleted_at",
+      limit: 5000,
+    }),
+    repository.list("monthly_fee_records", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,status,paid_amount,balance_amount,period_month",
+      in: { status: ["pending", "overdue"] },
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("invoices", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,monthly_fee_record_id,status,paid_amount,balance_amount",
+      in: { status: ["draft", "issued", "overdue"] },
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+  ])
+  const residentById = indexById(residents)
+  const invalidFeeRecords = feeRecords.filter((feeRecord) => {
+    const resident = residentById.get(stringValue(feeRecord, "resident_id") ?? "")
+
+    if (!resident || numberValue(feeRecord, "paid_amount") > 0) {
+      return false
+    }
+
+    return !isResidentEligibleForOccupancy({
+      id: stringValue(resident, "id"),
+      status: stringValue(resident, "status"),
+      is_active: booleanValue(resident, "is_active"),
+      user_id: stringValue(resident, "user_id"),
+      checkout_on: stringValue(resident, "checkout_on"),
+      onboarding_status: stringValue(resident, "onboarding_status"),
+    })
+  })
+  const invalidFeeRecordIds = new Set(
+    invalidFeeRecords
+      .map((feeRecord) => stringValue(feeRecord, "id"))
+      .filter((id): id is string => Boolean(id))
+  )
+  const invalidInvoices = invoices.filter((invoice) => {
+    const feeRecordId = stringValue(invoice, "monthly_fee_record_id")
+
+    return Boolean(
+      feeRecordId &&
+        invalidFeeRecordIds.has(feeRecordId) &&
+        numberValue(invoice, "paid_amount") === 0
+    )
+  })
+
+  return invalidFeeRecords.length > 0 || invalidInvoices.length > 0
+    ? [
+        finding(
+          "dues.inactive_resident_open_balances",
+          "payment",
+          "high",
+          "Inactive residents have open dues",
+          "Draft, unverified, suspended, checked-out, or archived residents must not carry unpaid operational dues unless finance explicitly keeps them open.",
+          invalidFeeRecords.length + invalidInvoices.length,
+          "reconcile_dues",
+          [
+            ...rowDetails(invalidFeeRecords, {
+              tableName: "monthly_fee_records",
+              anomalyType: "inactive_resident_fee_record",
+              expectedState: "pending/overdue dues only belong to operational verified residents",
+              actualState: "open unpaid dues linked to a non-operational resident",
+              repairAction: "reconcile_dues",
+              recommendation: "Run dues reconciliation to cancel unpaid invalid fee records and linked unpaid invoices.",
+            }),
+            ...rowDetails(invalidInvoices, {
+              tableName: "invoices",
+              anomalyType: "inactive_resident_invoice",
+              expectedState: "unpaid invoice belongs to valid operational fee record",
+              actualState: "unpaid invoice linked to invalid inactive-resident fee record",
+              repairAction: "reconcile_dues",
+              recommendation: "Run dues reconciliation to cancel unpaid invoices linked to invalid inactive-resident dues.",
+            }),
+          ].slice(0, 20)
         ),
       ]
     : []
@@ -585,14 +1176,14 @@ async function detectResidentAllocationAnomalies(
     repository.list("residents", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      select: "id,status,is_active,user_id,checkout_on,onboarding_status,deleted_at",
+      select: "id,organization_id,hostel_id,status,is_active,user_id,checkout_on,onboarding_status,deleted_at",
       deletedAtNull: true,
       limit: 5000,
     }),
     repository.list("room_allocations", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      select: "id,resident_id,status",
+      select: "id,organization_id,hostel_id,resident_id,room_id,status",
       equals: { status: "active" },
       deletedAtNull: true,
       limit: 5000,
@@ -646,6 +1237,10 @@ async function detectResidentAllocationAnomalies(
   const findings: ConsistencyFinding[] = []
 
   if (activeWithoutAllocation > 0) {
+    const rows = operationalResidents.filter(
+      (resident) => typeof resident.id === "string" && !allocatedResidentIds.has(resident.id)
+    )
+
     findings.push(
       finding(
         "residents.active_without_allocation",
@@ -654,12 +1249,26 @@ async function detectResidentAllocationAnomalies(
         "Active residents are missing room allocations",
         "Active residents without active allocations will not reduce vacancy and should be assigned or moved back to draft.",
         activeWithoutAllocation,
-        "recalculate_occupancy"
+        "recalculate_occupancy",
+        rowDetails(rows, {
+          tableName: "residents",
+          anomalyType: "active_resident_without_allocation",
+          expectedState: "verified active resident has one active room allocation",
+          actualState: "operational resident has no active room allocation",
+          repairAction: "review_manually",
+          recommendation: "Allocate a room or move the resident back to onboarding before billing and vacancy reporting.",
+        })
       )
     )
   }
 
   if (allocationWithoutActiveResident > 0) {
+    const rows = activeAllocations.filter(
+      (allocation) =>
+        typeof allocation.resident_id === "string" &&
+        !activeResidentIds.has(allocation.resident_id)
+    )
+
     findings.push(
       finding(
         "allocations.without_active_resident",
@@ -668,12 +1277,26 @@ async function detectResidentAllocationAnomalies(
         "Active allocations are not linked to active residents",
         "Allocations for archived, suspended, or missing residents can inflate occupancy unless reconciled.",
         allocationWithoutActiveResident,
-        "recalculate_occupancy"
+        "release_stale_allocations",
+        rowDetails(rows, {
+          tableName: "room_allocations",
+          anomalyType: "allocation_without_operational_resident",
+          expectedState: "active allocation belongs to verified active linked resident",
+          actualState: "active allocation belongs to inactive, missing, or unverified resident",
+          repairAction: "release_stale_allocations",
+          recommendation: "Run occupancy repair to close invalid allocations and recalculate vacancy.",
+        })
       )
     )
   }
 
   if (residentsWithMultipleActiveAllocations > 0) {
+    const rows = activeAllocations.filter((allocation) => {
+      const residentId = stringValue(allocation, "resident_id")
+
+      return Boolean(residentId && (allocationCountByResident.get(residentId) ?? 0) > 1)
+    })
+
     findings.push(
       finding(
         "allocations.multiple_active_for_resident",
@@ -682,7 +1305,15 @@ async function detectResidentAllocationAnomalies(
         "Residents have multiple active room allocations",
         "A resident must occupy at most one active room. Use Repair Occupancy before running billing or vacancy reports.",
         residentsWithMultipleActiveAllocations,
-        "recalculate_occupancy"
+        "release_stale_allocations",
+        rowDetails(rows, {
+          tableName: "room_allocations",
+          anomalyType: "duplicate_active_allocation_for_resident",
+          expectedState: "resident has at most one active allocation",
+          actualState: "resident has multiple active allocations",
+          repairAction: "release_stale_allocations",
+          recommendation: "Run occupancy repair to keep the newest allocation and complete stale duplicates.",
+        })
       )
     )
   }
@@ -1138,25 +1769,25 @@ async function detectSecurityAnomalies(
   const residentById = indexById(residents)
   const paymentById = indexById(payments)
   const userById = indexById(users)
-  const unsafePublicDocuments = documents.filter(
+  const unsafePublicDocumentRows = documents.filter(
     (document) =>
       stringValue(document, "bucket_name") !== "gallery-images" &&
       booleanValue(document, "is_public") === true
-  ).length
-  const pathScopeMismatches = documents.filter((document) => {
+  )
+  const pathScopeMismatchRows = documents.filter((document) => {
     const storagePath = stringValue(document, "storage_path")
 
     return Boolean(storagePath && !storagePath.startsWith(`${input.organizationId}/`))
-  }).length
-  const orphanDocuments = documents.filter((document) => {
+  })
+  const orphanDocumentRows = documents.filter((document) => {
     const residentId = stringValue(document, "resident_id")
     const paymentId = stringValue(document, "payment_id")
     const residentMissing = Boolean(residentId && !residentById.has(residentId))
     const paymentMissing = Boolean(paymentId && !paymentById.has(paymentId))
 
     return residentMissing || paymentMissing
-  }).length
-  const paymentProofScopeMismatches = documents.filter((document) => {
+  })
+  const paymentProofScopeMismatchRows = documents.filter((document) => {
     if (stringValue(document, "document_type") !== "payment_receipt") {
       return false
     }
@@ -1172,8 +1803,8 @@ async function detectSecurityAnomalies(
       !payment ||
       stringValue(payment, "resident_id") !== residentId
     )
-  }).length
-  const activeRolesWithoutUsers = roles.filter((role) => {
+  })
+  const activeRoleWithoutUserRows = roles.filter((role) => {
     if (stringValue(role, "status") !== "active") {
       return false
     }
@@ -1181,8 +1812,8 @@ async function detectSecurityAnomalies(
     const user = userById.get(stringValue(role, "user_id") ?? "")
 
     return !user || booleanValue(user, "is_active") === false
-  }).length
-  const roleTenantMismatches = roles.filter((role) => {
+  })
+  const roleTenantMismatchRows = roles.filter((role) => {
     const user = userById.get(stringValue(role, "user_id") ?? "")
     const userOrganizationId = user ? stringValue(user, "organization_id") : null
 
@@ -1190,7 +1821,13 @@ async function detectSecurityAnomalies(
       userOrganizationId &&
         userOrganizationId !== stringValue(role, "organization_id")
     )
-  }).length
+  })
+  const unsafePublicDocuments = unsafePublicDocumentRows.length
+  const pathScopeMismatches = pathScopeMismatchRows.length
+  const orphanDocuments = orphanDocumentRows.length
+  const paymentProofScopeMismatches = paymentProofScopeMismatchRows.length
+  const activeRolesWithoutUsers = activeRoleWithoutUserRows.length
+  const roleTenantMismatches = roleTenantMismatchRows.length
 
   if (unsafePublicDocuments > 0 || pathScopeMismatches > 0) {
     findings.push(
@@ -1201,7 +1838,25 @@ async function detectSecurityAnomalies(
         "Upload tenant scope needs security review",
         "Private documents must not be public, and all storage paths must start with the organization ID.",
         unsafePublicDocuments + pathScopeMismatches,
-        "review_manually"
+        "review_manually",
+        [
+          ...rowDetails(unsafePublicDocumentRows, {
+            tableName: "documents",
+            anomalyType: "private_document_marked_public",
+            expectedState: "private document is_public false",
+            actualState: "private document is_public true",
+            repairAction: "review_manually",
+            recommendation: "Mark private document metadata non-public and regenerate signed access only after ownership is verified.",
+          }),
+          ...rowDetails(pathScopeMismatchRows, {
+            tableName: "documents",
+            anomalyType: "storage_path_missing_organization_scope",
+            expectedState: `storage_path starts with ${input.organizationId}/`,
+            actualState: "storage_path is outside organization prefix",
+            repairAction: "review_manually",
+            recommendation: "Move or regenerate the uploaded file under the organization-scoped storage prefix.",
+          }),
+        ].slice(0, 20)
       )
     )
   }
@@ -1215,7 +1870,25 @@ async function detectSecurityAnomalies(
         "Upload ownership anomalies detected",
         "Document metadata references missing or mismatched residents/payments. Signed URL access should be blocked until repaired.",
         orphanDocuments + paymentProofScopeMismatches,
-        "review_manually"
+        "review_manually",
+        [
+          ...rowDetails(orphanDocumentRows, {
+            tableName: "documents",
+            anomalyType: "orphan_document_reference",
+            expectedState: "document links to existing resident/payment in same tenant",
+            actualState: "document resident/payment reference is missing or inaccessible",
+            repairAction: "review_manually",
+            recommendation: "Repair document metadata or archive the orphan upload before issuing signed URLs.",
+          }),
+          ...rowDetails(paymentProofScopeMismatchRows, {
+            tableName: "documents",
+            anomalyType: "payment_proof_ownership_mismatch",
+            expectedState: "payment proof bucket/path belongs to linked resident payment",
+            actualState: "payment proof metadata does not match linked payment owner",
+            repairAction: "review_manually",
+            recommendation: "Block preview and re-upload the proof under the correct resident/payment path.",
+          }),
+        ].slice(0, 20)
       )
     )
   }
@@ -1229,7 +1902,25 @@ async function detectSecurityAnomalies(
         "Role assignments need access review",
         "Active role assignments must point to active users in the same organization to prevent stale or cross-tenant access.",
         activeRolesWithoutUsers + roleTenantMismatches,
-        "review_manually"
+        "review_manually",
+        [
+          ...rowDetails(activeRoleWithoutUserRows, {
+            tableName: "user_roles",
+            anomalyType: "active_role_without_active_user",
+            expectedState: "active role belongs to active user",
+            actualState: "active role references missing/inactive user",
+            repairAction: "review_manually",
+            recommendation: "Suspend or revoke the stale role assignment from Staff & Access.",
+          }),
+          ...rowDetails(roleTenantMismatchRows, {
+            tableName: "user_roles",
+            anomalyType: "role_user_tenant_mismatch",
+            expectedState: "role organization matches user organization",
+            actualState: "role organization differs from user organization",
+            repairAction: "review_manually",
+            recommendation: "Revoke the role and recreate access in the correct organization.",
+          }),
+        ].slice(0, 20)
       )
     )
   }
@@ -1247,6 +1938,7 @@ function buildReport(input: {
     high: countSeverity(input.findings, "high"),
     medium: countSeverity(input.findings, "medium"),
     low: countSeverity(input.findings, "low"),
+    informational: countSeverity(input.findings, "informational"),
     totalFindings: input.findings.length,
   }
   const score = Math.max(
@@ -1255,7 +1947,8 @@ function buildReport(input: {
       summaries.critical * 25 -
       summaries.high * 15 -
       summaries.medium * 8 -
-      summaries.low * 3
+      summaries.low * 3 -
+      summaries.informational
   )
 
   return {
@@ -1327,17 +2020,86 @@ function pushLinkageDetail(
   details.push({
     tableName: values.tableName,
     recordId,
+    residentId: stringValue(values.record, "resident_id"),
+    organizationId: actualOrganizationId,
+    hostelId: actualHostelId,
     anomalyType: values.parent
       ? values.anomalyType
       : `${values.anomalyType}_orphan_${values.relation.replace(/\s+/g, "_")}`,
+    expectedState: values.parent
+      ? `record tenant matches linked ${values.relation}`
+      : `linked ${values.relation} exists in tenant scope`,
+    actualState: values.parent
+      ? "record tenant differs from linked record"
+      : `linked ${values.relation} is missing or outside tenant scope`,
     expectedOrganizationId,
     actualOrganizationId,
     expectedHostelId,
     actualHostelId,
+    recommendedRepairAction: "repair_tenant_linkage",
     recommendation: values.parent
       ? values.recommendation
       : `Linked ${values.relation} is missing or outside the visible tenant scope. Review this record manually before repair.`,
   })
+}
+
+function rowDetails(
+  rows: Array<Record<string, unknown>>,
+  values: {
+    tableName: string
+    anomalyType: string
+    expectedState: string
+    actualState: string
+    repairAction: ConsistencyRepairAction
+    recommendation: string
+  }
+): ConsistencyFindingDetail[] {
+  return rows.slice(0, 20).map((row) => {
+    const organizationId = stringValue(row, "organization_id")
+    const hostelId = stringValue(row, "hostel_id")
+
+    return {
+      tableName: values.tableName,
+      recordId: stringValue(row, "id"),
+      residentId: stringValue(row, "resident_id") ?? stringValue(row, "id"),
+      organizationId,
+      hostelId,
+      anomalyType: values.anomalyType,
+      expectedState: values.expectedState,
+      actualState: values.actualState,
+      expectedOrganizationId: organizationId,
+      actualOrganizationId: organizationId,
+      expectedHostelId: hostelId,
+      actualHostelId: hostelId,
+      recommendedRepairAction: values.repairAction,
+      recommendation: values.recommendation,
+    }
+  })
+}
+
+function duplicateIdentityDetails(
+  counts: Map<string, number>,
+  identityType: string
+): ConsistencyFindingDetail[] {
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .slice(0, 20)
+    .map(([identity, count]) => ({
+      tableName: "residents",
+      recordId: null,
+      residentId: null,
+      organizationId: null,
+      hostelId: null,
+      anomalyType: `duplicate_${identityType}`,
+      expectedState: `unique ${identityType} among production residents`,
+      actualState: `${count} production residents share ${identityType} ${identity}`,
+      expectedOrganizationId: null,
+      actualOrganizationId: null,
+      expectedHostelId: null,
+      actualHostelId: null,
+      recommendedRepairAction: "review_manually",
+      recommendation: "Review duplicate resident identities and merge, archive, or correct the duplicate records.",
+    }))
 }
 
 function isDetailInScope(detail: ConsistencyFindingDetail, hostelId?: string | null) {

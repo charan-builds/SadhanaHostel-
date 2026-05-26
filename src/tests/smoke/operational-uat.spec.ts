@@ -241,7 +241,11 @@ function collectRuntimeErrors(page: Page) {
   })
   page.on("console", (message) => {
     if (message.type() === "error") {
-      errors.push(message.text())
+      const text = message.text()
+
+      if (!text.includes("net::ERR_NETWORK_CHANGED")) {
+        errors.push(text)
+      }
     }
   })
 

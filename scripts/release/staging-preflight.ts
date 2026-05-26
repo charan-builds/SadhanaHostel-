@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs"
-import { spawnSync } from "node:child_process"
-
-type Check = {
-  name: string
-  status: "pass" | "warn" | "fail"
-  details: string
-}
+import {
+  checkCommand,
+  checkEnv,
+  checkEnvironmentSafety,
+  checkFile,
+  collectEnv,
+  type Check,
+} from "./hardening-checks"
 
 const strict = process.argv.includes("--strict")
 
@@ -36,11 +36,13 @@ const requiredEnv = [
 ]
 
 function main() {
+  const env = collectEnv([".env.staging", ".env.local", ".env"])
   const checks: Check[] = [
     ...requiredFiles.map(checkFile),
     ...requiredTools.map((tool) => checkCommand(tool, true)),
     ...optionalTools.map((tool) => checkCommand(tool, false)),
-    ...requiredEnv.map(checkEnv),
+    ...requiredEnv.map((name) => checkEnv(name, true, env)),
+    ...checkEnvironmentSafety(env, "staging"),
   ]
   const failed = checks.filter((check) => check.status === "fail")
   const warned = checks.filter((check) => check.status === "warn")
@@ -58,7 +60,7 @@ function main() {
         checks,
         nextAction:
           failed.length > 0
-            ? "Install missing tools or provide staging env vars, then rerun preflight."
+            ? "Install missing tools, replace placeholder env vars, or fix staging isolation, then rerun preflight."
             : "Staging execution prerequisites are ready.",
       },
       null,
@@ -68,61 +70,6 @@ function main() {
 
   if (strict && failed.length > 0) {
     process.exitCode = 1
-  }
-}
-
-function checkFile(filePath: string): Check {
-  return existsSync(filePath)
-    ? {
-        name: `file:${filePath}`,
-        status: "pass",
-        details: "Found.",
-      }
-    : {
-        name: `file:${filePath}`,
-        status: "fail",
-        details: "Missing required release artifact.",
-      }
-}
-
-function checkCommand(command: string, required: boolean): Check {
-  const result = spawnSync("bash", ["-lc", `command -v ${command}`], {
-    encoding: "utf8",
-  })
-  const path = result.stdout.trim()
-
-  if (path) {
-    return {
-      name: `tool:${command}`,
-      status: "pass",
-      details: path,
-    }
-  }
-
-  return {
-    name: `tool:${command}`,
-    status: required ? "fail" : "warn",
-    details: required
-      ? "Install before real staging execution."
-      : "Optional locally if provider is configured through CI.",
-  }
-}
-
-function checkEnv(name: string): Check {
-  const value = process.env[name]
-
-  if (value) {
-    return {
-      name: `env:${name}`,
-      status: "pass",
-      details: "Set.",
-    }
-  }
-
-  return {
-    name: `env:${name}`,
-    status: "fail",
-    details: "Missing for real staging execution.",
   }
 }
 

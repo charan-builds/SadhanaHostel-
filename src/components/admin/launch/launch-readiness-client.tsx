@@ -159,6 +159,22 @@ export function LaunchReadinessClient() {
             <ActionLink href="/admin/alerts" label="Review support blockers" />
             <ActionLink href="/admin/finance/payment-security" label="Verify payment safety" />
             <ActionLink href="/admin/setup" label="Review tenant setup" />
+            <div className="grid gap-2 rounded-lg border p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span>Cron jobs</span>
+                <StatusPill
+                  status={data?.launchConfig.safeguards.cronJobsEnabled ? "pass" : "warn"}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Emergency repairs</span>
+                <StatusPill
+                  status={
+                    data?.launchConfig.safeguards.operationalRepairsEnabled ? "pass" : "warn"
+                  }
+                />
+              </div>
+            </div>
             <div className="rounded-lg bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
               Use `MAINTENANCE_MODE=true` to pause user traffic, then roll back Vercel to the last healthy deployment if the issue is release-related.
             </div>
@@ -215,6 +231,7 @@ export function LaunchReadinessClient() {
             <GuideItem label="Support handbook" file="docs/operations/support-handbook.md" />
             <GuideItem label="Incident response guide" file="docs/operations/incident-response-guide.md" />
             <GuideItem label="First 30 days operations guide" file="docs/operations/first-30-days-operations-guide.md" />
+            <GuideItem label="Final hardening runbook" file="docs/launch/final-production-hardening-runbook.md" />
             <p className="pt-2 text-xs text-muted-foreground">
               Last checked {data?.generatedAt ? formatDateTime(data.generatedAt) : "-"}
             </p>

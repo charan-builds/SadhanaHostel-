@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   ConsistencyService,
@@ -17,6 +17,9 @@ function createRepository(overrides: Partial<{
   list: ReturnType<typeof vi.fn>
   repairOccupancyConsistency: ReturnType<typeof vi.fn>
   repairTenantLinkageConsistency: ReturnType<typeof vi.fn>
+  repairOnboardingAccessConsistency: ReturnType<typeof vi.fn>
+  reconcileInvalidDues: ReturnType<typeof vi.fn>
+  repairAnalyticsConsistency: ReturnType<typeof vi.fn>
   recordConsistencyReport: ReturnType<typeof vi.fn>
 }> = {}) {
   return {
@@ -36,6 +39,20 @@ function createRepository(overrides: Partial<{
       reservationsRepaired: 0,
       reservationPaymentsRepaired: 0,
       documentsRepaired: 0,
+      hostelsRecalculated: 1,
+    }),
+    repairOnboardingAccessConsistency: vi.fn().mockResolvedValue({
+      expiredCount: 0,
+      activatedInvitesRevokedCount: 0,
+      duplicateInvitesRevokedCount: 0,
+      authProfilesSyncedCount: 0,
+      deadlockResidentsAdvancedCount: 0,
+    }),
+    reconcileInvalidDues: vi.fn().mockResolvedValue({
+      feeRecordsCancelled: 0,
+      invoicesCancelled: 0,
+    }),
+    repairAnalyticsConsistency: vi.fn().mockResolvedValue({
       hostelsRecalculated: 1,
     }),
     recordConsistencyReport: vi.fn().mockResolvedValue({}),
@@ -78,7 +95,7 @@ describe("operational consistency scanning", () => {
         expect.objectContaining({
           id: "allocations.without_active_resident",
           severity: "critical",
-          repairAction: "recalculate_occupancy",
+          repairAction: "release_stale_allocations",
           count: 1,
         }),
       ])
@@ -286,9 +303,124 @@ describe("operational consistency scanning", () => {
       ])
     )
   })
+
+  it("reports duplicate active invites with record-level repair guidance", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string; equals?: Record<string, unknown> }) => {
+        if (table === "resident_invites" && input.equals?.status === "pending") {
+          return Promise.resolve([
+            {
+              id: "invite-1",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "pending",
+              expires_at: "2999-01-01T00:00:00.000Z",
+            },
+            {
+              id: "invite-2",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "pending",
+              expires_at: "2999-01-01T00:00:00.000Z",
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "invites.duplicate_active",
+          repairAction: "dedupe_invites",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "resident_invites",
+              residentId: RESIDENT_ID,
+              expectedState: expect.stringContaining("one pending active invite"),
+              recommendedRepairAction: "dedupe_invites",
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
+  it("reports inactive resident dues and recommends ledger reconciliation", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select?.includes("checkout_on")) {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              user_id: null,
+              status: "draft",
+              is_active: true,
+              checkout_on: null,
+              onboarding_status: "invited",
+              deleted_at: null,
+            },
+          ])
+        }
+
+        if (table === "monthly_fee_records") {
+          return Promise.resolve([
+            {
+              id: "fee-1",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "pending",
+              paid_amount: 0,
+              balance_amount: 3500,
+              period_month: "2026-05-01",
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dues.inactive_resident_open_balances",
+          repairAction: "reconcile_dues",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "monthly_fee_records",
+              residentId: RESIDENT_ID,
+              expectedState: expect.stringContaining("operational verified residents"),
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
 })
 
 describe("ConsistencyService repair", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it("repairs occupancy through the atomic repository function and records a follow-up scan", async () => {
     const service = new ConsistencyService({} as never)
     const repository = createRepository({
@@ -371,5 +503,145 @@ describe("ConsistencyService repair", () => {
       actorUserId: adminAuthContext().authUser.id,
     })
     expect(repository.recordConsistencyReport).toHaveBeenCalled()
+  })
+
+  it("supports dry-run repair without mutating records", async () => {
+    const service = new ConsistencyService({} as never)
+    const repository = createRepository({
+      repairOccupancyConsistency: vi.fn(),
+    })
+
+    Object.assign(service, {
+      authService: {
+        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requireHostelAccess: vi.fn(),
+      },
+      repository,
+    })
+
+    await expect(
+      service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "release_stale_allocations",
+        dryRun: true,
+      })
+    ).resolves.toMatchObject({
+      repaired: 0,
+      dryRun: true,
+      report: expect.any(Object),
+    })
+
+    expect(repository.repairOccupancyConsistency).not.toHaveBeenCalled()
+  })
+
+  it("blocks mutating repairs when the emergency repair kill switch is disabled", async () => {
+    vi.stubEnv("OPERATIONAL_REPAIRS_ENABLED", "false")
+
+    const service = new ConsistencyService({} as never)
+    const repository = createRepository({
+      repairOccupancyConsistency: vi.fn(),
+    })
+
+    Object.assign(service, {
+      authService: {
+        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requireHostelAccess: vi.fn(),
+      },
+      repository,
+    })
+
+    await expect(
+      service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "recalculate_occupancy",
+        dryRun: false,
+      })
+    ).resolves.toMatchObject({
+      repaired: 0,
+      dryRun: true,
+      message: expect.stringContaining("OPERATIONAL_REPAIRS_ENABLED=false"),
+    })
+
+    expect(repository.repairOccupancyConsistency).not.toHaveBeenCalled()
+    expect(repository.recordConsistencyReport).not.toHaveBeenCalled()
+  })
+
+  it("dedupes invites and resyncs auth linkage through onboarding access repair", async () => {
+    const service = new ConsistencyService({} as never)
+    const repository = createRepository({
+      repairOnboardingAccessConsistency: vi.fn().mockResolvedValue({
+        expiredCount: 1,
+        activatedInvitesRevokedCount: 1,
+        duplicateInvitesRevokedCount: 2,
+        authProfilesSyncedCount: 1,
+        deadlockResidentsAdvancedCount: 1,
+      }),
+    })
+
+    Object.assign(service, {
+      authService: {
+        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requireHostelAccess: vi.fn(),
+      },
+      repository,
+    })
+
+    await expect(
+      service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "dedupe_invites",
+        dryRun: false,
+      })
+    ).resolves.toMatchObject({
+      repaired: 6,
+      dryRun: false,
+      message: expect.stringContaining("duplicate invite"),
+    })
+
+    expect(repository.repairOnboardingAccessConsistency).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+  })
+
+  it("reconciles invalid dues through the atomic finance repair", async () => {
+    const service = new ConsistencyService({} as never)
+    const repository = createRepository({
+      reconcileInvalidDues: vi.fn().mockResolvedValue({
+        feeRecordsCancelled: 2,
+        invoicesCancelled: 1,
+      }),
+    })
+
+    Object.assign(service, {
+      authService: {
+        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requireHostelAccess: vi.fn(),
+      },
+      repository,
+    })
+
+    await expect(
+      service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "reconcile_dues",
+        dryRun: false,
+      })
+    ).resolves.toMatchObject({
+      repaired: 3,
+      dryRun: false,
+      message: expect.stringContaining("Dues reconciled"),
+    })
+
+    expect(repository.reconcileInvalidDues).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      actorUserId: adminAuthContext().authUser.id,
+    })
   })
 })

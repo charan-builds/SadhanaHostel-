@@ -98,6 +98,18 @@ export function getSoftLaunchResidentLimit() {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20
 }
 
+export function areCronJobsEnabled() {
+  return process.env.CRON_JOBS_ENABLED === undefined
+    ? true
+    : isTruthy(process.env.CRON_JOBS_ENABLED)
+}
+
+export function areOperationalRepairsEnabled() {
+  return process.env.OPERATIONAL_REPAIRS_ENABLED === undefined
+    ? true
+    : isTruthy(process.env.OPERATIONAL_REPAIRS_ENABLED)
+}
+
 export function getLaunchConfigSnapshot() {
   const enabledFlags = [...getEnabledFeatureFlags()]
 
@@ -116,6 +128,10 @@ export function getLaunchConfigSnapshot() {
       residentLimit: getSoftLaunchResidentLimit(),
       supportWhatsAppConfigured: Boolean(process.env.LAUNCH_SUPPORT_WHATSAPP?.trim()),
       ownerEmailConfigured: Boolean(process.env.LAUNCH_OWNER_EMAIL?.trim()),
+    },
+    safeguards: {
+      cronJobsEnabled: areCronJobsEnabled(),
+      operationalRepairsEnabled: areOperationalRepairsEnabled(),
     },
   }
 }

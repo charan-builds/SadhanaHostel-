@@ -5,6 +5,7 @@ Use this checklist before inviting the first real hostel residents.
 ## Gate 1: Staging Proof
 
 - [ ] `npm run release:soft-launch:validate -- --strict` passes or every warning has owner sign-off.
+- [ ] `npm run release:production:hardening` passes with real staging env values, not placeholders.
 - [ ] `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`, and `npm run test:smoke` pass.
 - [ ] Authenticated Playwright runs with `E2E_AUTH_RUN_REAL_FLOWS=true` against staging.
 - [ ] Full k6 run completes against staging with health, resident, admin, uploads, and realtime scenarios.
@@ -16,6 +17,8 @@ Use this checklist before inviting the first real hostel residents.
 
 - [ ] `MAINTENANCE_MODE=false` for launch window.
 - [ ] `MAINTENANCE_BYPASS_TOKEN` is configured for operators.
+- [ ] `CRON_JOBS_ENABLED=true` unless the launch window intentionally pauses automation.
+- [ ] `OPERATIONAL_REPAIRS_ENABLED=true` only during staffed repair windows; dry runs remain available when disabled.
 - [ ] `FEATURE_FLAGS` includes only approved modules.
 - [ ] `SOFT_LAUNCH_RESIDENT_LIMIT` is set to the approved first cohort size.
 - [ ] `CRON_SECRET`, `INVITE_TOKEN_SECRET`, Redis, Sentry, and Supabase env vars are configured.

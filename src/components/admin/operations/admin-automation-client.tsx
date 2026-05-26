@@ -21,7 +21,7 @@ import {
 } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
-import type { AutomationJobConfig } from "@/types/operations"
+import type { AutomationJobConfig, ConsistencyFinding } from "@/types/operations"
 import type { AutomationJobName } from "@/validations/operations.validation"
 
 export function AdminAutomationClient() {
@@ -79,29 +79,25 @@ export function AdminAutomationClient() {
     }
   }
 
-  async function recalculateOccupancy() {
-    if (!organizationId || !hostelId) {
-      toast.error("Choose an active hostel before recalculating occupancy.")
-      return
-    }
-
-    try {
-      const result = await repairConsistency.mutateAsync({
-        organizationId,
-        hostelId,
-        action: "recalculate_occupancy",
-        dryRun: false,
-      })
-      await dashboard.refetch()
-      toast.success(result.message)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to recalculate occupancy.")
-    }
-  }
-
-  async function repairTenantLinkage() {
+  async function runConsistencyRepair(
+    action: ConsistencyFinding["repairAction"],
+    dryRun = false
+  ) {
     if (!organizationId) {
-      toast.error("Choose an organization before repairing tenant linkage.")
+      toast.error("Choose an organization before running consistency repair.")
+      return
+    }
+
+    if (action === "review_manually") {
+      toast.info("This finding needs operator review before repair.")
+      return
+    }
+
+    if (
+      !hostelId &&
+      (action === "recalculate_occupancy" || action === "release_stale_allocations")
+    ) {
+      toast.error("Choose an active hostel before repairing occupancy.")
       return
     }
 
@@ -109,13 +105,13 @@ export function AdminAutomationClient() {
       const result = await repairConsistency.mutateAsync({
         organizationId,
         hostelId,
-        action: "repair_tenant_linkage",
-        dryRun: false,
+        action,
+        dryRun,
       })
       await dashboard.refetch()
       toast.success(result.message)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to repair tenant linkage.")
+      toast.error(error instanceof Error ? error.message : "Unable to process consistency repair.")
     }
   }
 
@@ -160,10 +156,11 @@ export function AdminAutomationClient() {
       ) : null}
 
       {consistency ? (
-        <section className="grid gap-4 md:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
           <Metric label="Critical" value={consistency.summaries.critical} tone="danger" />
           <Metric label="High" value={consistency.summaries.high} tone="warning" />
           <Metric label="Medium" value={consistency.summaries.medium} tone="info" />
+          <Metric label="Informational" value={consistency.summaries.informational ?? consistency.summaries.low} />
           <Metric label="Total findings" value={consistency.summaries.totalFindings} />
         </section>
       ) : null}
@@ -179,7 +176,7 @@ export function AdminAutomationClient() {
           type="button"
           variant="outline"
           disabled={repairConsistency.isPending}
-          onClick={() => void recalculateOccupancy()}
+          onClick={() => void runConsistencyRepair("release_stale_allocations")}
         >
           {repairConsistency.isPending ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -247,8 +244,13 @@ export function AdminAutomationClient() {
                           <span className="font-mono">{detail.recordId ?? "record unavailable"}</span>
                         </div>
                         <p className="mt-1 text-muted-foreground">
-                          Expected hostel {detail.expectedHostelId ?? "unknown"}; actual hostel{" "}
-                          {detail.actualHostelId ?? "unknown"}.
+                          Resident {detail.residentId ?? "not linked"} · Organization{" "}
+                          {detail.organizationId ?? detail.actualOrganizationId ?? "unknown"} · Hostel{" "}
+                          {detail.hostelId ?? detail.actualHostelId ?? "unknown"}.
+                        </p>
+                        <p className="mt-1 text-muted-foreground">
+                          Expected: {detail.expectedState ?? detail.expectedHostelId ?? "known safe state"}.
+                          {" "}Actual: {detail.actualState ?? detail.actualHostelId ?? "unsafe state"}.
                         </p>
                         <p className="mt-1 text-muted-foreground">{detail.recommendation}</p>
                       </div>
@@ -263,13 +265,25 @@ export function AdminAutomationClient() {
               </div>
               <div className="flex flex-col gap-2 md:items-end">
                 <Badge variant="outline">{humanizeEnum(finding.repairAction)}</Badge>
-                {finding.repairAction === "recalculate_occupancy" ? (
+                {finding.repairAction !== "review_manually" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={repairConsistency.isPending}
+                    onClick={() => void runConsistencyRepair(finding.repairAction, true)}
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden="true" />
+                    Dry run
+                  </Button>
+                ) : null}
+                {finding.repairAction !== "review_manually" ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={repairConsistency.isPending}
-                    onClick={() => void recalculateOccupancy()}
+                    onClick={() => void runConsistencyRepair(finding.repairAction)}
                   >
                     {repairConsistency.isPending ? (
                       <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -277,22 +291,6 @@ export function AdminAutomationClient() {
                       <RotateCcw className="size-3.5" aria-hidden="true" />
                     )}
                     Repair now
-                  </Button>
-                ) : null}
-                {finding.repairAction === "repair_tenant_linkage" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={repairConsistency.isPending}
-                    onClick={() => void repairTenantLinkage()}
-                  >
-                    {repairConsistency.isPending ? (
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <RotateCcw className="size-3.5" aria-hidden="true" />
-                    )}
-                    Repair safe links
                   </Button>
                 ) : null}
               </div>
