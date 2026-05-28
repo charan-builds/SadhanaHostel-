@@ -45,15 +45,105 @@ create unique index if not exists residents_aadhaar_last4_name_uidx
   on public.residents (organization_id, lower(full_name), aadhaar_last4)
   where aadhaar_last4 is not null and deleted_at is null and is_active = true;
 
-update public.residents
-set
-  onboarding_status = 'verified',
-  onboarding_completed_at = coalesce(onboarding_completed_at, updated_at),
-  onboarding_verified_at = coalesce(onboarding_verified_at, updated_at),
-  onboarding_metadata = onboarding_metadata || jsonb_build_object('legacy_verification', true)
-where status = 'active'
-  and user_id is not null
-  and onboarding_status <> 'verified';
+-- Protected migration pattern:
+-- Runtime resident profile protections intentionally block direct profile
+-- updates. Legacy onboarding backfills therefore run through a fixed-scope,
+-- SECURITY DEFINER helper that briefly disables only the resident profile
+-- protection trigger inside this transaction, writes audit rows, and always
+-- re-enables the trigger. Normal authenticated users cannot call this helper.
+create or replace function public.backfill_resident_onboarding_status_for_migration()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_updated_count integer := 0;
+  v_trigger_disabled boolean := false;
+begin
+  if exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.residents'::regclass
+      and tgname = 'protect_resident_profile_update'
+      and not tgisinternal
+  ) then
+    execute 'alter table public.residents disable trigger protect_resident_profile_update';
+    v_trigger_disabled := true;
+  end if;
+
+  with updated_rows as (
+    update public.residents
+    set
+      onboarding_status = 'verified',
+      onboarding_completed_at = coalesce(onboarding_completed_at, updated_at),
+      onboarding_verified_at = coalesce(onboarding_verified_at, updated_at),
+      onboarding_metadata = onboarding_metadata || jsonb_build_object('legacy_verification', true)
+    where status = 'active'
+      and user_id is not null
+      and onboarding_status <> 'verified'
+    returning
+      id,
+      organization_id,
+      hostel_id,
+      onboarding_status,
+      onboarding_completed_at,
+      onboarding_verified_at,
+      onboarding_metadata
+  )
+  insert into public.audit_logs (
+    organization_id,
+    hostel_id,
+    table_name,
+    record_id,
+    action,
+    new_values,
+    metadata
+  )
+  select
+    organization_id,
+    hostel_id,
+    'residents',
+    id,
+    'resident.onboarding_legacy_backfill',
+    jsonb_build_object(
+      'onboarding_status', onboarding_status,
+      'onboarding_completed_at', onboarding_completed_at,
+      'onboarding_verified_at', onboarding_verified_at
+    ),
+    jsonb_build_object(
+      'source', '20260522004000_resident_onboarding_lifecycle',
+      'legacy_verification', onboarding_metadata->>'legacy_verification'
+    )
+  from updated_rows;
+
+  get diagnostics v_updated_count = row_count;
+
+  if v_trigger_disabled then
+    execute 'alter table public.residents enable trigger protect_resident_profile_update';
+    v_trigger_disabled := false;
+  end if;
+
+  return v_updated_count;
+exception
+  when others then
+    if v_trigger_disabled then
+      begin
+        execute 'alter table public.residents enable trigger protect_resident_profile_update';
+      exception
+        when others then null;
+      end;
+    end if;
+    raise;
+end;
+$$;
+
+revoke execute on function public.backfill_resident_onboarding_status_for_migration()
+from public, anon, authenticated;
+grant execute on function public.backfill_resident_onboarding_status_for_migration()
+to service_role;
+
+select public.backfill_resident_onboarding_status_for_migration();
 
 create or replace function public.validate_resident_onboarding_status()
 returns trigger

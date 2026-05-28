@@ -97,6 +97,144 @@ test.describe("resident invite activation", () => {
     await expect(page.getByRole("link", { name: /enter invite code/i })).toBeVisible()
   })
 
+  test("phone-only invite codes render phone activation without email", async ({ page }) => {
+    await mockInviteValidation(page, {
+      identityMode: "phone_only",
+      maskedPhone: "******9749",
+      maskedEmail: null,
+      emailRequired: false,
+      phoneRequired: true,
+    })
+
+    await page.goto("/activate")
+    await page.getByLabel(/invite code/i).fill("SBH-PHONE1")
+    await page.getByRole("button", { name: /validate invite/i }).click()
+
+    await expect(page.getByText(/phone only/i)).toBeVisible()
+    await expect(page.getByText(/phone ending with 9749/i).first()).toBeVisible()
+    await expect(page.getByLabel(/^phone number$/i)).toBeVisible()
+    await expect(page.getByLabel(/^email$/i)).toHaveCount(0)
+  })
+
+  test("email-only invite codes render email activation without phone", async ({ page }) => {
+    await mockInviteValidation(page, {
+      identityMode: "email_only",
+      maskedPhone: null,
+      maskedEmail: "c******@gmail.com",
+      emailRequired: true,
+      phoneRequired: false,
+    })
+
+    await page.goto("/activate")
+    await page.getByLabel(/invite code/i).fill("SBH-EMAIL1")
+    await page.getByRole("button", { name: /validate invite/i }).click()
+
+    await expect(page.getByText(/email only/i)).toBeVisible()
+    await expect(page.getByText(/c\*+@gmail\.com/i).first()).toBeVisible()
+    await expect(page.getByLabel(/^email$/i)).toBeVisible()
+    await expect(page.getByLabel(/^phone number$/i)).toHaveCount(0)
+  })
+
+  test("hybrid invite codes render a single email-or-phone identity field", async ({ page }) => {
+    await mockInviteValidation(page, {
+      identityMode: "hybrid",
+      maskedPhone: "******9749",
+      maskedEmail: "c******@gmail.com",
+      emailRequired: false,
+      phoneRequired: false,
+    })
+
+    await page.goto("/activate")
+    await page.getByLabel(/invite code/i).fill("SBH-HYBRID1")
+    await page.getByRole("button", { name: /validate invite/i }).click()
+
+    await expect(page.getByText(/hybrid/i)).toBeVisible()
+    await expect(page.getByLabel(/^email or phone$/i)).toBeVisible()
+    await expect(page.getByLabel(/^phone number$/i)).toHaveCount(0)
+    await expect(page.getByLabel(/^email$/i)).toHaveCount(0)
+  })
+
+  test("phone-only activation submits phone identity and logs in through the returned resident identifier", async ({ page }) => {
+    let activationPayload: Record<string, unknown> | null = null
+    let loginPayload: Record<string, unknown> | null = null
+
+    await mockInviteValidation(page, {
+      identityMode: "phone_only",
+      maskedPhone: "******9749",
+      maskedEmail: null,
+      emailRequired: false,
+      phoneRequired: true,
+    })
+    await page.route("**/api/activation/activate", async (route) => {
+      activationPayload = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Resident account activated.",
+          data: {
+            authenticatedIdentifier: "+919000009749",
+            residentId: "00000000-0000-4000-8000-000000000001",
+            redirectTo: "/resident/onboarding",
+          },
+        }),
+      })
+    })
+    await page.route("**/api/auth/login", async (route) => {
+      loginPayload = route.request().postDataJSON() as Record<string, unknown>
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Signed in.",
+          data: {
+            authenticated: true,
+            user: { id: "00000000-0000-4000-8000-000000000088", email: null, phone: "+919000009749" },
+            profile: {
+              id: "00000000-0000-4000-8000-000000000088",
+              full_name: "Charan",
+              email: null,
+              phone: "+919000009749",
+              default_role: "resident",
+              organization_id: "00000000-0000-4000-8000-000000000002",
+            },
+            roles: ["resident"],
+            primaryRole: "resident",
+            organizationId: "00000000-0000-4000-8000-000000000002",
+            hostelIds: ["00000000-0000-4000-8000-000000000003"],
+            onboardingRequired: true,
+            redirectTo: "/resident/onboarding",
+          },
+        }),
+      })
+    })
+
+    await page.goto("/activate")
+    await page.getByLabel(/invite code/i).fill("SBH-PHONE1")
+    await page.getByRole("button", { name: /validate invite/i }).click()
+    await page.getByLabel(/^phone number$/i).fill("90000 09749")
+    await page.getByLabel(/create password/i).fill("StrongPassword123!")
+    await page.getByLabel(/confirm password/i).fill("StrongPassword123!")
+    await page.getByRole("button", { name: /activate resident account/i }).click()
+
+    await expect
+      .poll(() => (loginPayload ? "submitted" : "pending"))
+      .toBe("submitted")
+    expect(activationPayload).toMatchObject({
+      inviteCode: "SBH-PHONE1",
+      phone: "90000 09749",
+      password: "StrongPassword123!",
+      confirmPassword: "StrongPassword123!",
+    })
+    expect(activationPayload).not.toHaveProperty("email")
+    expect(loginPayload).toMatchObject({
+      identifier: "+919000009749",
+      password: "StrongPassword123!",
+    })
+  })
+
   test("resident can activate a fresh invite and land in onboarding", async ({ page }) => {
     test.skip(
       !runActivationFlow || !activationInvite,
@@ -242,6 +380,41 @@ async function getSession(page: Page) {
     authenticated: boolean
     roles: string[]
   }
+}
+
+async function mockInviteValidation(
+  page: Page,
+  overrides: {
+    identityMode: "phone_only" | "email_only" | "hybrid"
+    maskedPhone: string | null
+    maskedEmail: string | null
+    emailRequired: boolean
+    phoneRequired: boolean
+  }
+) {
+  await page.route("**/api/activation/validate", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        message: "Invite validated.",
+        data: {
+          id: "00000000-0000-4000-8000-000000000089",
+          residentId: "00000000-0000-4000-8000-000000000001",
+          organizationId: "00000000-0000-4000-8000-000000000002",
+          hostelId: "00000000-0000-4000-8000-000000000003",
+          residentName: "Charan",
+          admissionNumber: "ADM-001",
+          authLinked: false,
+          activationState: "activation_pending",
+          expiresAt: "2026-05-27T00:00:00.000Z",
+          status: "pending",
+          ...overrides,
+        },
+      }),
+    })
+  })
 }
 
 function collectRuntimeErrors(page: Page) {

@@ -18,6 +18,7 @@ function createRepository(overrides: Partial<{
   repairOccupancyConsistency: ReturnType<typeof vi.fn>
   repairTenantLinkageConsistency: ReturnType<typeof vi.fn>
   repairOnboardingAccessConsistency: ReturnType<typeof vi.fn>
+  listResidentTenantIdentityAnomalies: ReturnType<typeof vi.fn>
   reconcileInvalidDues: ReturnType<typeof vi.fn>
   repairAnalyticsConsistency: ReturnType<typeof vi.fn>
   recordConsistencyReport: ReturnType<typeof vi.fn>
@@ -48,6 +49,7 @@ function createRepository(overrides: Partial<{
       authProfilesSyncedCount: 0,
       deadlockResidentsAdvancedCount: 0,
     }),
+    listResidentTenantIdentityAnomalies: vi.fn().mockResolvedValue([]),
     reconcileInvalidDues: vi.fn().mockResolvedValue({
       feeRecordsCancelled: 0,
       invoicesCancelled: 0,
@@ -304,6 +306,56 @@ describe("operational consistency scanning", () => {
     )
   })
 
+  it("reports tenantless resident identity anomalies as manual repair findings", async () => {
+    const repository = createRepository({
+      listResidentTenantIdentityAnomalies: vi.fn().mockResolvedValue([
+        {
+          table_name: "residents",
+          record_id: RESIDENT_ID,
+          resident_id: RESIDENT_ID,
+          organization_id: null,
+          hostel_id: null,
+          user_id: null,
+          expected_organization_id: null,
+          expected_hostel_id: null,
+          anomaly_type: "resident_missing_organization_id",
+          expected_state: "resident has a valid organization_id before normalization",
+          actual_state: "resident.organization_id is null",
+          recommended_repair_action: "review_manually",
+          recommendation: "Review source records before relinking or archiving this resident.",
+        },
+      ]),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(repository.listResidentTenantIdentityAnomalies).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      limit: 100,
+    })
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "security.resident_tenant_identity",
+          severity: "critical",
+          repairAction: "review_manually",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "residents",
+              recordId: RESIDENT_ID,
+              anomalyType: "resident_missing_organization_id",
+              actualOrganizationId: null,
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
   it("reports duplicate active invites with record-level repair guidance", async () => {
     const repository = createRepository({
       list: vi.fn().mockImplementation((table: string, input: { select?: string; equals?: Record<string, unknown> }) => {
@@ -348,6 +400,191 @@ describe("operational consistency scanning", () => {
               residentId: RESIDENT_ID,
               expectedState: expect.stringContaining("one pending active invite"),
               recommendedRepairAction: "dedupe_invites",
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
+  it("reports pending invite identity mode mismatches before residents activate", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select?.includes("user_id")) {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              user_id: null,
+              status: "draft",
+              onboarding_status: "invited",
+              full_name: "Charan",
+              phone: "9000000002",
+              email: null,
+              deleted_at: null,
+            },
+          ])
+        }
+
+        if (table === "resident_invites" && input.select?.includes("email,phone")) {
+          return Promise.resolve([
+            {
+              id: "invite-email-only",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "pending",
+              email: "resident@sadhanahostel.example",
+              phone: null,
+              used_at: null,
+              revoked_at: null,
+              expires_at: "2999-01-01T00:00:00.000Z",
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "onboarding.invite_identity_mode_mismatch",
+          repairAction: "dedupe_invites",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "resident_invites",
+              recordId: "invite-email-only",
+              anomalyType: "invite_identity_mode_mismatch",
+              expectedState: expect.stringContaining("Phone Only"),
+              actualState: expect.stringContaining("Email Only"),
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
+  it("reports stale auth identity mode metadata after resident contact changes", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select?.includes("user_id")) {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              user_id: "user-1",
+              status: "draft",
+              onboarding_status: "activated",
+              full_name: "Charan",
+              phone: "9000000002",
+              email: null,
+              deleted_at: null,
+            },
+          ])
+        }
+
+        if (table === "users") {
+          return Promise.resolve([
+            {
+              id: "user-1",
+              organization_id: TEST_ORGANIZATION_ID,
+              is_active: true,
+              default_role: "resident",
+              metadata: {
+                resident_identity_mode: "email",
+              },
+              deleted_at: null,
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "onboarding.auth_identity_mode_mismatch",
+          repairAction: "resync_auth_linkage",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "residents",
+              recordId: RESIDENT_ID,
+              anomalyType: "auth_identity_mode_mismatch",
+              expectedState: expect.stringContaining("Phone Only"),
+              actualState: expect.stringContaining("Email Only"),
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
+  it("reports mixed-format phone identities that can break auth matching", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select === "id,organization_id,hostel_id,phone,user_id,deleted_at") {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              phone: "90000 00002",
+              user_id: null,
+              deleted_at: null,
+            },
+          ])
+        }
+
+        if (table === "resident_invites" && input.select === "id,organization_id,hostel_id,resident_id,phone,status,used_at,revoked_at") {
+          return Promise.resolve([
+            {
+              id: "invite-1",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              phone: "9000000002",
+              status: "pending",
+              used_at: null,
+              revoked_at: null,
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "identity.phone_normalization_mismatch",
+          severity: "high",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              tableName: "residents",
+              anomalyType: "phone_not_e164",
+              expectedState: "+919000000002",
             }),
           ]),
         }),

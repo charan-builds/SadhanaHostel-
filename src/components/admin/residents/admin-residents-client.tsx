@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { Edit, Eye, KeyRound, LogOut, Plus, Search, UserX } from "lucide-react"
+import { Edit, Eye, KeyRound, LogOut, Plus, Search, UserX, Wrench } from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
@@ -39,10 +39,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
+import {
+  formatResidentIdentityMode,
+  getResidentIdentityMode,
+} from "@/lib/resident-identity"
 import { useRealtimeAdmissions } from "@/lib/realtime"
-import { useCheckoutResident, useDashboardAnalytics, useDeactivateResident, useResidents } from "@/hooks"
+import {
+  useCheckoutResident,
+  useDashboardAnalytics,
+  useDeactivateResident,
+  useRepairResidentLifecycle,
+  useResidents,
+} from "@/hooks"
 import type { Tables } from "@/types/database"
 
 type ResidentStatusFilter = "all" | "draft" | "active" | "suspended" | "checked_out" | "archived"
@@ -60,8 +71,10 @@ export function AdminResidentsClient() {
   const [deactivateTarget, setDeactivateTarget] = useState<Tables<"residents"> | null>(null)
   const [checkoutTarget, setCheckoutTarget] = useState<Tables<"residents"> | null>(null)
   const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
+  const [repairTarget, setRepairTarget] = useState<Tables<"residents"> | null>(null)
   const deactivateResident = useDeactivateResident()
   const checkoutResident = useCheckoutResident()
+  const repairResidentLifecycle = useRepairResidentLifecycle()
   const analytics = useDashboardAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
@@ -127,6 +140,29 @@ export function AdminResidentsClient() {
     })
     toast.success("Resident checked out and occupancy released.")
     setCheckoutTarget(null)
+  }
+
+  async function confirmRepair() {
+    if (!organizationId || !repairTarget) {
+      return
+    }
+
+    const result = await repairResidentLifecycle.mutateAsync({
+      residentId: repairTarget.id,
+      organizationId,
+      dryRun: false,
+    })
+    const repairCount = Object.values(result.repairs).reduce(
+      (total, value) => total + (typeof value === "number" ? value : 0),
+      0
+    )
+
+    toast.success(
+      repairCount > 0
+        ? `Resident lifecycle repaired (${repairCount} updates applied).`
+        : "Resident lifecycle checked. No repair was needed."
+    )
+    setRepairTarget(null)
   }
 
   if (!organizationId) {
@@ -257,6 +293,7 @@ export function AdminResidentsClient() {
                 <TableHead>Admission</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Portal Access</TableHead>
                 <TableHead>Fee</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Joined</TableHead>
@@ -275,6 +312,16 @@ export function AdminResidentsClient() {
                   <TableCell>{resident.admission_number}</TableCell>
                   <TableCell className="capitalize">{resident.resident_type}</TableCell>
                   <TableCell>{resident.phone ?? "-"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline">
+                        {formatResidentIdentityMode(getResidentIdentityMode(resident))}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {resident.user_id ? "Auth linked" : "Activation pending"}
+                      </span>
+                    </div>
+                  </TableCell>
                   <TableCell>{formatCurrency(resident.monthly_fee_amount)}</TableCell>
                   <TableCell>
                     <StatusBadge status={resident.status} />
@@ -300,6 +347,15 @@ export function AdminResidentsClient() {
                       >
                         <KeyRound className="size-3.5" aria-hidden="true" />
                         Invite
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={repairResidentLifecycle.isPending}
+                        onClick={() => setRepairTarget(resident)}
+                      >
+                        <Wrench className="size-3.5" aria-hidden="true" />
+                        Repair
                       </Button>
                       <Button
                         size="sm"
@@ -381,6 +437,15 @@ export function AdminResidentsClient() {
         confirmLabel={deactivateResident.isPending ? "Deactivating..." : "Deactivate"}
         variant="danger"
         onConfirm={() => void confirmDeactivate()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(repairTarget)}
+        onOpenChange={(open) => !open && setRepairTarget(null)}
+        title={`Repair lifecycle for ${repairTarget?.full_name ?? "resident"}?`}
+        description="This safely checks auth linkage, duplicate invites, stale onboarding, active allocations, invalid dues, and occupancy snapshots for this resident. All changes are tenant-scoped and audit logged."
+        confirmLabel={repairResidentLifecycle.isPending ? "Repairing..." : "Repair lifecycle"}
+        onConfirm={() => void confirmRepair()}
       />
 
       <ResidentInviteDialog

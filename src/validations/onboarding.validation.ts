@@ -19,55 +19,62 @@ export const residentOnboardingStatuses = [
   "suspended",
 ] as const
 
-export const onboardingProfileSchema = z
-  .object({
-    organizationId: uuidSchema,
-    fullName: z.string().trim().min(2).max(120),
-    preferredName: z.string().trim().max(80).optional(),
-    gender: z.string().trim().max(40).optional(),
-    dateOfBirth: dateOnlySchema,
-    phone: phoneSchema,
-    email: optionalEmailSchema,
-    parentName: z.string().trim().min(2).max(120),
-    parentPhone: phoneSchema,
-    parentEmail: optionalEmailSchema,
-    emergencyContactName: z.string().trim().min(2).max(120),
-    emergencyContactPhone: phoneSchema,
-    permanentAddress: z.string().trim().min(10).max(500),
-    aadhaarLast4: z.string().trim().regex(/^[0-9]{4}$/).optional(),
-    collegeName: z.string().trim().max(160).optional(),
-    courseName: z.string().trim().max(160).optional(),
-    guardianRelation: z.string().trim().max(80).optional(),
-  })
-  .superRefine((value, ctx) => {
-    const dob = new Date(`${value.dateOfBirth}T00:00:00.000Z`)
+export const onboardingProfileBaseSchema = z.object({
+  organizationId: uuidSchema,
+  fullName: z.string().trim().min(2).max(120),
+  preferredName: z.string().trim().max(80).optional(),
+  gender: z.string().trim().max(40).optional(),
+  dateOfBirth: dateOnlySchema,
+  phone: phoneSchema,
+  email: optionalEmailSchema,
+  parentName: z.string().trim().min(2).max(120),
+  parentPhone: phoneSchema,
+  parentEmail: optionalEmailSchema,
+  emergencyContactName: z.string().trim().min(2).max(120),
+  emergencyContactPhone: phoneSchema,
+  permanentAddress: z.string().trim().min(10).max(500),
+  aadhaarLast4: z.string().trim().regex(/^[0-9]{4}$/).optional(),
+  collegeName: z.string().trim().max(160).optional(),
+  courseName: z.string().trim().max(160).optional(),
+  guardianRelation: z.string().trim().max(80).optional(),
+})
 
-    if (Number.isNaN(dob.getTime()) || dob > new Date()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["dateOfBirth"],
-        message: "Enter a valid date of birth.",
-      })
-      return
-    }
+function validateResidentAge(value: { dateOfBirth: string }, ctx: z.RefinementCtx) {
+  const dob = new Date(`${value.dateOfBirth}T00:00:00.000Z`)
 
-    const now = new Date()
-    const age =
-      now.getUTCFullYear() -
-      dob.getUTCFullYear() -
-      (now.getUTCMonth() < dob.getUTCMonth() ||
-      (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() < dob.getUTCDate())
-        ? 1
-        : 0)
+  if (Number.isNaN(dob.getTime()) || dob > new Date()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["dateOfBirth"],
+      message: "Enter a valid date of birth.",
+    })
+    return
+  }
 
-    if (age < 15) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["dateOfBirth"],
-        message: "Resident must be at least 15 years old.",
-      })
-    }
-  })
+  const now = new Date()
+  const age =
+    now.getUTCFullYear() -
+    dob.getUTCFullYear() -
+    (now.getUTCMonth() < dob.getUTCMonth() ||
+    (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() < dob.getUTCDate())
+      ? 1
+      : 0)
+
+  if (age < 15) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["dateOfBirth"],
+      message: "Resident must be at least 15 years old.",
+    })
+  }
+}
+
+export const onboardingProfileFormSchema = onboardingProfileBaseSchema
+  .omit({ organizationId: true })
+  .superRefine(validateResidentAge)
+
+export const onboardingProfileSchema =
+  onboardingProfileBaseSchema.superRefine(validateResidentAge)
 
 export const onboardingStatusQuerySchema = z.object({
   organizationId: uuidSchema.optional(),

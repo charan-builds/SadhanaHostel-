@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { PhoneNormalizationError, normalizePhoneNumber } from "@/lib/identity"
+
 export const uuidSchema = z.string().uuid()
 
 export const paginationSchema = z.object({
@@ -36,9 +38,23 @@ export const jsonObjectSchema = z.record(z.string(), z.unknown())
 export const phoneSchema = z
   .string()
   .trim()
-  .min(8)
-  .max(20)
-  .regex(/^[+0-9\s-]+$/, "Phone number contains unsupported characters.")
+  .min(8, "Phone number is too short.")
+  .max(24, "Phone number is too long.")
+  .transform((value, ctx) => {
+    try {
+      return normalizePhoneNumber(value)
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof PhoneNormalizationError
+            ? error.message
+            : "Enter a valid Indian mobile number.",
+      })
+
+      return z.NEVER
+    }
+  })
 
 export const optionalEmailSchema = z
   .string()

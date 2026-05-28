@@ -98,7 +98,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   const createResident = useCreateResident()
   const updateResident = useUpdateResident()
   const createInvite = useCreateResidentInvite()
-  const [sendInvite, setSendInvite] = useState(true)
   const [accessMode, setAccessMode] = useState<"activation_link" | "temporary_password">(
     "activation_link"
   )
@@ -170,8 +169,11 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       setCreatedInvite(null)
       setCreatedResident(null)
 
-      const savedResident = resident
-        ? await updateResident.mutateAsync({
+      let savedResident: Tables<"residents">
+      let generatedInvite: ResidentInviteCreated | null = null
+
+      if (resident) {
+        savedResident = await updateResident.mutateAsync({
             residentId: resident.id,
             organizationId,
             fullName: values.fullName,
@@ -192,7 +194,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             notes: values.notes || undefined,
             status: values.status,
           })
-        : await createResident.mutateAsync({
+      } else {
+        const createResult = await createResident.mutateAsync({
             organizationId,
             hostelId,
             admissionNumber: values.admissionNumber || undefined,
@@ -215,37 +218,24 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             bedLabel: values.bedLabel || undefined,
             allocatedFrom: values.allocatedFrom || undefined,
             notes: values.notes || undefined,
+            inviteDeliveryChannel:
+              accessMode === "temporary_password" ? "temp_password" : "whatsapp",
+            inviteExpiresInHours: 72,
           })
+
+        savedResident = createResult.resident
+        generatedInvite = createResult.invite
+      }
 
       if (!resident) {
         setCreatedResident(savedResident)
+        setCreatedInvite(generatedInvite)
 
-        if (sendInvite) {
-          try {
-            const invite = await createInvite.mutateAsync({
-              organizationId,
-              residentId: savedResident.id,
-              deliveryChannel:
-                accessMode === "temporary_password" ? "temp_password" : "whatsapp",
-              expiresInHours: 72,
-            })
-
-            setCreatedInvite(invite)
-            toast.success(
-              accessMode === "temporary_password"
-                ? "Resident created and temporary phone login is ready."
-                : "Resident created and WhatsApp onboarding link is ready."
-            )
-          } catch (inviteError) {
-            toast.warning(
-              inviteError instanceof FrontendApiError
-                ? `Resident created, but invite failed: ${inviteError.message}`
-                : "Resident created, but invite generation failed."
-            )
-          }
-        } else {
-          toast.success("Draft resident created. You can send activation later.")
-        }
+        toast.success(
+          accessMode === "temporary_password"
+            ? "Resident created and temporary phone login is ready."
+            : "Resident created and WhatsApp onboarding link is ready."
+        )
       } else {
         toast.success("Resident updated.")
       }
@@ -456,23 +446,16 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         {isCreate ? (
           <div className="md:col-span-2 rounded-lg border border-dashed bg-muted/30 p-4">
             <div className="grid gap-4 md:grid-cols-[1fr_240px] md:items-start">
-              <label className="flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={sendInvite}
-                  onChange={(event) => setSendInvite(event.target.checked)}
-                  className="mt-1 size-4 rounded border-border"
-                />
-                <span>
-                  <span className="block font-medium text-foreground">
-                    Generate resident access now
-                  </span>
-                  <span className="mt-1 block text-muted-foreground">
-                    Share a WhatsApp activation link or a phone login temporary password. Email can
-                    be added later during self-onboarding.
-                  </span>
-                </span>
-              </label>
+              <div className="text-sm">
+                <p className="font-medium text-foreground">
+                  Resident access will be generated now
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Quick admission always creates draft resident access so onboarding cannot
+                  deadlock. Share a WhatsApp activation link or a phone login temporary password.
+                  Email can be added later during self-onboarding.
+                </p>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="accessMode">Access mode</Label>
                 <Select
@@ -480,7 +463,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                   onValueChange={(value) =>
                     setAccessMode(value as "activation_link" | "temporary_password")
                   }
-                  disabled={!sendInvite}
                 >
                   <SelectTrigger id="accessMode" className="h-9 w-full">
                     <SelectValue />
@@ -515,11 +497,9 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
           )}
           {resident
             ? "Update Resident"
-            : sendInvite
-              ? accessMode === "temporary_password"
-                ? "Create & Issue Phone Login"
-                : "Create & Generate Access"
-              : "Create Draft Resident"}
+            : accessMode === "temporary_password"
+              ? "Create & Issue Phone Login"
+              : "Create & Generate Access"}
         </Button>
       </div>
     </form>

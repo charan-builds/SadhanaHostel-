@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest"
+
+import {
+  onboardingProfileBaseSchema,
+  onboardingProfileFormSchema,
+  onboardingProfileSchema,
+} from "@/validations/onboarding.validation"
+import { TEST_ORGANIZATION_ID } from "@/tests/fixtures"
+
+const adultBirthDate = "2000-01-01"
+const underageBirthDate = "2020-01-01"
+
+function onboardingProfile(overrides: Record<string, unknown> = {}) {
+  return {
+    organizationId: TEST_ORGANIZATION_ID,
+    fullName: "Resident User",
+    dateOfBirth: adultBirthDate,
+    phone: "+919000000002",
+    email: "resident.test@sadhanahostel.example",
+    parentName: "Parent User",
+    parentPhone: "+919000000003",
+    parentEmail: "parent.test@sadhanahostel.example",
+    emergencyContactName: "Emergency Contact",
+    emergencyContactPhone: "+919000000004",
+    permanentAddress: "Sadhana Boys Hostel, Main Road, Hyderabad",
+    ...overrides,
+  }
+}
+
+describe("onboarding validation schemas", () => {
+  it("derives form schemas from the non-refined base schema before applying refinements", () => {
+    expect(() => {
+      onboardingProfileBaseSchema.omit({ organizationId: true })
+    }).not.toThrow()
+
+    expect(
+      onboardingProfileFormSchema.parse(
+        onboardingProfile({ organizationId: undefined })
+      )
+    ).toMatchObject({
+      fullName: "Resident User",
+      phone: "+919000000002",
+    })
+  })
+
+  it("keeps resident age rules on both API and client form schemas", () => {
+    expect(() =>
+      onboardingProfileSchema.parse(
+        onboardingProfile({ dateOfBirth: underageBirthDate })
+      )
+    ).toThrow(/at least 15 years old/)
+
+    expect(() =>
+      onboardingProfileFormSchema.parse(
+        onboardingProfile({
+          organizationId: undefined,
+          dateOfBirth: underageBirthDate,
+        })
+      )
+    ).toThrow(/at least 15 years old/)
+  })
+
+  it("evaluates the resident onboarding client module without refined-schema omit crashes", async () => {
+    await expect(
+      import("@/components/resident/onboarding/resident-onboarding-client")
+    ).resolves.toHaveProperty("ResidentOnboardingClient")
+  })
+})

@@ -10,6 +10,9 @@ import type {
   AutomationSettingsInput,
   ConsistencyRepairInput,
   ConsistencyReportQueryInput,
+  DemoDataResetInput,
+  IdentityReconciliationQueryInput,
+  IdentityRepairInput,
 } from "@/validations/operations.validation"
 
 export function useAutomationDashboard(params: AutomationDashboardQueryInput) {
@@ -95,6 +98,55 @@ export function useRepairConsistency() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
         void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(scope) })
       }
+    },
+  })
+}
+
+export function useResetDemoData() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: DemoDataResetInput) => operationsSdk.resetDemoData(input),
+    onSuccess: (_result, input) => {
+      const scope = { organizationId: input.organizationId, hostelId: input.hostelId }
+
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.operations.all(scope),
+      })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admissions.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.leaves.all(scope) })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.support.alerts(scope),
+      })
+    },
+  })
+}
+
+export function useIdentityReconciliation(params: IdentityReconciliationQueryInput) {
+  return useQuery({
+    queryKey: queryKeys.operations.identity(params),
+    queryFn: () => operationsSdk.identityReconciliation(params),
+    enabled: Boolean(params.organizationId),
+    staleTime: 30_000,
+  })
+}
+
+export function useRepairIdentities() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: IdentityRepairInput) => operationsSdk.repairIdentities(input),
+    onSuccess: (_result, input) => {
+      const scope = { organizationId: input.organizationId, hostelId: input.hostelId }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.operations.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.staffAccess.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.support.alerts(scope) })
     },
   })
 }

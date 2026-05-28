@@ -130,9 +130,6 @@ export class ResidentInvitesRepository {
       .from("resident_invites")
       .select("*")
       .eq("invite_code", input.inviteCode)
-      .eq("status", "pending")
-      .is("used_at", null)
-      .is("revoked_at", null)
 
     const { data, error } = await query
       .order("created_at", { ascending: false })
@@ -210,6 +207,40 @@ export class ResidentInvitesRepository {
     return data as ResidentInviteRow
   }
 
+  async supersedeForRecoveredIdentity(input: {
+    invite: ResidentInviteRow
+    actorUserId: string
+    linkedResidentId: string
+  }) {
+    const { data, error } = await this.inviteDb()
+      .from("resident_invites")
+      .update({
+        status: "revoked",
+        revoked_at: new Date().toISOString(),
+        updated_by: input.actorUserId,
+        metadata: {
+          ...objectFromJson(input.invite.metadata),
+          activation_lifecycle_state: "superseded_by_existing_identity",
+          auth_linkage_state: "linked_to_existing_resident",
+          recovered_resident_id: input.linkedResidentId,
+          superseded_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", input.invite.id)
+      .eq("organization_id", input.invite.organization_id)
+      .eq("status", "pending")
+      .is("used_at", null)
+      .is("revoked_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to supersede resident invite.")
+    }
+
+    return data as ResidentInviteRow
+  }
+
   async markUsed(inviteId: string, organizationId: string, userId: string) {
     const { data, error } = await this.inviteDb()
       .from("resident_invites")
@@ -269,6 +300,27 @@ export class ResidentInvitesRepository {
 
     if (error) {
       throwRepositoryError(error, "Unable to activate resident invite.")
+    }
+
+    return data as unknown as { id: string; organization_id: string; hostel_id: string | null }
+  }
+
+  async recoverUsedInviteActivationAtomic(input: {
+    inviteId: string
+    inviteTokenHash: string
+    authUserId: string
+  }) {
+    const { data, error } = await this.inviteDb().rpc(
+      "recover_resident_invite_activation_atomic",
+      {
+        p_invite_id: input.inviteId,
+        p_invite_token_hash: input.inviteTokenHash,
+        p_auth_user_id: input.authUserId,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to recover resident invite activation.")
     }
 
     return data as unknown as { id: string; organization_id: string; hostel_id: string | null }
@@ -373,4 +425,12 @@ export class ResidentInvitesRepository {
   private inviteDb() {
     return this.db as unknown as GenericInviteDb
   }
+}
+
+function objectFromJson(value: Json): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }

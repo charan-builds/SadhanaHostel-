@@ -1,4 +1,5 @@
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
+import { normalizeOptionalPhoneNumber } from "@/lib/identity"
 
 import {
   createPaginationMeta,
@@ -166,7 +167,7 @@ export class ResidentsRepository {
     phone?: string
     email?: string
   }) {
-    const phone = input.phone?.trim()
+    const phone = normalizeOptionalPhoneNumber(input.phone)
     const email = input.email?.trim().toLowerCase()
 
     if (!phone && !email) {

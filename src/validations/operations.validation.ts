@@ -66,9 +66,47 @@ export const consistencyRepairSchema = z.object({
   dryRun: z.boolean().default(true),
 })
 
+export const DEMO_DATA_RESET_CONFIRMATION = "RESET DEMO DATA"
+
+export const demoDataResetSchema = z
+  .object({
+    organizationId: uuidSchema,
+    hostelId: uuidSchema.optional(),
+    dryRun: z.boolean().default(true),
+    confirmation: z.string().trim().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.dryRun && value.confirmation !== DEMO_DATA_RESET_CONFIRMATION) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmation"],
+        message: `Type ${DEMO_DATA_RESET_CONFIRMATION} to reset demo/test data.`,
+      })
+    }
+  })
+
+export const identityReconciliationQuerySchema = z.object({
+  organizationId: uuidSchema.optional(),
+  hostelId: uuidSchema.optional(),
+})
+
+export const identityRepairSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  action: z.enum([
+    "repair_safe",
+    "delete_orphan_auth",
+    "scan_only",
+  ]).default("repair_safe"),
+  dryRun: z.boolean().default(true),
+})
+
 export type AutomationJobName = z.infer<typeof automationJobNameSchema>
 export type AutomationDashboardQueryInput = z.infer<typeof automationDashboardQuerySchema>
 export type AutomationRunInput = z.infer<typeof automationRunSchema>
 export type AutomationSettingsInput = z.infer<typeof automationSettingsSchema>
 export type ConsistencyReportQueryInput = z.infer<typeof consistencyReportQuerySchema>
 export type ConsistencyRepairInput = z.infer<typeof consistencyRepairSchema>
+export type DemoDataResetInput = z.infer<typeof demoDataResetSchema>
+export type IdentityReconciliationQueryInput = z.infer<typeof identityReconciliationQuerySchema>
+export type IdentityRepairInput = z.infer<typeof identityRepairSchema>

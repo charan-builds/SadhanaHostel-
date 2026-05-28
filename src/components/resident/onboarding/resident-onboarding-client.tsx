@@ -39,11 +39,11 @@ import {
   useUpdateResidentOnboardingProfile,
 } from "@/hooks"
 import {
-  onboardingProfileSchema,
+  onboardingProfileFormSchema,
   type OnboardingProfileInput,
 } from "@/validations/onboarding.validation"
 
-const formSchema = onboardingProfileSchema.omit({ organizationId: true })
+const formSchema = onboardingProfileFormSchema
 type FormInput = z.input<typeof formSchema>
 type FormValues = z.output<typeof formSchema>
 

@@ -7,13 +7,17 @@ import { conflict, forbidden } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { OperationsRepository } from "@/repositories/operations.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import type { ResidentInviteCreated } from "@/types/invites"
+import type { ResidentCreateResult } from "@/types/residents"
 import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import type { RealtimeEventType } from "@/services/realtime/event-types"
 import {
   checkoutResidentSchema,
   createResidentSchema,
+  repairResidentLifecycleSchema,
   residentIdMutationSchema,
   residentListSchema,
   updateOwnResidentProfileSchema,
@@ -21,14 +25,34 @@ import {
 } from "@/validations/resident.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+import { ResidentInviteService } from "./invites"
+
+type ResidentsServiceDependencies = {
+  authService?: AuthService
+  residentsRepository?: ResidentsRepository
+  residentInviteService?: Pick<ResidentInviteService, "createResidentInvite">
+  operationsRepository?: Pick<OperationsRepository, "repairResidentLifecycle">
+}
 
 export class ResidentsService {
   private readonly authService: AuthService
   private readonly residentsRepository: ResidentsRepository
+  private readonly residentInviteService: Pick<ResidentInviteService, "createResidentInvite">
+  private readonly operationsRepository: Pick<OperationsRepository, "repairResidentLifecycle">
 
-  constructor(private readonly db: AppSupabaseClient) {
-    this.authService = new AuthService(db)
-    this.residentsRepository = new ResidentsRepository(db)
+  constructor(
+    private readonly db: AppSupabaseClient,
+    dependencies: ResidentsServiceDependencies = {}
+  ) {
+    this.authService = dependencies.authService ?? new AuthService(db)
+    this.residentsRepository = dependencies.residentsRepository ?? new ResidentsRepository(db)
+    this.residentInviteService =
+      dependencies.residentInviteService ??
+      new ResidentInviteService(db, {
+        authService: this.authService,
+        residentsRepository: this.residentsRepository,
+      })
+    this.operationsRepository = dependencies.operationsRepository ?? new OperationsRepository(db)
   }
 
   static async create() {
@@ -89,7 +113,7 @@ export class ResidentsService {
     return assertFound(resident, "Resident profile is not linked to this account yet.")
   }
 
-  async createResident(input: unknown) {
+  async createResident(input: unknown): Promise<ResidentCreateResult> {
     const values = createResidentSchema.parse(input)
     const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
 
@@ -109,10 +133,19 @@ export class ResidentsService {
     const resident = await this.createDraftResident(values, context.authUser.id)
     const currentResident =
       (await this.residentsRepository.getById(resident.id, values.organizationId)) ?? resident
+    const invite = await this.createOnboardingInviteForResident({
+      organizationId: values.organizationId,
+      residentId: currentResident.id,
+      deliveryChannel: values.inviteDeliveryChannel,
+      expiresInHours: values.inviteExpiresInHours,
+    })
 
     await this.publishResidentEvent("resident.created", currentResident, context.authUser.id)
 
-    return currentResident
+    return {
+      resident: currentResident,
+      invite,
+    }
   }
 
   private async createDraftResident(
@@ -161,6 +194,24 @@ export class ResidentsService {
       })
     } catch (error) {
       throw mapResidentCreateError(error)
+    }
+  }
+
+  private async createOnboardingInviteForResident(input: {
+    organizationId: string
+    residentId: string
+    deliveryChannel: ReturnType<typeof createResidentSchema.parse>["inviteDeliveryChannel"]
+    expiresInHours: number
+  }): Promise<ResidentInviteCreated> {
+    try {
+      return await this.residentInviteService.createResidentInvite({
+        organizationId: input.organizationId,
+        residentId: input.residentId,
+        deliveryChannel: input.deliveryChannel,
+        expiresInHours: input.expiresInHours,
+      })
+    } catch (error) {
+      throw mapResidentInviteCreateError(error)
     }
   }
 
@@ -309,6 +360,50 @@ export class ResidentsService {
     }
   }
 
+  async repairResidentLifecycle(input: unknown) {
+    const values = repairResidentLifecycleSchema.parse(input)
+    const context = await this.authService.requireRole(ADMIN_ROLES)
+
+    const existingResident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingResident.organization_id,
+      existingResident.hostel_id
+    )
+
+    const result = await this.operationsRepository.repairResidentLifecycle({
+      organizationId: values.organizationId,
+      residentId: values.residentId,
+      actorUserId: context.authUser.id,
+      dryRun: values.dryRun,
+    })
+
+    logger.info({
+      event: "resident.lifecycle_repair_requested",
+      message: "Admin executed resident lifecycle repair.",
+      organizationId: values.organizationId,
+      userId: context.authUser.id,
+      metadata: {
+        residentId: values.residentId,
+        dryRun: values.dryRun,
+        correlationId: result.correlationId,
+        repairs: result.repairs,
+      },
+    })
+
+    await this.publishResidentEvent(
+      "resident.updated",
+      existingResident,
+      context.authUser.id
+    )
+
+    return result
+  }
+
   private async publishResidentEvent(
     type: RealtimeEventType,
     resident: { id: string; organization_id: string; hostel_id: string | null },
@@ -423,6 +518,24 @@ function mapResidentCreateError(error: unknown): never {
         type: "resident_duplicate_constraint",
         actions: ["open_resident", "continue_onboarding", "resend_activation"],
       }
+    )
+  }
+
+  throw error
+}
+
+function mapResidentInviteCreateError(error: unknown): never {
+  const message = error instanceof Error ? error.message : ""
+
+  if (message.includes("already has an activated portal account")) {
+    throw conflict(
+      "Resident already has portal access. Open the resident profile to resend access or repair auth linkage."
+    )
+  }
+
+  if (message.includes("email or phone") || message.includes("phone before invite")) {
+    throw conflict(
+      "Resident was created, but onboarding access could not be generated because phone or email is missing. Add a phone number and resend activation."
     )
   }
 

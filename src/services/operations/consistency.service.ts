@@ -2,6 +2,12 @@ import "server-only"
 
 import { areOperationalRepairsEnabled } from "@/config/launch"
 import { ADMIN_PORTAL_ROLES, ADMIN_ROLES } from "@/constants/auth"
+import {
+  formatResidentIdentityMode,
+  getResidentIdentityMode,
+  type ResidentIdentityMode,
+} from "@/lib/resident-identity"
+import { tryNormalizePhoneNumber } from "@/lib/identity"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -630,6 +636,8 @@ export async function scanConsistency(
   findings.push(...await detectDuplicateResidents(repository, input))
   findings.push(...await detectDuplicateInviteAnomalies(repository, input, now))
   findings.push(...await detectOnboardingAuthDeadlocks(repository, input))
+  findings.push(...await detectPhoneIdentityAnomalies(repository, input))
+  findings.push(...await detectResidentTenantIdentityAnomalies(repository, input))
   findings.push(...await detectResidentAllocationAnomalies(repository, input))
   findings.push(...await detectOverCapacityRooms(repository, input))
   findings.push(...await detectCapacitySnapshotAnomalies(repository, input))
@@ -805,11 +813,12 @@ async function detectOnboardingAuthDeadlocks(
     repository.list("resident_invites", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      select: "id,organization_id,hostel_id,resident_id,status,used_at,revoked_at,expires_at",
+      select: "id,organization_id,hostel_id,resident_id,status,email,phone,metadata,used_at,revoked_at,expires_at",
       limit: 5000,
     }),
   ])
   const userById = indexById(users)
+  const residentById = indexById(residents)
   const pendingInviteResidentIds = new Set(
     invites
       .filter((invite) => stringValue(invite, "status") === "pending")
@@ -846,6 +855,33 @@ async function detectOnboardingAuthDeadlocks(
         (status === "draft" || onboardingStatus === "invited") &&
         !pendingInviteResidentIds.has(residentId)
     )
+  })
+  const activeInvites = invites.filter((invite) => {
+    const expiresAt = Date.parse(stringValue(invite, "expires_at") ?? "")
+
+    return Boolean(
+      stringValue(invite, "status") === "pending" &&
+        !stringValue(invite, "used_at") &&
+        !stringValue(invite, "revoked_at") &&
+        Number.isFinite(expiresAt) &&
+        expiresAt > Date.now()
+    )
+  })
+  const inviteIdentityModeMismatches = activeInvites.filter((invite) => {
+    const resident = residentById.get(stringValue(invite, "resident_id") ?? "")
+
+    if (!resident) {
+      return false
+    }
+
+    return getRowIdentityMode(invite) !== getRowIdentityMode(resident)
+  })
+  const authIdentityModeMismatches = residents.filter((resident) => {
+    const userId = stringValue(resident, "user_id")
+    const user = userId ? userById.get(userId) : null
+    const actualMode = authMetadataIdentityMode(user)
+
+    return Boolean(actualMode && actualMode !== getRowIdentityMode(resident))
   })
   const findings: ConsistencyFinding[] = []
 
@@ -925,7 +961,221 @@ async function detectOnboardingAuthDeadlocks(
     )
   }
 
+  if (inviteIdentityModeMismatches.length > 0) {
+    findings.push(
+      finding(
+        "onboarding.invite_identity_mode_mismatch",
+        "onboarding",
+        "high",
+        "Invite identity mode does not match resident record",
+        "Some pending invites ask residents to verify the wrong identity type. Revoke and resend access before activation.",
+        inviteIdentityModeMismatches.length,
+        "dedupe_invites",
+        inviteIdentityModeMismatches.slice(0, 20).map((invite) => {
+          const resident = residentById.get(stringValue(invite, "resident_id") ?? "")
+          const expectedMode = resident ? getRowIdentityMode(resident) : null
+          const actualMode = getRowIdentityMode(invite)
+
+          return {
+            tableName: "resident_invites",
+            recordId: stringValue(invite, "id"),
+            residentId: stringValue(invite, "resident_id"),
+            organizationId: stringValue(invite, "organization_id"),
+            hostelId: stringValue(invite, "hostel_id"),
+            anomalyType: "invite_identity_mode_mismatch",
+            expectedState: expectedMode
+              ? `activation requires ${formatResidentIdentityMode(expectedMode)}`
+              : "resident exists with a clear activation identity mode",
+            actualState: `invite is ${formatResidentIdentityMode(actualMode)}`,
+            expectedOrganizationId: resident ? stringValue(resident, "organization_id") : null,
+            actualOrganizationId: stringValue(invite, "organization_id"),
+            expectedHostelId: resident ? stringValue(resident, "hostel_id") : null,
+            actualHostelId: stringValue(invite, "hostel_id"),
+            recommendedRepairAction: "dedupe_invites",
+            recommendation: "Revoke stale invites and resend activation so the resident sees the correct phone/email verification step.",
+          }
+        })
+      )
+    )
+  }
+
+  if (authIdentityModeMismatches.length > 0) {
+    findings.push(
+      finding(
+        "onboarding.auth_identity_mode_mismatch",
+        "onboarding",
+        "high",
+        "Auth identity mode does not match resident record",
+        "Some linked auth profiles carry stale phone/email activation metadata. Login may work, but recovery and diagnostics can guide the resident incorrectly.",
+        authIdentityModeMismatches.length,
+        "resync_auth_linkage",
+        authIdentityModeMismatches.slice(0, 20).map((resident) => {
+          const user = userById.get(stringValue(resident, "user_id") ?? "")
+          const expectedMode = getRowIdentityMode(resident)
+          const actualMode = authMetadataIdentityMode(user)
+
+          return {
+            tableName: "residents",
+            recordId: stringValue(resident, "id"),
+            residentId: stringValue(resident, "id"),
+            organizationId: stringValue(resident, "organization_id"),
+            hostelId: stringValue(resident, "hostel_id"),
+            anomalyType: "auth_identity_mode_mismatch",
+            expectedState: `auth profile metadata is ${formatResidentIdentityMode(expectedMode)}`,
+            actualState: actualMode
+              ? `auth profile metadata is ${formatResidentIdentityMode(actualMode)}`
+              : "auth profile metadata is missing identity mode",
+            expectedOrganizationId: stringValue(resident, "organization_id"),
+            actualOrganizationId: stringValue(user ?? {}, "organization_id"),
+            expectedHostelId: stringValue(resident, "hostel_id"),
+            actualHostelId: stringValue(resident, "hostel_id"),
+            recommendedRepairAction: "resync_auth_linkage",
+            recommendation: "Run auth linkage repair, then ask the resident to continue onboarding with the latest access instructions.",
+          }
+        })
+      )
+    )
+  }
+
   return findings
+}
+
+async function detectPhoneIdentityAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const [residents, users, invites] = await Promise.all([
+    repository.list("residents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,phone,user_id,deleted_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("users", {
+      organizationId: input.organizationId,
+      select: "id,organization_id,phone,deleted_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("resident_invites", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,phone,status,used_at,revoked_at",
+      limit: 5000,
+    }),
+  ])
+  const rows = [
+    ...residents.map((record) => ({ tableName: "residents", record })),
+    ...users.map((record) => ({ tableName: "users", record })),
+    ...invites.map((record) => ({ tableName: "resident_invites", record })),
+  ]
+  const anomalies = rows
+    .map(({ tableName, record }) => {
+      const phone = stringValue(record, "phone")
+
+      if (!phone) {
+        return null
+      }
+
+      const normalized = tryNormalizePhoneNumber(phone)
+
+      if (normalized && normalized === phone) {
+        return null
+      }
+
+      return {
+        tableName,
+        record,
+        normalized,
+      }
+    })
+    .filter((value): value is {
+      tableName: string
+      record: Record<string, unknown>
+      normalized: string | null
+    } => Boolean(value))
+
+  if (anomalies.length === 0) {
+    return []
+  }
+
+  return [
+    finding(
+      "identity.phone_normalization_mismatch",
+      "onboarding",
+      "high",
+      "Phone identities are not normalized",
+      "Resident login, activation, OTP, and WhatsApp delivery require E.164 Indian mobile numbers. Mixed formats can make Supabase Auth reject valid residents.",
+      anomalies.length,
+      "review_manually",
+      anomalies.slice(0, 20).map(({ tableName, record, normalized }) => ({
+        tableName,
+        recordId: stringValue(record, "id"),
+        residentId:
+          tableName === "residents"
+            ? stringValue(record, "id")
+            : stringValue(record, "resident_id"),
+        organizationId: stringValue(record, "organization_id"),
+        hostelId: stringValue(record, "hostel_id"),
+        anomalyType: normalized ? "phone_not_e164" : "invalid_phone_identity",
+        expectedState: normalized ?? "valid Indian E.164 mobile number",
+        actualState: stringValue(record, "phone"),
+        expectedOrganizationId: stringValue(record, "organization_id"),
+        actualOrganizationId: stringValue(record, "organization_id"),
+        expectedHostelId: stringValue(record, "hostel_id"),
+        actualHostelId: stringValue(record, "hostel_id"),
+        recommendedRepairAction: "review_manually",
+        recommendation:
+          "Correct the phone in the admin panel or apply the phone identity normalization migration, then resend activation if the resident still cannot log in.",
+      }))
+    ),
+  ]
+}
+
+async function detectResidentTenantIdentityAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const rows = await repository.listResidentTenantIdentityAnomalies({
+    organizationId: input.organizationId,
+    hostelId: input.hostelId,
+    limit: 100,
+  })
+
+  if (rows.length === 0) {
+    return []
+  }
+
+  return [
+    finding(
+      "security.resident_tenant_identity",
+      "security",
+      "critical",
+      "Resident tenant identity needs repair",
+      "Historical or partial resident records have missing tenant scope, invalid hostel linkage, or broken auth ownership. These rows are skipped by normalization and must be reviewed before activation, billing, or occupancy repair.",
+      rows.length,
+      "review_manually",
+      rows.slice(0, 20).map((row) => ({
+        tableName: stringValue(row, "table_name") ?? "residents",
+        recordId: stringValue(row, "record_id"),
+        residentId: stringValue(row, "resident_id"),
+        organizationId: stringValue(row, "organization_id"),
+        hostelId: stringValue(row, "hostel_id"),
+        anomalyType: stringValue(row, "anomaly_type") ?? "resident_tenant_identity_anomaly",
+        expectedState: stringValue(row, "expected_state"),
+        actualState: stringValue(row, "actual_state"),
+        expectedOrganizationId: stringValue(row, "expected_organization_id"),
+        actualOrganizationId: stringValue(row, "organization_id"),
+        expectedHostelId: stringValue(row, "expected_hostel_id"),
+        actualHostelId: stringValue(row, "hostel_id"),
+        recommendedRepairAction: "review_manually",
+        recommendation:
+          stringValue(row, "recommendation") ??
+          "Review resident tenant, hostel, auth, invite, and audit history before repairing manually.",
+      }))
+    ),
+  ]
 }
 
 async function detectOverCapacityRooms(
@@ -2151,4 +2401,38 @@ function numberValue(row: Record<string, unknown>, key: string) {
   const value = row[key]
 
   return typeof value === "number" ? value : Number(value ?? 0)
+}
+
+function getRowIdentityMode(row: Record<string, unknown>) {
+  return getResidentIdentityMode({
+    email: stringValue(row, "email"),
+    phone: stringValue(row, "phone"),
+  })
+}
+
+function authMetadataIdentityMode(row?: Record<string, unknown> | null): ResidentIdentityMode | null {
+  const metadata = recordFromUnknown(row?.metadata)
+  const mode = metadata.resident_identity_mode
+
+  if (mode === "phone" || mode === "phone_only") {
+    return "phone_only"
+  }
+
+  if (mode === "email" || mode === "email_only") {
+    return "email_only"
+  }
+
+  if (mode === "email_and_phone" || mode === "hybrid") {
+    return "hybrid"
+  }
+
+  return null
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }

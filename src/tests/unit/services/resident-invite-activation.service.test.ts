@@ -67,14 +67,31 @@ function createServiceHarness(invite: ResidentInviteRow) {
           data: { user: authUserFixture() },
           error: null,
         }),
+        getUserById: vi.fn().mockResolvedValue({
+          data: { user: authUserFixture() },
+          error: null,
+        }),
+        deleteUser: vi.fn().mockResolvedValue({ data: {}, error: null }),
       },
     },
   }
   const invitesRepository = {
     findByTokenHash: vi.fn().mockResolvedValue(invite),
     findByCodeAndIdentity: vi.fn().mockResolvedValue(invite),
+    listForResident: vi.fn().mockResolvedValue([invite]),
     markExpired: vi.fn(),
+    supersedeForRecoveredIdentity: vi.fn().mockResolvedValue({
+      ...invite,
+      status: "revoked",
+      revoked_at: "2026-05-23T01:00:00.000Z",
+    }),
     activateInviteAtomic: vi.fn().mockResolvedValue(
+      residentFixture({
+        user_id: ACTIVATION_USER_ID,
+        status: "draft",
+      })
+    ),
+    recoverUsedInviteActivationAtomic: vi.fn().mockResolvedValue(
       residentFixture({
         user_id: ACTIVATION_USER_ID,
         status: "draft",
@@ -94,6 +111,7 @@ function createServiceHarness(invite: ResidentInviteRow) {
   }
   const usersRepository = {
     getById: vi.fn().mockResolvedValue(null),
+    updateProfile: vi.fn().mockResolvedValue({}),
   }
   const eventPublisher = {
     publish: vi.fn().mockResolvedValue(undefined),
@@ -155,6 +173,174 @@ describe("ResidentInviteService activation bootstrap", () => {
     })
   })
 
+  it("returns identity-aware safe metadata for phone-only invite lookup", async () => {
+    const invite = createInviteFixture({
+      email: null,
+      phone: "90000 00002",
+    })
+    const harness = createServiceHarness(invite)
+
+    await expect(
+      harness.service.validateInvite({
+        inviteCode: invite.invite_code,
+      })
+    ).resolves.toMatchObject({
+      identityMode: "phone_only",
+      phoneRequired: true,
+      emailRequired: false,
+      maskedPhone: expect.stringMatching(/0002$/),
+      maskedEmail: null,
+      authLinked: false,
+      activationState: "activation_pending",
+    })
+  })
+
+  it("returns identity-aware safe metadata for email-only invite lookup", async () => {
+    const invite = createInviteFixture({
+      email: "resident.test@sadhanahostel.example",
+      phone: null,
+    })
+    const harness = createServiceHarness(invite)
+
+    await expect(
+      harness.service.validateInvite({
+        inviteCode: invite.invite_code,
+      })
+    ).resolves.toMatchObject({
+      identityMode: "email_only",
+      phoneRequired: false,
+      emailRequired: true,
+      maskedEmail: "r******@sadhanahostel.example",
+      maskedPhone: null,
+    })
+  })
+
+  it("returns hybrid metadata when both resident identities are available", async () => {
+    const invite = createInviteFixture()
+    const harness = createServiceHarness(invite)
+
+    await expect(
+      harness.service.validateInvite({
+        inviteCode: invite.invite_code,
+      })
+    ).resolves.toMatchObject({
+      identityMode: "hybrid",
+      phoneRequired: false,
+      emailRequired: false,
+      maskedEmail: "r******@sadhanahostel.example",
+      maskedPhone: expect.stringMatching(/0002$/),
+    })
+  })
+
+  it("activates phone-only residents without requiring an email identity", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      email: null,
+      phone: "90000 00002",
+      invite_token_hash: hashInviteToken(token),
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.db.auth.admin.createUser.mockResolvedValue({
+      data: {
+        user: authUserFixture({
+          email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+          phone: "+919000000002",
+          user_metadata: {
+            internal_auth_email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+          },
+        }),
+      },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: "+919000000002",
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    const payload = harness.db.auth.admin.createUser.mock.calls[0]?.[0]
+
+    expect(payload).toMatchObject({
+      email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+      email_confirm: true,
+      phone: "+919000000002",
+      phone_confirm: true,
+      password: "StrongPassword123!",
+      user_metadata: expect.objectContaining({
+        resident_identity_mode: "phone",
+        resident_id: invite.resident_id,
+        auth_login_email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+        internal_auth_email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+        phone_password_login_strategy: "internal_email_alias",
+      }),
+    })
+    expect(harness.usersRepository.updateProfile).toHaveBeenCalledWith(
+      ACTIVATION_USER_ID,
+      expect.objectContaining({
+        email: null,
+        phone: "+919000000002",
+        metadata: expect.objectContaining({
+          auth_login_email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+          internal_auth_email: `resident-${invite.resident_id.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+        }),
+      })
+    )
+  })
+
+  it("rejects email entry for phone-only activation codes", async () => {
+    const invite = createInviteFixture({
+      email: null,
+      phone: "90000 00002",
+    })
+    const harness = createServiceHarness(invite)
+
+    await expect(
+      harness.service.activateInvite({
+        inviteCode: invite.invite_code,
+        email: "wrong@sadhanahostel.example",
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message:
+        "This invite uses phone verification. Enter the phone number shared with hostel administration.",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects phone entry for email-only activation codes", async () => {
+    const invite = createInviteFixture({
+      email: "resident.test@sadhanahostel.example",
+      phone: null,
+    })
+    const harness = createServiceHarness(invite)
+
+    await expect(
+      harness.service.activateInvite({
+        inviteCode: invite.invite_code,
+        phone: "9000000002",
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message:
+        "This invite uses email verification. Enter the email shared with hostel administration.",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+  })
+
   it("retries activation safely when the auth user already exists but the resident is not linked yet", async () => {
     const token = generateSignedInviteToken()
     const invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
@@ -179,6 +365,44 @@ describe("ResidentInviteService activation bootstrap", () => {
     expect(harness.invitesRepository.activateInviteAtomic).toHaveBeenCalled()
   })
 
+  it("recovers a concurrent activation race when Supabase reports a duplicate identity during create", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
+    const harness = createServiceHarness(invite)
+
+    harness.db.auth.admin.listUsers
+      .mockResolvedValueOnce({ data: { users: [] }, error: null })
+      .mockResolvedValueOnce({ data: { users: [] }, error: null })
+      .mockResolvedValueOnce({ data: { users: [authUserFixture()] }, error: null })
+    harness.db.auth.admin.createUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: "A user with this email address has already been registered" },
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: invite.email,
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    expect(harness.db.auth.admin.createUser).toHaveBeenCalledTimes(1)
+    expect(harness.db.auth.admin.updateUserById).toHaveBeenCalledWith(
+      ACTIVATION_USER_ID,
+      expect.objectContaining({ password: "StrongPassword123!" })
+    )
+    expect(harness.invitesRepository.activateInviteAtomic).toHaveBeenCalledWith({
+      inviteId: invite.id,
+      inviteTokenHash: invite.invite_token_hash,
+      authUserId: ACTIVATION_USER_ID,
+    })
+  })
+
   it("blocks reused invites before mutating auth or resident state", async () => {
     const token = generateSignedInviteToken()
     const invite = createInviteFixture({
@@ -196,11 +420,203 @@ describe("ResidentInviteService activation bootstrap", () => {
       })
     ).rejects.toMatchObject({
       code: "CONFLICT",
-      message: "This invite is no longer active.",
+      message:
+        "This invite was consumed but the resident account is not linked. Ask hostel administration to run onboarding repair and resend activation.",
     })
 
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("treats a completed activation retry as idempotent when the invite is already used and linked", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      invite_token_hash: hashInviteToken(token),
+      status: "used",
+      used_at: "2026-05-23T01:00:00.000Z",
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: ACTIVATION_USER_ID,
+        status: "draft",
+        email: invite.email,
+        phone: invite.phone,
+      })
+    )
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: { users: [authUserFixture()] },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: invite.email,
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("recovers an interrupted activation when the invite is used but resident linkage is missing", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      invite_token_hash: hashInviteToken(token),
+      status: "used",
+      used_at: "2026-05-23T01:00:00.000Z",
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: null,
+        status: "draft",
+        email: invite.email,
+        phone: invite.phone,
+      })
+    )
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          authUserFixture({
+            user_metadata: {
+              organization_id: invite.organization_id,
+              resident_id: invite.resident_id,
+            },
+          }),
+        ],
+      },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: invite.email,
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.db.auth.admin.updateUserById).toHaveBeenCalledWith(
+      ACTIVATION_USER_ID,
+      expect.objectContaining({ password: "StrongPassword123!" })
+    )
+    expect(harness.invitesRepository.recoverUsedInviteActivationAtomic).toHaveBeenCalledWith({
+      inviteId: invite.id,
+      inviteTokenHash: invite.invite_token_hash,
+      authUserId: ACTIVATION_USER_ID,
+    })
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("resumes a used invite by loading the resident-linked auth user when identity lookup is stale", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({
+      invite_token_hash: hashInviteToken(token),
+      status: "used",
+      used_at: "2026-05-23T01:00:00.000Z",
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: ACTIVATION_USER_ID,
+        status: "draft",
+        email: invite.email,
+        phone: invite.phone,
+      })
+    )
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: { users: [] },
+      error: null,
+    })
+    harness.db.auth.admin.getUserById.mockResolvedValue({
+      data: { user: authUserFixture() },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: invite.email,
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    expect(harness.db.auth.admin.getUserById).toHaveBeenCalledWith(ACTIVATION_USER_ID)
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("blocks suspended onboarding before creating auth users", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
+    const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: null,
+        status: "suspended",
+        email: invite.email,
+        phone: invite.phone,
+      })
+    )
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message:
+        "Resident access is suspended. Ask hostel administration to reactivate onboarding before using this invite.",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("maps bootstrap lifecycle failures to an actionable repair message", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
+    const harness = createServiceHarness(invite)
+
+    harness.invitesRepository.activateInviteAtomic.mockRejectedValue(
+      new RepositoryError("resident_activation_blocked_onboarding_status:suspended", "23514")
+    )
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message:
+        "Resident activation is blocked because onboarding is suspended. Run onboarding repair or resume onboarding from the admin panel before retrying.",
+    })
+
+    expect(harness.db.auth.admin.deleteUser).toHaveBeenCalledWith(ACTIVATION_USER_ID)
   })
 
   it("blocks phone reuse when an existing auth account belongs to another organization", async () => {
@@ -243,11 +659,22 @@ describe("ResidentInviteService activation bootstrap", () => {
 
   it("blocks phone reuse when an existing auth account is marked for another resident", async () => {
     const token = generateSignedInviteToken()
+    const linkedResidentId = "00000000-0000-4000-8000-000000009998"
     const invite = createInviteFixture({
       email: null,
       invite_token_hash: hashInviteToken(token),
     })
     const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockImplementation(async (residentId: string) =>
+      residentFixture({
+        id: residentId,
+        user_id: residentId === linkedResidentId ? ACTIVATION_USER_ID : null,
+        status: "draft",
+        email: null,
+        phone: residentId === linkedResidentId ? "+919999999999" : invite.phone,
+      })
+    )
 
     harness.db.auth.admin.listUsers.mockResolvedValue({
       data: {
@@ -257,7 +684,7 @@ describe("ResidentInviteService activation bootstrap", () => {
             phone: "+919000000002",
             user_metadata: {
               organization_id: invite.organization_id,
-              resident_id: "00000000-0000-4000-8000-000000009998",
+              resident_id: linkedResidentId,
             },
           } as Partial<User>),
         ],
@@ -273,10 +700,86 @@ describe("ResidentInviteService activation bootstrap", () => {
       })
     ).rejects.toMatchObject({
       code: "CONFLICT",
-      message: "This login account is already linked to another resident.",
+      message:
+        "This login account belongs to a different resident identity. Ask hostel administration to merge duplicates or repair auth linkage before retrying.",
     })
 
     expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
+  })
+
+  it("recovers duplicate draft activation when the auth identity already belongs to a same-phone resident", async () => {
+    const token = generateSignedInviteToken()
+    const linkedResidentId = "00000000-0000-4000-8000-000000009997"
+    const invite = createInviteFixture({
+      email: null,
+      phone: "90000 00002",
+      invite_token_hash: hashInviteToken(token),
+    })
+    const harness = createServiceHarness(invite)
+
+    harness.residentsRepository.getById.mockImplementation(async (residentId: string) =>
+      residentFixture({
+        id: residentId,
+        user_id: residentId === linkedResidentId ? ACTIVATION_USER_ID : null,
+        status: "draft",
+        email: null,
+        phone: invite.phone,
+      })
+    )
+    harness.db.auth.admin.listUsers.mockResolvedValue({
+      data: {
+        users: [
+          authUserFixture({
+            email: undefined,
+            phone: "+919000000002",
+            user_metadata: {
+              organization_id: invite.organization_id,
+              resident_id: linkedResidentId,
+            },
+          } as Partial<User>),
+        ],
+      },
+      error: null,
+    })
+    harness.db.auth.admin.updateUserById.mockResolvedValue({
+      data: {
+        user: authUserFixture({
+          email: `resident-${linkedResidentId.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+          phone: "+919000000002",
+          user_metadata: {
+            internal_auth_email: `resident-${linkedResidentId.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+          },
+        }),
+      },
+      error: null,
+    })
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: "+919000000002",
+      residentId: linkedResidentId,
+      redirectTo: "/resident/onboarding",
+    })
+
+    expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.db.auth.admin.updateUserById).toHaveBeenCalledWith(
+      ACTIVATION_USER_ID,
+      expect.objectContaining({
+        email: `resident-${linkedResidentId.replace(/-/g, "")}@auth.sadhanahostel.invalid`,
+        password: "StrongPassword123!",
+      })
+    )
+    expect(harness.invitesRepository.supersedeForRecoveredIdentity).toHaveBeenCalledWith({
+      invite,
+      actorUserId: ACTIVATION_USER_ID,
+      linkedResidentId,
+    })
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
@@ -322,6 +825,30 @@ describe("ResidentInviteService activation bootstrap", () => {
       code: "CONFLICT",
       message: "This resident profile is already linked to another login account.",
     })
+  })
+
+  it("rolls back a newly created auth user when the activation bootstrap cannot finish", async () => {
+    const token = generateSignedInviteToken()
+    const invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
+    const harness = createServiceHarness(invite)
+
+    harness.invitesRepository.activateInviteAtomic.mockRejectedValue(
+      new RepositoryError("Invalid resident activation bootstrap update", "P0001")
+    )
+
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message:
+        "Activation was blocked by resident lifecycle validation. Ask the admin to run onboarding repair, then resend activation.",
+    })
+
+    expect(harness.db.auth.admin.deleteUser).toHaveBeenCalledWith(ACTIVATION_USER_ID)
   })
 
   it("issues phone-first temporary password access without storing the raw password", async () => {
@@ -386,7 +913,7 @@ describe("ResidentInviteService activation bootstrap", () => {
 
     expect(invitesRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        phone: invite.phone,
+        phone: "+919000000002",
         invited_by: ADMIN_USER_ID,
         metadata: expect.objectContaining({
           delivery_channel: "temp_password",

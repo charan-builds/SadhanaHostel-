@@ -42,6 +42,10 @@ export const createResidentSchema = z.object({
   bedLabel: z.string().trim().max(40).optional(),
   allocatedFrom: dateOnlySchema.optional(),
   notes: z.string().trim().max(1000).optional(),
+  inviteDeliveryChannel: z
+    .enum(["copy_link", "email", "whatsapp", "sms_ready", "temp_password"])
+    .default("whatsapp"),
+  inviteExpiresInHours: z.coerce.number().int().min(1).max(24 * 14).default(72),
 })
 
 export const updateResidentSchema = createResidentSchema
@@ -52,6 +56,8 @@ export const updateResidentSchema = createResidentSchema
     roomId: true,
     bedLabel: true,
     allocatedFrom: true,
+    inviteDeliveryChannel: true,
+    inviteExpiresInHours: true,
   })
   .partial()
   .extend({
@@ -68,6 +74,10 @@ export const residentIdMutationSchema = z.object({
 export const checkoutResidentSchema = residentIdMutationSchema.extend({
   checkoutDate: dateOnlySchema.optional(),
   reason: z.string().trim().max(500).optional(),
+})
+
+export const repairResidentLifecycleSchema = residentIdMutationSchema.extend({
+  dryRun: z.boolean().default(false),
 })
 
 export const updateOwnResidentProfileSchema = z.object({
@@ -88,4 +98,5 @@ export type CreateResidentInput = z.infer<typeof createResidentSchema>
 export type UpdateResidentInput = z.infer<typeof updateResidentSchema>
 export type ResidentIdMutationInput = z.infer<typeof residentIdMutationSchema>
 export type CheckoutResidentInput = z.infer<typeof checkoutResidentSchema>
+export type RepairResidentLifecycleInput = z.infer<typeof repairResidentLifecycleSchema>
 export type UpdateOwnResidentProfileInput = z.infer<typeof updateOwnResidentProfileSchema>

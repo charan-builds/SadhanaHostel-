@@ -18,21 +18,19 @@ import { Label } from "@/components/ui/label"
 import { authSdk } from "@/sdk"
 import { useActivateInvite, useValidateInvite } from "@/hooks"
 import { FrontendApiError } from "@/lib/api-client"
+import { formatResidentIdentityMode } from "@/lib/resident-identity"
 import type { ResidentInviteSafe } from "@/types/invites"
 
 const codeSchema = z
   .object({
     inviteCode: z.string().trim().min(8, "Enter your invite code."),
-    email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
-    phone: z.string().trim().min(8, "Enter phone or email.").optional().or(z.literal("")),
-  })
-  .refine((value) => Boolean(value.email || value.phone), {
-    message: "Enter the email or phone shared with hostel administration.",
-    path: ["email"],
   })
 
 const activationSchema = z
   .object({
+    email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
+    phone: z.string().trim().min(8, "Enter your phone number.").optional().or(z.literal("")),
+    identifier: z.string().trim().min(5, "Enter your email or phone.").optional().or(z.literal("")),
     password: z.string().min(12, "Use at least 12 characters."),
     confirmPassword: z.string().min(12, "Confirm your password."),
   })
@@ -57,13 +55,14 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
     resolver: zodResolver(codeSchema),
     defaultValues: {
       inviteCode: "",
-      email: "",
-      phone: "",
     },
   })
   const activationForm = useForm<ActivationValues>({
     resolver: zodResolver(activationSchema),
     defaultValues: {
+      email: "",
+      phone: "",
+      identifier: "",
       password: "",
       confirmPassword: "",
     },
@@ -88,6 +87,13 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
       .then((result) => {
         if (!cancelled) {
           setInvite(result)
+          activationForm.reset({
+            email: "",
+            phone: "",
+            identifier: "",
+            password: "",
+            confirmPassword: "",
+          })
         }
       })
       .catch(() => {
@@ -104,21 +110,24 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
   }, [validationPayload])
 
   async function onCodeSubmit(values: CodeValues) {
-    setManualLookup({
-      inviteCode: values.inviteCode,
-      email: values.email || undefined,
-      phone: values.phone || undefined,
-    })
+    setManualLookup({ inviteCode: values.inviteCode })
   }
 
   async function onActivate(values: ActivationValues) {
     if (!validationPayload || !invite) {
       return
     }
+    const identityPayload = buildActivationIdentityPayload(invite, values, Boolean(token))
+
+    if (!identityPayload.ok) {
+      activationForm.setError(identityPayload.field, { message: identityPayload.message })
+      return
+    }
 
     try {
       const result = await activateInvite.mutateAsync({
         ...validationPayload,
+        ...identityPayload.value,
         password: values.password,
         confirmPassword: values.confirmPassword,
       })
@@ -152,8 +161,8 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
           <div className="rounded-lg border bg-muted/30 p-4">
             <h2 className="text-sm font-semibold">Use an invite code</h2>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Enter the code shared by the hostel office and confirm the email or phone used for
-              your admission record.
+              Enter the code shared by the hostel office. We will show the right phone or email
+              check before you create your password.
             </p>
           </div>
 
@@ -175,12 +184,6 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
               placeholder="SBH-ABCD2345"
               {...codeForm.register("inviteCode")}
             />
-          </Field>
-          <Field label="Email" id="email" error={codeForm.formState.errors.email?.message}>
-            <Input id="email" type="email" autoComplete="email" {...codeForm.register("email")} />
-          </Field>
-          <Field label="Phone" id="phone" error={codeForm.formState.errors.phone?.message}>
-            <Input id="phone" type="tel" autoComplete="tel" {...codeForm.register("phone")} />
           </Field>
           <Button type="submit" disabled={validateInvite.isPending}>
             {validateInvite.isPending ? (
@@ -223,7 +226,10 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
                   {invite.residentName} · Admission {invite.admissionNumber}
                 </p>
                 <p className="mt-1 text-xs text-emerald-800">
-                  Email {invite.maskedEmail ?? "-"} · Phone {invite.maskedPhone ?? "-"}
+                  {buildIdentityHint(invite, Boolean(token))}
+                </p>
+                <p className="mt-2 text-xs font-medium text-emerald-900">
+                  {formatResidentIdentityMode(invite.identityMode)}
                 </p>
               </div>
             </div>
@@ -240,6 +246,9 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
             className="grid gap-4"
             onSubmit={activationForm.handleSubmit(onActivate)}
           >
+            {!token ? (
+              <ActivationIdentityFields invite={invite} form={activationForm} />
+            ) : null}
             <PasswordField
               id="password"
               label="Create password"
@@ -272,6 +281,145 @@ export function ActivationClient({ initialToken }: { initialToken?: string }) {
       ) : null}
     </div>
   )
+}
+
+function ActivationIdentityFields({
+  invite,
+  form,
+}: {
+  invite: ResidentInviteSafe
+  form: ReturnType<typeof useForm<ActivationValues>>
+}) {
+  if (invite.identityMode === "phone_only") {
+    return (
+      <Field label="Phone number" id="phone" error={form.formState.errors.phone?.message}>
+        <Input
+          id="phone"
+          type="tel"
+          autoComplete="tel"
+          placeholder="Enter the phone number used for admission"
+          aria-describedby="phone-activation-hint"
+          {...form.register("phone")}
+        />
+        <p id="phone-activation-hint" className="text-xs text-muted-foreground">
+          Verification will continue using {phoneIdentityHint(invite.maskedPhone)}.
+        </p>
+      </Field>
+    )
+  }
+
+  if (invite.identityMode === "email_only") {
+    return (
+      <Field label="Email" id="email" error={form.formState.errors.email?.message}>
+        <Input
+          id="email"
+          type="email"
+          autoComplete="email"
+          placeholder="Enter the email used for admission"
+          aria-describedby="email-activation-hint"
+          {...form.register("email")}
+        />
+        <p id="email-activation-hint" className="text-xs text-muted-foreground">
+          Verification will continue using {invite.maskedEmail ?? "your admission email"}.
+        </p>
+      </Field>
+    )
+  }
+
+  return (
+    <Field
+      label="Email or phone"
+      id="identifier"
+      error={form.formState.errors.identifier?.message}
+    >
+      <Input
+        id="identifier"
+        autoComplete="username"
+        placeholder="Enter your email or phone"
+        aria-describedby="hybrid-activation-hint"
+        {...form.register("identifier")}
+      />
+      <p id="hybrid-activation-hint" className="text-xs text-muted-foreground">
+        Use {invite.maskedEmail ?? "your email"} or {phoneIdentityHint(invite.maskedPhone)}.
+      </p>
+    </Field>
+  )
+}
+
+function buildActivationIdentityPayload(
+  invite: ResidentInviteSafe,
+  values: ActivationValues,
+  hasSignedToken: boolean
+):
+  | { ok: true; value: { email?: string; phone?: string } }
+  | { ok: false; field: "email" | "phone" | "identifier"; message: string } {
+  if (hasSignedToken) {
+    return { ok: true, value: {} }
+  }
+
+  if (invite.identityMode === "phone_only") {
+    return values.phone
+      ? { ok: true, value: { phone: values.phone } }
+      : {
+          ok: false,
+          field: "phone",
+          message: "Enter the phone number shared with hostel administration.",
+        }
+  }
+
+  if (invite.identityMode === "email_only") {
+    return values.email
+      ? { ok: true, value: { email: values.email } }
+      : {
+          ok: false,
+          field: "email",
+          message: "Enter the email shared with hostel administration.",
+        }
+  }
+
+  const identifier = values.identifier?.trim()
+
+  if (!identifier) {
+    return {
+      ok: false,
+      field: "identifier",
+      message: "Enter the email or phone shared with hostel administration.",
+    }
+  }
+
+  return identifier.includes("@")
+    ? { ok: true, value: { email: identifier } }
+    : { ok: true, value: { phone: identifier } }
+}
+
+function buildIdentityHint(invite: ResidentInviteSafe, hasSignedToken: boolean) {
+  if (invite.identityMode === "phone_only") {
+    return `Verification will continue using ${phoneIdentityHint(invite.maskedPhone)}.`
+  }
+
+  if (invite.identityMode === "email_only") {
+    return `Verification will continue using ${invite.maskedEmail ?? "your admission email"}.`
+  }
+
+  if (hasSignedToken) {
+    return `This secure link supports ${invite.maskedEmail ?? "email"} or ${phoneIdentityHint(invite.maskedPhone)}.`
+  }
+
+  return `Continue with ${invite.maskedEmail ?? "your email"} or ${phoneIdentityHint(invite.maskedPhone)}.`
+}
+
+function lastVisible(value?: string | null) {
+  return value?.match(/\d{4}$/)?.[0] ?? "your admission record"
+}
+
+function phoneIdentityHint(value?: string | null) {
+  const lastFour = lastVisible(value)
+
+  if (lastFour === "your admission record") {
+    return "the phone from your admission record"
+  }
+
+  return `+91 ******${lastFour} (phone ending with ${lastFour})`
 }
 
 function Field({

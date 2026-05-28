@@ -21,26 +21,29 @@ export const residentInviteActionSchema = z.object({
   inviteId: uuidSchema,
 })
 
-export const validateInviteSchema = z
-  .object({
-    token: z.string().trim().min(40).max(512).optional(),
-    inviteCode: z.string().trim().toUpperCase().max(32).optional(),
-    email: z.string().trim().email().optional(),
-    phone: phoneSchema.optional(),
-  })
-  .refine((value) => Boolean(value.token || value.inviteCode), {
+export const inviteIdentityBaseSchema = z.object({
+  token: z.string().trim().min(40).max(512).optional(),
+  inviteCode: z.string().trim().toUpperCase().max(32).optional(),
+  email: z.string().trim().email().optional(),
+  phone: phoneSchema.optional(),
+})
+
+export const validateInviteSchema = inviteIdentityBaseSchema.refine(
+  (value) => Boolean(value.token || value.inviteCode),
+  {
     message: "Invite token or invite code is required.",
     path: ["token"],
+  }
+)
+
+export const activateInviteSchema = inviteIdentityBaseSchema
+  .extend({
+    password: z.string().min(12).max(128),
+    confirmPassword: z.string().min(12).max(128),
   })
   .refine((value) => value.token || value.email || value.phone, {
     message: "Email or phone is required when activating with an invite code.",
     path: ["email"],
-  })
-
-export const activateInviteSchema = validateInviteSchema
-  .extend({
-    password: z.string().min(12).max(128),
-    confirmPassword: z.string().min(12).max(128),
   })
   .refine((value) => value.password === value.confirmPassword, {
     message: "Passwords do not match.",

@@ -1,16 +1,16 @@
+import { phoneDigits } from "@/lib/identity"
+
 export function buildWhatsappUrl(input: {
   phone?: string | null
   message: string
 }) {
-  const phone = input.phone?.replace(/\D/g, "")
+  const phone = phoneDigits(input.phone)
 
   if (!phone) {
     return null
   }
 
-  const normalizedPhone = phone.length === 10 ? `91${phone}` : phone
-
-  return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(input.message)}`
+  return `https://wa.me/${phone}?text=${encodeURIComponent(input.message)}`
 }
 
 export function buildPaymentSupportMessage(input: {

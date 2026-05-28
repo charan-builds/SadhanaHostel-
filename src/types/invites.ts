@@ -1,4 +1,5 @@
 import type { Json } from "@/types/database"
+import type { ResidentIdentityMode } from "@/lib/resident-identity"
 
 export type ResidentInviteStatus = "pending" | "used" | "expired" | "revoked"
 
@@ -30,8 +31,18 @@ export type ResidentInviteSafe = {
   hostelId: string
   residentName: string
   admissionNumber: string
+  identityMode: ResidentIdentityMode
   maskedEmail: string | null
   maskedPhone: string | null
+  emailRequired: boolean
+  phoneRequired: boolean
+  authLinked: boolean
+  activationState:
+    | "activation_pending"
+    | "auth_linked"
+    | "onboarding_pending"
+    | "verified"
+    | "suspended"
   expiresAt: string
   status: ResidentInviteStatus
 }

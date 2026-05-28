@@ -3,6 +3,9 @@ import type {
   AutomationDashboard,
   AutomationRunResult,
   ConsistencyReport,
+  DemoDataResetReport,
+  IdentityReconciliationReport,
+  IdentityRepairResult,
 } from "@/types/operations"
 import type {
   AutomationDashboardQueryInput,
@@ -10,6 +13,9 @@ import type {
   AutomationSettingsInput,
   ConsistencyRepairInput,
   ConsistencyReportQueryInput,
+  DemoDataResetInput,
+  IdentityReconciliationQueryInput,
+  IdentityRepairInput,
 } from "@/validations/operations.validation"
 
 export const operationsSdk = {
@@ -45,5 +51,28 @@ export const operationsSdk = {
       { repaired: number; dryRun: boolean; message: string; report?: ConsistencyReport },
       ConsistencyRepairInput
     >("/api/operations/consistency/repair", input, { retry: 0 })
+  },
+
+  resetDemoData(input: DemoDataResetInput) {
+    return apiClient.post<DemoDataResetReport, DemoDataResetInput>(
+      "/api/operations/demo-data-reset",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  identityReconciliation(params: IdentityReconciliationQueryInput) {
+    return apiClient.get<IdentityReconciliationReport>(
+      "/api/operations/identity-repair",
+      params
+    )
+  },
+
+  repairIdentities(input: IdentityRepairInput) {
+    return apiClient.post<IdentityRepairResult, IdentityRepairInput>(
+      "/api/operations/identity-repair",
+      input,
+      { retry: 0 }
+    )
   },
 }

@@ -106,3 +106,90 @@ export type AutomationRunResult = {
   dryRun: boolean
   result: JobResult
 }
+
+export type DemoDataResetAuthUser = {
+  id: string
+  email?: string | null
+  phone?: string | null
+  reason: string
+}
+
+export type DemoDataResetStorageObject = {
+  bucket: string
+  path: string
+  sourceTable?: string | null
+  recordId?: string | null
+}
+
+export type DemoDataResetReport = {
+  dryRun: boolean
+  organizationId: string
+  hostelId?: string | null
+  rows: Record<string, number>
+  deletedRows: Record<string, number>
+  authUsers: DemoDataResetAuthUser[]
+  storageObjects: DemoDataResetStorageObject[]
+  preserved: string[]
+  warnings: string[]
+  confirmationRequired: string
+  sequencesReset: string[]
+  auditId?: string | null
+  executedAt?: string | null
+  storageDeleted?: number
+  authUsersDeleted?: number
+}
+
+export type IdentityRepairAction =
+  | "delete_orphan_auth"
+  | "relink_resident"
+  | "reset_onboarding"
+  | "dedupe_identity"
+  | "review_manually"
+
+export type IdentityReconciliationFinding = {
+  id: string
+  severity: ConsistencySeverity
+  category:
+    | "auth_without_resident"
+    | "resident_without_auth"
+    | "duplicate_phone"
+    | "duplicate_alias"
+    | "stale_onboarding"
+    | "invalid_linkage"
+    | "orphan_metadata"
+  title: string
+  description: string
+  authUserId?: string | null
+  residentId?: string | null
+  organizationId?: string | null
+  hostelId?: string | null
+  expectedState: string
+  actualState: string
+  recommendedRepairAction: IdentityRepairAction
+  safeAutoRepair: boolean
+}
+
+export type IdentityReconciliationReport = {
+  organizationId: string
+  hostelId?: string | null
+  generatedAt: string
+  scannedAuthUsers: number
+  findings: IdentityReconciliationFinding[]
+  summaries: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+    informational: number
+    totalFindings: number
+    safeAutoRepairs: number
+  }
+}
+
+export type IdentityRepairResult = {
+  dryRun: boolean
+  deletedAuthUsers: number
+  repairedResidents: number
+  warnings: string[]
+  report: IdentityReconciliationReport
+}

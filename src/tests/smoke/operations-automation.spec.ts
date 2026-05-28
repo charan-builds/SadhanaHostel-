@@ -45,6 +45,12 @@ test.describe("operational recovery and automation surfaces", () => {
           dryRun: true,
         },
       }),
+      request.post("/api/operations/demo-data-reset", {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          dryRun: true,
+        },
+      }),
       request.get(`/api/support/alerts?organizationId=${ORGANIZATION_ID}`),
     ])
 

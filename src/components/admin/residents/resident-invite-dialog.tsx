@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
+import {
+  formatResidentIdentityMode,
+  getResidentIdentityMode,
+} from "@/lib/resident-identity"
 import {
   useCreateResidentInvite,
   useResidentInvites,
@@ -121,6 +126,14 @@ export function ResidentInviteDialog({
                   <p className="mt-1 text-sm text-muted-foreground">
                     Admission {resident.admission_number} · {resident.email ?? resident.phone ?? "No contact"}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {formatResidentIdentityMode(getResidentIdentityMode(resident))}
+                    </Badge>
+                    <Badge variant={resident.user_id ? "secondary" : "outline"}>
+                      {resident.user_id ? "Auth linked" : "Activation pending"}
+                    </Badge>
+                  </div>
                 </div>
               </div>
             </div>
@@ -205,6 +218,9 @@ export function ResidentInviteDialog({
                             <div className="flex items-center gap-2">
                               <StatusBadge status={invite.status} />
                               <span className="text-sm font-medium">{invite.invite_code}</span>
+                              <Badge variant="outline">
+                                {formatResidentIdentityMode(getResidentIdentityMode(invite))}
+                              </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
                               Expires {formatDateTime(invite.expires_at)}

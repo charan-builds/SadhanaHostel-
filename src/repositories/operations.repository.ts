@@ -2,6 +2,7 @@ import type { PostgrestError } from "@supabase/supabase-js"
 
 import type { Json, TablesInsert } from "@/types/database"
 import type { ConsistencyFinding } from "@/types/operations"
+import type { ResidentLifecycleRepairResult } from "@/types/residents"
 
 import { throwRepositoryError, type AppSupabaseClient } from "./types"
 
@@ -461,6 +462,27 @@ export class OperationsRepository {
     } | null
   }
 
+  async listResidentTenantIdentityAnomalies(input: {
+    organizationId: string
+    hostelId?: string | null
+    limit?: number
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "get_resident_tenant_identity_anomaly_report",
+      {
+        p_organization_id: input.organizationId,
+        p_hostel_id: input.hostelId ?? null,
+        p_limit: input.limit ?? 100,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident tenant identity anomalies.")
+    }
+
+    return (data ?? []) as Array<Record<string, unknown>>
+  }
+
   async repairOnboardingAccessConsistency(input: {
     organizationId: string
     hostelId?: string | null
@@ -488,6 +510,29 @@ export class OperationsRepository {
       authProfilesSyncedCount?: number
       deadlockResidentsAdvancedCount?: number
     } | null
+  }
+
+  async repairResidentLifecycle(input: {
+    organizationId: string
+    residentId: string
+    actorUserId?: string | null
+    dryRun?: boolean
+  }) {
+    const { data, error } = await this.operationsDb().rpc(
+      "repair_resident_lifecycle_atomic",
+      {
+        p_organization_id: input.organizationId,
+        p_resident_id: input.residentId,
+        p_actor_user_id: input.actorUserId ?? null,
+        p_dry_run: input.dryRun ?? true,
+      }
+    )
+
+    if (error) {
+      throwRepositoryError(error, "Unable to repair resident lifecycle.")
+    }
+
+    return data as ResidentLifecycleRepairResult
   }
 
   async reconcileInvalidDues(input: {

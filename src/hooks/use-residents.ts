@@ -7,6 +7,7 @@ import { residentsSdk } from "@/sdk"
 import type {
   CheckoutResidentInput,
   CreateResidentInput,
+  RepairResidentLifecycleInput,
   ResidentListInput,
   UpdateOwnResidentProfileInput,
   UpdateResidentInput,
@@ -41,7 +42,7 @@ export function useCreateResident() {
 
   return useMutation({
     mutationFn: (input: CreateResidentInput) => residentsSdk.create(input),
-    onSuccess: (resident) => {
+    onSuccess: ({ resident }) => {
       invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
     },
   })
@@ -97,6 +98,23 @@ export function useCheckoutResident() {
     mutationFn: (input: CheckoutResidentInput) => residentsSdk.checkout(input),
     onSuccess: (resident) => {
       invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
+    },
+  })
+}
+
+export function useRepairResidentLifecycle() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: RepairResidentLifecycleInput) => residentsSdk.repairLifecycle(input),
+    onSuccess: (result) => {
+      invalidateResidentOperationalState(queryClient, result.organizationId, result.hostelId)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.residents.detail(
+          { organizationId: result.organizationId, hostelId: result.hostelId },
+          result.residentId
+        ),
+      })
     },
   })
 }

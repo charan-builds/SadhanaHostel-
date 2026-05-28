@@ -121,6 +121,9 @@ export const queryKeys = {
     consistency(scope: TenantScope) {
       return [...queryKeys.operations.all(scope), "consistency"] as const
     },
+    identity(scope: TenantScope) {
+      return [...queryKeys.operations.all(scope), "identity"] as const
+    },
   },
   launch: {
     all(scope: TenantScope) {

@@ -1,8 +1,10 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
+import type { ResidentCreateResult, ResidentLifecycleRepairResult } from "@/types/residents"
 import type {
   CheckoutResidentInput,
   CreateResidentInput,
+  RepairResidentLifecycleInput,
   ResidentIdMutationInput,
   ResidentListInput,
   UpdateOwnResidentProfileInput,
@@ -32,7 +34,7 @@ export const residentsSdk = {
   },
 
   create(input: CreateResidentInput) {
-    return apiClient.post<Tables<"residents">, CreateResidentInput>(
+    return apiClient.post<ResidentCreateResult, CreateResidentInput>(
       "/api/residents",
       input
     )
@@ -65,6 +67,18 @@ export const residentsSdk = {
 
     return apiClient.post<Tables<"residents">, Omit<CheckoutResidentInput, "residentId">>(
       `/api/residents/${residentId}/checkout`,
+      body
+    )
+  },
+
+  repairLifecycle(input: RepairResidentLifecycleInput) {
+    const { residentId, ...body } = input
+
+    return apiClient.post<
+      ResidentLifecycleRepairResult,
+      Omit<RepairResidentLifecycleInput, "residentId">
+    >(
+      `/api/residents/${residentId}/repair`,
       body
     )
   },
