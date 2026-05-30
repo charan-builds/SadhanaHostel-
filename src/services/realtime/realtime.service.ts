@@ -23,6 +23,7 @@ export class RealtimeService {
       type: "notification.created",
       organizationId: input.organizationId,
       hostelId: input.hostelId,
+      residentId: input.residentId,
       payload: input satisfies Json,
     })
   }
@@ -35,13 +36,29 @@ export class RealtimeService {
     residentId: string
     status: string
   }) {
-    return this.publisher.publish({
-      type: "payment.status_changed",
-      organizationId: input.organizationId,
-      hostelId: input.hostelId,
-      actorUserId: input.actorUserId,
-      payload: input satisfies Json,
-    })
+    const payload = input satisfies Json
+
+    return Promise.all([
+      this.publisher.publish({
+        type: "payment.status_changed",
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        actorUserId: input.actorUserId,
+        payload,
+      }),
+      ...(input.hostelId
+        ? [
+            this.publisher.publish({
+              type: "payment.status_changed",
+              organizationId: input.organizationId,
+              hostelId: input.hostelId,
+              residentId: input.residentId,
+              actorUserId: input.actorUserId,
+              payload,
+            }),
+          ]
+        : []),
+    ])
   }
 
   paymentSettingsChanged(input: {
@@ -70,13 +87,29 @@ export class RealtimeService {
     residentId: string
     status: string
   }) {
-    return this.publisher.publish({
-      type: "leave.status_changed",
-      organizationId: input.organizationId,
-      hostelId: input.hostelId,
-      actorUserId: input.actorUserId,
-      payload: input satisfies Json,
-    })
+    const payload = input satisfies Json
+
+    return Promise.all([
+      this.publisher.publish({
+        type: "leave.status_changed",
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        actorUserId: input.actorUserId,
+        payload,
+      }),
+      ...(input.hostelId
+        ? [
+            this.publisher.publish({
+              type: "leave.status_changed",
+              organizationId: input.organizationId,
+              hostelId: input.hostelId,
+              residentId: input.residentId,
+              actorUserId: input.actorUserId,
+              payload,
+            }),
+          ]
+        : []),
+    ])
   }
 
   dashboardRefresh(input: {

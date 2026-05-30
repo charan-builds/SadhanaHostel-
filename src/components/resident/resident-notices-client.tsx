@@ -28,7 +28,10 @@ export function ResidentNoticesClient() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
 
-  useRealtimeNotifications({ enabled: Boolean(organizationId) })
+  useRealtimeNotifications({
+    enabled: Boolean(organizationId && residentQuery.data?.id),
+    residentId: residentQuery.data?.id,
+  })
 
   const noticesQuery = useNotices({
     organizationId: organizationId ?? "",

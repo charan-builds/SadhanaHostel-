@@ -48,6 +48,7 @@ function createServiceHarness() {
   const service = new LeavesService({} as never)
   const authService = {
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+    requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
     requireHostelAccess: vi.fn(),
   }

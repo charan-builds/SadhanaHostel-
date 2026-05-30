@@ -44,8 +44,9 @@ import {
   useResidentPaymentLedger,
   useSubmitUpiPaymentWithProof,
 } from "@/hooks"
+import { useMounted } from "@/hooks/use-mounted"
 import { useAuth } from "@/lib/auth"
-import { FrontendApiError } from "@/lib/api-client"
+import { FrontendApiError, createRequestId } from "@/lib/api-client"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import { buildPaymentSupportMessage, buildWhatsappUrl } from "@/lib/operations/whatsapp"
 import {
@@ -75,6 +76,7 @@ type PaymentInput = z.input<typeof paymentSchema>
 type PaymentValues = z.output<typeof paymentSchema>
 
 export function ResidentPaymentsClient() {
+  const mounted = useMounted()
   const { organizationId, session } = useAuth()
   const resident = useCurrentResident(organizationId ?? undefined)
   const hostelId = resident.data?.hostel_id ?? session?.hostelIds[0]
@@ -95,10 +97,13 @@ export function ResidentPaymentsClient() {
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() =>
-    crypto.randomUUID()
+    createRequestId()
   )
   const submitUpiPayment = useSubmitUpiPaymentWithProof({ onProgress: setUploadProgress })
-  useRealtimePayments({ enabled: Boolean(organizationId) })
+  useRealtimePayments({
+    enabled: Boolean(organizationId && resident.data?.id),
+    residentId: resident.data?.id,
+  })
   const suggestedAmount =
     ledger.data?.totals.currentDue && ledger.data.totals.currentDue > 0
       ? ledger.data.totals.currentDue
@@ -130,11 +135,13 @@ export function ResidentPaymentsClient() {
     : suggestedAmount
   const paymentReference = useMemo(
     () =>
-      buildHostelPaymentReference({
-        admissionNumber: resident.data?.admission_number,
-        idempotencyKey: paymentIdempotencyKey,
-      }),
-    [paymentIdempotencyKey, resident.data?.admission_number]
+      mounted
+        ? buildHostelPaymentReference({
+            admissionNumber: resident.data?.admission_number,
+            idempotencyKey: paymentIdempotencyKey,
+          })
+        : "Generating reference",
+    [mounted, paymentIdempotencyKey, resident.data?.admission_number]
   )
   const upiPaymentNote = useMemo(
     () =>
@@ -155,14 +162,17 @@ export function ResidentPaymentsClient() {
   )
   const upiPaymentLink = useMemo(
     () =>
-      buildUpiPaymentLink({
-        upiId: paymentSettings.data?.upi_id,
-        payeeName: paymentSettings.data?.account_name,
-        amount: currentPaymentAmount,
-        transactionReference: paymentReference,
-        note: upiPaymentNote,
-      }),
+      mounted
+        ? buildUpiPaymentLink({
+            upiId: paymentSettings.data?.upi_id,
+            payeeName: paymentSettings.data?.account_name,
+            amount: currentPaymentAmount,
+            transactionReference: paymentReference,
+            note: upiPaymentNote,
+          })
+        : null,
     [
+      mounted,
       paymentReference,
       paymentSettings.data?.account_name,
       paymentSettings.data?.upi_id,
@@ -211,6 +221,13 @@ export function ResidentPaymentsClient() {
       return
     }
 
+    if (!mounted) {
+      setError("root", {
+        message: "Payment reference is still being prepared. Retry in a moment.",
+      })
+      return
+    }
+
     try {
       await submitUpiPayment.mutateAsync({
         input: {
@@ -234,7 +251,7 @@ export function ResidentPaymentsClient() {
       reset()
       setProofFile(null)
       setUploadProgress(null)
-      setPaymentIdempotencyKey(crypto.randomUUID())
+      setPaymentIdempotencyKey(createRequestId())
       toast.success("Payment submitted for admin verification.")
     } catch (error) {
       setError("root", {
@@ -251,12 +268,20 @@ export function ResidentPaymentsClient() {
       return
     }
 
-    const result = await downloadInvoice.mutateAsync({
-      organizationId,
-      invoiceId,
-      expiresInSeconds: 900,
-    })
-    window.open(result.signedUrl, "_blank", "noopener,noreferrer")
+    try {
+      const result = await downloadInvoice.mutateAsync({
+        organizationId,
+        invoiceId,
+        expiresInSeconds: 900,
+      })
+      window.open(result.signedUrl, "_blank", "noopener,noreferrer")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Unable to open invoice. Please retry."
+      )
+    }
   }
 
   return (
@@ -294,6 +319,12 @@ export function ResidentPaymentsClient() {
               </div>
               {paymentSettings.isLoading ? (
                 <p className="mt-2 text-sm text-muted-foreground">Loading payment instructions...</p>
+              ) : paymentSettings.isError ? (
+                <APIErrorState
+                  title="Payment instructions unavailable"
+                  error={paymentSettings.error}
+                  onRetry={() => void paymentSettings.refetch()}
+                />
               ) : paymentSettings.data ? (
                 <div className="mt-3 grid gap-3">
                   {upiPaymentLink ? (
@@ -431,6 +462,13 @@ export function ResidentPaymentsClient() {
         </form>
 
         <div className="grid gap-4">
+          {ledger.isError ? (
+            <APIErrorState
+              title="Payment ledger unavailable"
+              error={ledger.error}
+              onRetry={() => void ledger.refetch()}
+            />
+          ) : null}
           <Summary label="Current due" value={formatCurrency(ledger.data?.totals.currentDue ?? 0)} />
           <Summary label="Monthly fee" value={formatCurrency(resident.data.monthly_fee_amount)} />
           <Summary
@@ -453,6 +491,15 @@ export function ResidentPaymentsClient() {
           ) : undefined
         }
       >
+        {payments.isError ? (
+          <div className="border-b p-4">
+            <APIErrorState
+              title="Payment history unavailable"
+              error={payments.error}
+              onRetry={() => void payments.refetch()}
+            />
+          </div>
+        ) : null}
         {rejectedPayments.length > 0 ? (
           <div className="border-b bg-amber-50 p-4 text-sm text-amber-900">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

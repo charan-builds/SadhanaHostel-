@@ -49,8 +49,11 @@ npm run load:k6
 ## Soft Launch Simulation
 
 ```bash
+LOAD_TEST_SCENARIOS=health,resident,admin,uploads,realtime \
 LOAD_TEST_ADMIN_VUS=5 \
 LOAD_TEST_RESIDENT_VUS=30 \
+LOAD_TEST_UPLOAD_VUS=3 \
+LOAD_TEST_REALTIME_VUS=10 \
 LOAD_TEST_DURATION=10m \
 npm run load:k6
 ```
@@ -66,6 +69,7 @@ npm run load:k6
 | Search p95 | < 1500 ms | Medium |
 | Export p95 first response | < 5000 ms | Medium |
 | Payment/upload failures | 0 critical workflow failures | High/Critical |
+| Realtime-adjacent checks | No sustained 5xx or tenant leakage | High |
 
 ## Monitoring During Run
 
@@ -86,6 +90,7 @@ Watch:
 - [ ] Confirm no duplicate invoices for same monthly fee record.
 - [ ] Confirm no room over-allocation.
 - [ ] Confirm no cross-tenant records in reports/search.
+- [ ] Confirm websocket reconnect behavior with real browser/mobile soak sessions; k6 only adds API/reconnect-adjacent pressure.
 
 ## Results Record
 

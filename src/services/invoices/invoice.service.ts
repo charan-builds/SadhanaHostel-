@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { measureAsync } from "@/lib/performance"
@@ -128,7 +128,7 @@ export class InvoicesService {
 
   async generateMonthlyFeeInvoice(input: unknown) {
     const values = generateInvoiceSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("finance.manage")
     const feeRecord = assertFound(
       await this.invoicesRepository.getFeeRecord(
         values.monthlyFeeRecordId,
@@ -189,11 +189,11 @@ export class InvoicesService {
       "Invoice not found."
     )
 
-    if (context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
       this.authService.requireHostelAccess(context, invoice.organization_id, invoice.hostel_id)
     }
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (!anyRoleHasPermission(context.roles, "finance.manage")) {
       const resident = await this.invoicesRepository.getResident(
         invoice.resident_id,
         values.organizationId

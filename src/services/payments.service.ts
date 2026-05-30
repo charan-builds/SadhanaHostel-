@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES, FINANCE_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { badRequest, conflict, forbidden } from "@/lib/api/api-error"
 import { logError, logPaymentEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
@@ -79,7 +79,7 @@ export class PaymentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
       const hostelId = this.authService.resolveHostelScope(
         context,
         values.organizationId,
@@ -111,7 +111,7 @@ export class PaymentsService {
 
   async recordManualPayment(input: unknown) {
     const values = createPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -194,9 +194,7 @@ export class PaymentsService {
       await this.residentsRepository.getById(values.residentId, values.organizationId),
       "Resident not found."
     )
-    const isFinanceUser = context.roles.some((role) =>
-      [...FINANCE_ROLES, "staff"].includes(role)
-    )
+    const isFinanceUser = anyRoleHasPermission(context.roles, "finance.manage")
 
     if (!isFinanceUser && resident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only submit payments for their own profile.")
@@ -303,9 +301,7 @@ export class PaymentsService {
       values.organizationId
     )
     const existingResident = assertFound(resident, "Resident not found.")
-    const isFinanceUser = context.roles.some((role) =>
-      [...FINANCE_ROLES, "staff"].includes(role)
-    )
+    const isFinanceUser = anyRoleHasPermission(context.roles, "finance.manage")
 
     if (!isFinanceUser && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only create their own payment records.")
@@ -380,7 +376,7 @@ export class PaymentsService {
     const payment = await this.paymentsRepository.getById(paymentId, organizationId)
     const existingPayment = assertFound(payment, "Payment not found.")
 
-    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
       this.authService.requireHostelAccess(
         context,
         existingPayment.organization_id,
@@ -388,7 +384,7 @@ export class PaymentsService {
       )
     }
 
-    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (!anyRoleHasPermission(context.roles, "finance.manage")) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         organizationId
@@ -417,7 +413,7 @@ export class PaymentsService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
       this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     } else {
       const resident = await this.residentsRepository.getByUserId(
@@ -440,7 +436,7 @@ export class PaymentsService {
 
   async listPaymentSettings(input: unknown) {
     const values = paymentSettingsHistorySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -454,7 +450,7 @@ export class PaymentsService {
 
   async savePaymentSettings(input: unknown, auditContext?: PaymentSettingsAuditContext) {
     const values = paymentSettingsSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -558,7 +554,7 @@ export class PaymentsService {
 
   async testPaymentSettings(input: unknown) {
     const values = paymentSettingsTestSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -620,7 +616,7 @@ export class PaymentsService {
 
   async uploadPaymentQr(input: unknown, file: File, auditContext?: PaymentSettingsAuditContext) {
     const values = paymentQrUploadSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     this.validateQrFile(file)
@@ -694,7 +690,7 @@ export class PaymentsService {
 
     let residentId = values.residentId
 
-    if (!context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (!anyRoleHasPermission(context.roles, "finance.manage")) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         values.organizationId
@@ -720,7 +716,7 @@ export class PaymentsService {
       "Resident not found."
     )
 
-    if (context.roles.some((role) => [...FINANCE_ROLES, "staff"].includes(role))) {
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
       this.authService.requireHostelAccess(context, values.organizationId, resident.hostel_id)
     }
 
@@ -785,7 +781,7 @@ export class PaymentsService {
 
   async verifyPayment(input: unknown) {
     const values = verifyPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(FINANCE_ROLES)
+    const context = await this.authService.requirePermission("payments.verify")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -881,7 +877,7 @@ export class PaymentsService {
 
   async rejectPayment(input: unknown) {
     const values = rejectPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(FINANCE_ROLES)
+    const context = await this.authService.requirePermission("payments.verify")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -939,7 +935,7 @@ export class PaymentsService {
 
   async generateMonthlyFee(input: unknown) {
     const values = generateMonthlyFeeSchema.parse(input)
-    const context = await this.authService.requireRole(FINANCE_ROLES)
+    const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 

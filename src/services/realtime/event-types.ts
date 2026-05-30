@@ -3,11 +3,7 @@ import type { Json } from "@/types/database"
 export type RealtimeEventType =
   | "notification.created"
   | "payment.status_changed"
-  | "payment.submitted"
-  | "payment.approved"
-  | "payment.rejected"
   | "payment.settings_changed"
-  | "invoice.generated"
   | "leave.status_changed"
   | "dashboard.refresh"
   | "vacancy.changed"
@@ -27,7 +23,6 @@ export type RealtimeEventType =
   | "resident.updated"
   | "resident.deactivated"
   | "resident.checked_out"
-  | "resident.onboarding_updated"
   | "staff.created"
   | "staff.role_changed"
   | "staff.access_revoked"
@@ -37,6 +32,7 @@ export type TenantRealtimeEvent<TPayload extends Json = Json> = {
   type: RealtimeEventType
   organizationId: string
   hostelId?: string | null
+  residentId?: string | null
   actorUserId?: string | null
   occurredAt: string
   payload: TPayload

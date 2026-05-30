@@ -4,12 +4,14 @@ import Link from "next/link"
 import type { Route } from "next"
 import { useEffect, useState } from "react"
 import { WifiOff } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
 
 export function ConnectivityRecoveryBanner() {
-  const { isAuthenticated, refreshSession } = useAuth()
+  const { isAuthenticated, organizationId, refreshSession } = useAuth()
+  const queryClient = useQueryClient()
   const [isOffline, setIsOffline] = useState(false)
   const [hadAuthenticatedSession, setHadAuthenticatedSession] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
@@ -28,17 +30,28 @@ export function ConnectivityRecoveryBanner() {
   }, [hadAuthenticatedSession, isAuthenticated])
 
   useEffect(() => {
+    function refreshTenantState() {
+      void refreshSession()
+
+      if (organizationId) {
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "tenant" && query.queryKey[1] === organizationId,
+        })
+      }
+    }
+
     function syncOnlineState() {
       setIsOffline(!navigator.onLine)
 
       if (navigator.onLine) {
-        void refreshSession()
+        refreshTenantState()
       }
     }
 
     function refreshOnFocus() {
       if (navigator.onLine && hadAuthenticatedSession) {
-        void refreshSession()
+        refreshTenantState()
       }
     }
 
@@ -52,7 +65,7 @@ export function ConnectivityRecoveryBanner() {
       window.removeEventListener("offline", syncOnlineState)
       window.removeEventListener("focus", refreshOnFocus)
     }
-  }, [hadAuthenticatedSession, refreshSession])
+  }, [hadAuthenticatedSession, organizationId, queryClient, refreshSession])
 
   if (!isOffline && !sessionExpired) {
     return null

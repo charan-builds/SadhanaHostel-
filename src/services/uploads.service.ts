@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
@@ -114,7 +114,7 @@ export class UploadsService {
       ),
       "Payment proof not found."
     )
-    const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const isAdmin = anyRoleHasPermission(context.roles, "finance.manage")
 
     if (!isAdmin) {
       const resident = await this.residentsRepository.getByUserId(
@@ -172,7 +172,11 @@ export class UploadsService {
       input.organizationId
     )
     const existingResident = assertFound(resident, "Resident not found.")
-    const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const isAdmin =
+      input.documentType === "payment_receipt"
+        ? anyRoleHasPermission(context.roles, "finance.manage") ||
+          anyRoleHasPermission(context.roles, "residents.manage")
+        : anyRoleHasPermission(context.roles, "residents.manage")
     const targetHostelId = input.hostelId ?? existingResident.hostel_id
 
     if (targetHostelId !== existingResident.hostel_id) {

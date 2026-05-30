@@ -112,6 +112,28 @@ export const ROLE_PERMISSIONS = {
   parent: [],
 } satisfies Record<AppRole, PermissionKey[]>
 
+export const ALL_APP_ROLES = Object.keys(ROLE_PERMISSIONS) as AppRole[]
+
+export const ROLE_CAPABILITY_MATRIX = ROLE_PERMISSIONS
+
+export function roleHasPermission(
+  role: AppRole,
+  permission: PermissionKey
+) {
+  return (ROLE_PERMISSIONS[role] as readonly PermissionKey[]).includes(permission)
+}
+
+export function anyRoleHasPermission(
+  roles: readonly AppRole[],
+  permission: PermissionKey
+) {
+  return roles.some((role) => roleHasPermission(role, permission))
+}
+
+export function rolesForPermission(permission: PermissionKey) {
+  return ALL_APP_ROLES.filter((role) => roleHasPermission(role, permission))
+}
+
 export const AUTH_REDIRECTS = {
   login: "/login",
   onboarding: "/onboarding",

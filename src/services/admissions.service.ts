@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest, conflict } from "@/lib/api/api-error"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -25,8 +24,6 @@ import {
 } from "@/validations/admission.validation"
 
 import { assertFound, AuthService } from "./auth.service"
-
-const ADMISSION_ADMIN_ROLES = [...ADMIN_ROLES, "staff"] as const
 
 export class AdmissionsService {
   private readonly authService: AuthService
@@ -59,7 +56,7 @@ export class AdmissionsService {
   async getVacancy(input: unknown) {
     const values = vacancyQuerySchema.parse(input)
     const tenant = await this.resolveTenant(values.organizationId, values.hostelId)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     this.authService.requireHostelAccess(context, tenant.organizationId, tenant.hostelId)
 
@@ -68,7 +65,7 @@ export class AdmissionsService {
 
   async listLeads(input: unknown) {
     const values = leadListSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -83,7 +80,7 @@ export class AdmissionsService {
 
   async createLead(input: unknown) {
     const values = createLeadSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -177,7 +174,7 @@ export class AdmissionsService {
 
   async updateLead(input: unknown) {
     const values = updateLeadSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     const existingLead = assertFound(
       await this.admissionsRepository.getLeadById(values.leadId, values.organizationId),
@@ -229,7 +226,7 @@ export class AdmissionsService {
 
   async addLeadNote(input: unknown) {
     const values = addLeadNoteSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     const lead = assertFound(
       await this.admissionsRepository.getLeadById(values.leadId, values.organizationId),
@@ -255,7 +252,7 @@ export class AdmissionsService {
 
   async listReservations(input: unknown) {
     const values = reservationListSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -270,7 +267,7 @@ export class AdmissionsService {
 
   async createReservation(input: unknown) {
     const values = createReservationSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -310,7 +307,7 @@ export class AdmissionsService {
 
   async confirmReservation(input: unknown) {
     const values = reservationIdSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     const existingReservation = assertFound(
       await this.admissionsRepository.getReservationById(
@@ -353,7 +350,7 @@ export class AdmissionsService {
 
   async cancelReservation(input: unknown) {
     const values = cancelReservationSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     const existingReservation = assertFound(
       await this.admissionsRepository.getReservationById(
@@ -397,7 +394,7 @@ export class AdmissionsService {
 
   async createReservationPayment(input: unknown) {
     const values = createReservationPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -420,7 +417,7 @@ export class AdmissionsService {
 
   async verifyReservationPayment(input: unknown) {
     const values = verifyReservationPaymentSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("payments.verify")
 
     const existingPayment = assertFound(
       await this.admissionsRepository.getReservationPaymentById(
@@ -460,7 +457,7 @@ export class AdmissionsService {
 
   async convertReservation(input: unknown) {
     const values = convertReservationSchema.parse(input)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("admissions.manage")
 
     const existingReservation = assertFound(
       await this.admissionsRepository.getReservationById(
@@ -514,7 +511,7 @@ export class AdmissionsService {
   async getAnalytics(input: unknown) {
     const values = vacancyQuerySchema.parse(input)
     const tenant = await this.resolveTenant(values.organizationId, values.hostelId)
-    const context = await this.authService.requireRole(ADMISSION_ADMIN_ROLES)
+    const context = await this.authService.requirePermission("analytics.view")
 
     this.authService.requireHostelAccess(context, tenant.organizationId, tenant.hostelId)
 

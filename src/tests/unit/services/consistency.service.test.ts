@@ -670,7 +670,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,
@@ -715,7 +715,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,
@@ -750,7 +750,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,
@@ -782,7 +782,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,
@@ -819,7 +819,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,
@@ -856,7 +856,7 @@ describe("ConsistencyService repair", () => {
 
     Object.assign(service, {
       authService: {
-        requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+        requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
       repository,

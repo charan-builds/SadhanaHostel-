@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -63,7 +63,7 @@ export class ResidentsService {
 
   async listResidents(input: unknown) {
     const values = residentListSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -84,11 +84,11 @@ export class ResidentsService {
     const resident = await this.residentsRepository.getById(residentId, organizationId)
     const isOwnProfile = resident?.user_id === context.authUser.id
 
-    if (context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role)) && resident) {
+    if (anyRoleHasPermission(context.roles, "residents.manage") && resident) {
       this.authService.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
     }
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role)) && !isOwnProfile) {
+    if (!anyRoleHasPermission(context.roles, "residents.manage") && !isOwnProfile) {
       throw forbidden("Residents can only access their own profile.")
     }
 
@@ -115,7 +115,7 @@ export class ResidentsService {
 
   async createResident(input: unknown): Promise<ResidentCreateResult> {
     const values = createResidentSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -217,7 +217,7 @@ export class ResidentsService {
 
   async updateResident(input: unknown) {
     const values = updateResidentSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
 
     const existingResident = assertFound(
       await this.residentsRepository.getById(values.residentId, values.organizationId),
@@ -304,7 +304,7 @@ export class ResidentsService {
 
   async deactivateResident(input: unknown) {
     const values = residentIdMutationSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
 
     const existingResident = assertFound(
       await this.residentsRepository.getById(values.residentId, values.organizationId),
@@ -330,7 +330,7 @@ export class ResidentsService {
 
   async checkoutResident(input: unknown) {
     const values = checkoutResidentSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
 
     const existingResident = assertFound(
       await this.residentsRepository.getById(values.residentId, values.organizationId),
@@ -362,7 +362,7 @@ export class ResidentsService {
 
   async repairResidentLifecycle(input: unknown) {
     const values = repairResidentLifecycleSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     const existingResident = assertFound(
       await this.residentsRepository.getById(values.residentId, values.organizationId),

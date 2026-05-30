@@ -1,5 +1,6 @@
 "use client"
 
+import * as Sentry from "@sentry/nextjs"
 import { Component, type ErrorInfo, type ReactNode } from "react"
 
 import { APIErrorState } from "./api-error-state"
@@ -21,6 +22,12 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    Sentry.captureException(error, {
+      extra: {
+        componentStack: info.componentStack,
+      },
+    })
+
     if (process.env.NODE_ENV !== "production") {
       console.error(error, info)
     }
@@ -31,7 +38,11 @@ export class ErrorBoundary extends Component<
       return (
         this.props.fallback ?? (
           <APIErrorState
-            message={this.state.error.message}
+            message={
+              process.env.NODE_ENV === "production"
+                ? "This section could not be rendered. Retry the action or reload the page."
+                : this.state.error.message
+            }
             onRetry={() => this.setState({ error: null })}
           />
         )

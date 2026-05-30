@@ -1,7 +1,6 @@
 import "server-only"
 
 import { areOperationalRepairsEnabled } from "@/config/launch"
-import { ADMIN_PORTAL_ROLES, ADMIN_ROLES } from "@/constants/auth"
 import {
   formatResidentIdentityMode,
   getResidentIdentityMode,
@@ -52,7 +51,7 @@ export class ConsistencyService {
 
   async getReport(input: unknown) {
     const values = consistencyReportQuerySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
+    const context = await this.authService.requirePermission("admin.dashboard.view")
     const organizationId = values.organizationId ?? context.organizationId
     const hostelId = values.hostelId ?? context.hostelIds[0] ?? null
 
@@ -85,7 +84,7 @@ export class ConsistencyService {
 
   async repair(input: unknown) {
     const values = consistencyRepairSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -240,7 +239,7 @@ export class ConsistencyService {
     }
 
     if (values.action === "repair_tenant_linkage") {
-      if (!context.roles.some((role) => ADMIN_ROLES.some((adminRole) => adminRole === role))) {
+      if (!context.roles.some((role) => role === "owner" || role === "admin" || role === "super_admin")) {
         return {
           repaired: 0,
           dryRun: false,

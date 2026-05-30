@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
+import { FrontendApiError } from "@/lib/api-client"
 import {
   useDocumentUpload,
   useProfilePhotoUpload,
@@ -161,12 +162,21 @@ export function ResidentOnboardingClient() {
       return
     }
 
-    await updateProfile.mutateAsync({
-      organizationId,
-      ...values,
-    } satisfies OnboardingProfileInput)
-    await onboarding.refetch()
-    toast.success("Onboarding profile saved.")
+    try {
+      await updateProfile.mutateAsync({
+        organizationId,
+        ...values,
+      } satisfies OnboardingProfileInput)
+      await onboarding.refetch()
+      toast.success("Onboarding profile saved.")
+    } catch (error) {
+      form.setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Unable to save onboarding profile. Please retry.",
+      })
+    }
   }
 
   async function uploadFile(kind: "aadhaar" | "student_id" | "photo") {
@@ -229,9 +239,18 @@ export function ResidentOnboardingClient() {
       return
     }
 
-    await submitOnboarding.mutateAsync({ organizationId })
-    await onboarding.refetch()
-    toast.success("Submitted for hostel admin verification.")
+    try {
+      await submitOnboarding.mutateAsync({ organizationId })
+      await onboarding.refetch()
+      toast.success("Submitted for hostel admin verification.")
+    } catch (error) {
+      form.setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Unable to submit onboarding for verification. Please retry.",
+      })
+    }
   }
 
   return (
@@ -288,6 +307,14 @@ export function ResidentOnboardingClient() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {form.formState.errors.root?.message ? (
+              <div className="mb-5">
+                <APIErrorState
+                  title="Onboarding action failed"
+                  message={form.formState.errors.root.message}
+                />
+              </div>
+            ) : null}
             <form className="grid gap-5" onSubmit={form.handleSubmit(saveProfile)}>
               <div className="grid gap-4 md:grid-cols-2">
                 <Field form={form} name="fullName" label="Full name" />

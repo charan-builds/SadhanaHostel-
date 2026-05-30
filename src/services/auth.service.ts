@@ -1,8 +1,18 @@
 import "server-only"
 
 import type { User } from "@supabase/supabase-js"
+import { headers } from "next/headers"
 
-import { ADMIN_PORTAL_ROLES, ADMIN_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES, type AppRole } from "@/constants/auth"
+import {
+  ADMIN_PORTAL_ROLES,
+  ADMIN_ROLES,
+  AUTH_REDIRECTS,
+  RESIDENT_ROLES,
+  anyRoleHasPermission,
+  type AppRole,
+  type PermissionKey,
+} from "@/constants/auth"
+import { getServerEnv } from "@/config/env"
 import {
   badRequest,
   forbidden,
@@ -13,10 +23,18 @@ import { AppError } from "@/lib/errors"
 import {
   PhoneNormalizationError,
   normalizePhoneNumber,
+  phoneNumbersMatch,
   phoneLastTen,
   tryNormalizePhoneNumber,
 } from "@/lib/identity"
 import { logger } from "@/lib/logger"
+import {
+  buildResidentInternalAuthEmail,
+  getResidentMetadataAuthLoginEmail,
+  normalizeEmailCandidate,
+  resolveResidentAuthLoginEmail,
+  resolveResidentInternalAuthEmail,
+} from "@/lib/resident-auth-identity"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
@@ -84,6 +102,13 @@ type ResidentLoginDiagnosticRow = {
   phone: string | null
 }
 
+type ResidentAuthIdentityRepairDb = {
+  rpc(
+    functionName: "repair_resident_auth_identity_atomic",
+    args: Record<string, unknown>
+  ): Promise<{ data: unknown; error: { message: string; code?: string } | null }>
+}
+
 export class AuthService {
   private readonly usersRepository: UsersRepository
   private readonly organizationsRepository: OrganizationsRepository
@@ -102,10 +127,20 @@ export class AuthService {
   }
 
   async getCurrentAuthUser() {
-    const {
+    let {
       data: { user },
       error,
     } = await this.db.auth.getUser()
+
+    if (error || !user) {
+      const bearerToken = await getBearerTokenFromRequest()
+
+      if (bearerToken) {
+        const fallback = await this.db.auth.getUser(bearerToken)
+        user = fallback.data.user
+        error = fallback.error
+      }
+    }
 
     if (error || !user) {
       throw unauthorized()
@@ -177,6 +212,16 @@ export class AuthService {
     const context = await this.getCurrentContext()
 
     if (!context.roles.some((role) => allowedRoles.includes(role))) {
+      throw forbidden("Your role does not allow this action.")
+    }
+
+    return context
+  }
+
+  async requirePermission(permission: PermissionKey) {
+    const context = await this.getCurrentContext()
+
+    if (!anyRoleHasPermission(context.roles, permission)) {
       throw forbidden("Your role does not allow this action.")
     }
 
@@ -265,15 +310,30 @@ export class AuthService {
       const adminDb = createSupabaseAdminClient()
       const resident = await this.findResidentForLoginDiagnostics(adminDb, normalizedPhone)
 
-      if (!resident?.user_id) {
+      if (!resident) {
         return null
       }
 
-      const profile = await new UsersRepository(adminDb).getById(resident.user_id)
-      const profileMetadata = recordFromUnknown(profile?.metadata)
-      const profileLoginEmail = getInternalAuthLoginEmail(profileMetadata)
+      const linkedAuthUser = resident.user_id
+        ? await getAuthUserById(adminDb, resident.user_id)
+        : null
+      const authUser = linkedAuthUser ?? await this.findAuthUserForResidentIdentity(
+        adminDb,
+        resident
+      )
 
-      if (profileLoginEmail) {
+      if (!resident.user_id && !authUser) {
+        return null
+      }
+
+      const canonicalLoginEmail = getCanonicalResidentPasswordLoginEmail(resident)
+      const profile = resident.user_id
+        ? await new UsersRepository(adminDb).getById(resident.user_id)
+        : null
+      const profileMetadata = recordFromUnknown(profile?.metadata)
+      const profileLoginEmail = getResidentMetadataAuthLoginEmail(profileMetadata)
+
+      if (profileLoginEmail && profileLoginEmail === canonicalLoginEmail) {
         logPhonePasswordResolution({
           normalizedPhone,
           resident,
@@ -286,7 +346,7 @@ export class AuthService {
 
       const profileEmail = normalizeEmailCandidate(profile?.email)
 
-      if (profileEmail) {
+      if (profileEmail && profileEmail === canonicalLoginEmail) {
         logPhonePasswordResolution({
           normalizedPhone,
           resident,
@@ -297,16 +357,25 @@ export class AuthService {
         return profileEmail
       }
 
-      const authUser = await getAuthUserById(adminDb, resident.user_id)
-      const authMetadata = recordFromUnknown(authUser?.user_metadata)
-      const authLoginEmail =
-        getInternalAuthLoginEmail(authMetadata) ?? normalizeEmailCandidate(authUser?.email)
+      const authLoginEmail = authUser ? canonicalLoginEmail : null
 
-      if (authLoginEmail) {
+      if (authUser && authLoginEmail) {
+        await this.repairResidentPasswordIdentity({
+          adminDb,
+          resident,
+          profile,
+          authUser,
+          authLoginEmail,
+          normalizedPhone,
+          reason: resident.user_id
+            ? "login_alias_metadata_missing"
+            : "login_resident_link_missing",
+        })
+
         logPhonePasswordResolution({
           normalizedPhone,
           resident,
-          strategy: "auth_user_metadata",
+          strategy: resident.user_id ? "auth_identity_repair" : "auth_identity_link_repair",
           authLoginEmail,
         })
 
@@ -337,6 +406,205 @@ export class AuthService {
 
       return null
     }
+  }
+
+  private async findAuthUserForResidentIdentity(
+    adminDb: AppSupabaseClient,
+    resident: ResidentLoginDiagnosticRow
+  ) {
+    const authAdmin = getAuthAdminApi(adminDb)
+
+    if (!authAdmin?.listUsers) {
+      return null
+    }
+
+    const residentEmail = normalizeEmailCandidate(resident.email)
+    const residentPhone = tryNormalizePhoneNumber(resident.phone ?? "")
+    const residentInternalEmail = buildResidentInternalAuthEmail(resident.id)
+    const matches: User[] = []
+
+    for (let page = 1; page <= 50; page += 1) {
+      const { data, error } = await authAdmin.listUsers({
+        page,
+        perPage: 100,
+      })
+
+      if (error) {
+        logger.warn({
+          event: "auth.resident_identity_candidate_lookup_failed",
+          message: "Could not inspect Supabase auth users while repairing resident phone login.",
+          organizationId: resident.organization_id,
+          userId: resident.user_id,
+          metadata: {
+            residentId: resident.id,
+            error: error.message,
+          },
+        })
+
+        return null
+      }
+
+      for (const candidate of data.users) {
+        if (authUserMatchesResident(candidate, resident, {
+          residentEmail,
+          residentPhone,
+          residentInternalEmail,
+        })) {
+          matches.push(candidate)
+        }
+      }
+
+      if (data.users.length < 100) {
+        break
+      }
+    }
+
+    const uniqueMatches = [...new Map(matches.map((user) => [user.id, user])).values()]
+
+    if (uniqueMatches.length === 1) {
+      return uniqueMatches[0]
+    }
+
+    if (uniqueMatches.length > 1) {
+      logger.warn({
+        event: "auth.resident_identity_candidate_ambiguous",
+        message: "Multiple Supabase auth users match one resident phone login; repair was skipped.",
+        organizationId: resident.organization_id,
+        metadata: {
+          residentId: resident.id,
+          candidateUserIds: uniqueMatches.map((user) => user.id),
+          normalizedPhone: residentPhone,
+        },
+      })
+    }
+
+    return null
+  }
+
+  private async repairResidentPasswordIdentity(input: {
+    adminDb: AppSupabaseClient
+    resident: ResidentLoginDiagnosticRow
+    profile: UserRow | null
+    authUser: User
+    authLoginEmail: string
+    normalizedPhone: string
+    reason: "login_alias_metadata_missing" | "login_resident_link_missing"
+  }) {
+    const authMetadata = recordFromUnknown(input.authUser.user_metadata)
+    const profileMetadata = recordFromUnknown(input.profile?.metadata)
+    const internalAuthEmail = resolveResidentInternalAuthEmail({
+      residentId: input.resident.id,
+      profileMetadata,
+      authMetadata,
+      profileEmail: input.profile?.email,
+      authEmail: input.authUser.email,
+      residentEmail: input.resident.email,
+    })
+    const userMetadata = {
+      ...authMetadata,
+      organization_id: input.resident.organization_id,
+      hostel_id: input.resident.hostel_id,
+      resident_id: input.resident.id,
+      auth_login_email: input.authLoginEmail,
+      internal_auth_email: internalAuthEmail ?? undefined,
+      resident_identity_mode: inferResidentIdentityMode(input.resident),
+      phone_password_login_strategy: internalAuthEmail
+        ? "internal_email_alias"
+        : "direct_email",
+      resident_auth_identity_version: 2,
+      resident_auth_repaired_at: new Date().toISOString(),
+      resident_auth_repair_reason: input.reason,
+    }
+    const updatePayload: {
+      email?: string
+      email_confirm?: boolean
+      phone?: string
+      phone_confirm?: boolean
+      user_metadata: Record<string, unknown>
+    } = {
+      user_metadata: userMetadata,
+    }
+    const authEmail = normalizeEmailCandidate(input.authUser.email)
+
+    if (!authEmail || authEmail !== input.authLoginEmail) {
+      updatePayload.email = input.authLoginEmail
+      updatePayload.email_confirm = true
+    }
+
+    if (!input.authUser.phone && input.normalizedPhone) {
+      updatePayload.phone = input.normalizedPhone
+      updatePayload.phone_confirm = true
+    }
+
+    const authAdmin = getAuthAdminApi(input.adminDb)
+
+    if (!authAdmin?.updateUserById) {
+      return
+    }
+
+    const { data: updatedAuth, error: updateError } = await authAdmin.updateUserById(
+      input.authUser.id,
+      updatePayload
+    )
+
+    if (updateError || !updatedAuth.user) {
+      logger.warn({
+        event: "auth.resident_password_identity_auth_repair_failed",
+        message: "Could not repair Supabase auth metadata before resident phone login.",
+        organizationId: input.resident.organization_id,
+        userId: input.authUser.id,
+        metadata: {
+          residentId: input.resident.id,
+          error: updateError?.message,
+          reason: input.reason,
+        },
+      })
+
+      return
+    }
+
+    const { error } = await (input.adminDb as unknown as ResidentAuthIdentityRepairDb).rpc(
+      "repair_resident_auth_identity_atomic",
+      {
+        p_organization_id: input.resident.organization_id,
+        p_resident_id: input.resident.id,
+        p_auth_user_id: updatedAuth.user.id,
+        p_auth_login_email: input.authLoginEmail,
+        p_internal_auth_email: internalAuthEmail,
+        p_reason: input.reason,
+      }
+    )
+
+    if (error) {
+      logger.warn({
+        event: "auth.resident_password_identity_profile_repair_failed",
+        message: "Could not repair public resident auth linkage before phone login.",
+        organizationId: input.resident.organization_id,
+        userId: updatedAuth.user.id,
+        metadata: {
+          residentId: input.resident.id,
+          error: error.message,
+          code: error.code,
+          reason: input.reason,
+        },
+      })
+
+      return
+    }
+
+    logger.info({
+      event: "auth.resident_password_identity_repaired",
+      message: "Resident password login identity was repaired before provider sign-in.",
+      organizationId: input.resident.organization_id,
+      userId: updatedAuth.user.id,
+      metadata: {
+        residentId: input.resident.id,
+        hostelId: input.resident.hostel_id,
+        authLoginEmail: maskEmail(input.authLoginEmail),
+        normalizedPhone: input.normalizedPhone,
+        reason: input.reason,
+      },
+    })
   }
 
   async requestResidentPhoneOtp(input: unknown) {
@@ -417,8 +685,11 @@ export class AuthService {
 
   async resetPassword(input: unknown) {
     const values = resetPasswordSchema.parse(input)
+    const redirectTo = values.redirectTo
+      ? this.requireAllowedPasswordResetRedirect(values.redirectTo)
+      : undefined
     const { error } = await this.db.auth.resetPasswordForEmail(values.email, {
-      redirectTo: values.redirectTo,
+      redirectTo,
     })
 
     if (error) {
@@ -589,12 +860,16 @@ export class AuthService {
 
   private resolveRoles(profile: UserRow, roleAssignments: UserRoleRow[]) {
     const roles = new Set<AppRole>()
-    roles.add(profile.default_role)
+    const activeAssignments = roleAssignments.filter(
+      (assignment) => assignment.status === "active"
+    )
 
-    roleAssignments.forEach((assignment) => {
-      if (assignment.status === "active") {
-        roles.add(assignment.role)
-      }
+    if (activeAssignments.length === 0 || profile.default_role === "resident" || profile.default_role === "parent") {
+      roles.add(profile.default_role)
+    }
+
+    activeAssignments.forEach((assignment) => {
+      roles.add(assignment.role)
     })
 
     return [...roles].sort((a, b) => ROLE_PRIORITY[b] - ROLE_PRIORITY[a])
@@ -704,7 +979,10 @@ export class AuthService {
   private async assertTemporaryPasswordIsUsable(context: AuthContext) {
     const metadata = recordFromUnknown(context.profile.metadata)
 
-    if (metadata.temporary_password_active !== true) {
+    if (
+      metadata.temporary_password_active !== true &&
+      metadata.force_password_reset !== true
+    ) {
       return
     }
 
@@ -799,6 +1077,27 @@ export class AuthService {
       }
 
       if (!identifier.includes("@")) {
+        const profileMetadata = recordFromUnknown(profile.metadata)
+        const profileLoginEmail =
+          getResidentMetadataAuthLoginEmail(profileMetadata) ??
+          normalizeEmailCandidate(profile.email)
+        const authUser = await getAuthUserById(adminDb, resident.user_id)
+        const authMetadata = recordFromUnknown(authUser?.user_metadata)
+        const authLoginEmail = authUser
+          ? resolveResidentAuthLoginEmail({
+              residentId: resident.id,
+              profileMetadata,
+              authMetadata,
+              profileEmail: profile.email,
+              authEmail: authUser.email,
+              residentEmail: resident.email,
+            })
+          : null
+
+        if (profileLoginEmail || authLoginEmail) {
+          return null
+        }
+
         return unauthorized(
           "Phone login could not be completed because resident password access is not synchronized. Ask hostel administration to reset resident access or run auth linkage repair."
         )
@@ -892,6 +1191,36 @@ export class AuthService {
 
     return AUTH_REDIRECTS.login
   }
+
+  private requireAllowedPasswordResetRedirect(redirectTo: string) {
+    const appUrl = new URL(getServerEnv().NEXT_PUBLIC_APP_URL)
+    const redirectUrl = new URL(redirectTo)
+    const allowedPaths = new Set([
+      AUTH_REDIRECTS.login,
+      AUTH_REDIRECTS.unauthorized,
+      "/forgot-password",
+    ])
+
+    if (
+      redirectUrl.origin !== appUrl.origin ||
+      !allowedPaths.has(redirectUrl.pathname)
+    ) {
+      throw badRequest("Password reset redirect URL is not allowed.")
+    }
+
+    return redirectUrl.toString()
+  }
+}
+
+async function getBearerTokenFromRequest() {
+  const authorization = (await headers()).get("authorization")
+  const [scheme, token] = authorization?.split(" ") ?? []
+
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return null
+  }
+
+  return token
 }
 
 function getAccountStatus(metadata: unknown) {
@@ -936,27 +1265,94 @@ function normalizePhoneForUserInput(value: string) {
   }
 }
 
-function normalizeEmailCandidate(value: string | null | undefined) {
-  const email = value?.trim().toLowerCase()
-
-  return email && email.includes("@") ? email : null
+function getAuthAdminApi(adminDb: AppSupabaseClient) {
+  return (
+    adminDb as unknown as {
+      auth?: {
+        admin?: {
+          getUserById?: (userId: string) => Promise<{
+            data: { user: User | null }
+            error: { message: string; code?: string } | null
+          }>
+          listUsers?: (options: { page: number; perPage: number }) => Promise<{
+            data: { users: User[] }
+            error: { message: string; code?: string } | null
+          }>
+          updateUserById?: (
+            userId: string,
+            payload: {
+              email?: string
+              email_confirm?: boolean
+              phone?: string
+              phone_confirm?: boolean
+              user_metadata?: Record<string, unknown>
+            }
+          ) => Promise<{
+            data: { user: User | null }
+            error: { message: string; code?: string } | null
+          }>
+        }
+      }
+    }
+  ).auth?.admin
 }
 
-function getInternalAuthLoginEmail(metadata: Record<string, unknown>) {
-  return (
-    normalizeEmailCandidate(stringFromMetadata(metadata, "auth_login_email")) ??
-    normalizeEmailCandidate(stringFromMetadata(metadata, "internal_auth_email"))
+function authUserMatchesResident(
+  user: User,
+  resident: ResidentLoginDiagnosticRow,
+  normalized: {
+    residentEmail: string | null
+    residentPhone: string | null
+    residentInternalEmail: string
+  }
+) {
+  const metadata = recordFromUnknown(user.user_metadata)
+  const metadataOrganizationId = stringFromMetadataRecord(metadata, "organization_id")
+  const metadataResidentId = stringFromMetadataRecord(metadata, "resident_id")
+  const userEmail = normalizeEmailCandidate(user.email)
+  const metadataLoginEmail = getResidentMetadataAuthLoginEmail(metadata)
+
+  if (metadataOrganizationId && metadataOrganizationId !== resident.organization_id) {
+    return false
+  }
+
+  return Boolean(
+    user.id === resident.user_id ||
+      metadataResidentId === resident.id ||
+      userEmail === normalized.residentInternalEmail ||
+      metadataLoginEmail === normalized.residentInternalEmail ||
+      (normalized.residentEmail && userEmail === normalized.residentEmail) ||
+      (normalized.residentEmail && metadataLoginEmail === normalized.residentEmail) ||
+      (normalized.residentPhone && phoneNumbersMatch(user.phone, normalized.residentPhone))
   )
 }
 
-function stringFromMetadata(metadata: Record<string, unknown>, key: string) {
+function inferResidentIdentityMode(resident: ResidentLoginDiagnosticRow) {
+  if (resident.email && resident.phone) {
+    return "email_and_phone"
+  }
+
+  return resident.email ? "email" : "phone"
+}
+
+function getCanonicalResidentPasswordLoginEmail(resident: ResidentLoginDiagnosticRow) {
+  return normalizeEmailCandidate(resident.email) ?? buildResidentInternalAuthEmail(resident.id)
+}
+
+function stringFromMetadataRecord(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key]
 
   return typeof value === "string" ? value : null
 }
 
 async function getAuthUserById(adminDb: AppSupabaseClient, userId: string) {
-  const { data, error } = await adminDb.auth.admin.getUserById(userId)
+  const authAdmin = getAuthAdminApi(adminDb)
+
+  if (!authAdmin?.getUserById) {
+    return null
+  }
+
+  const { data, error } = await authAdmin.getUserById(userId)
 
   if (error) {
     logger.warn({
@@ -981,6 +1377,8 @@ function logPhonePasswordResolution(input: {
     | "public_user_metadata"
     | "public_user_email"
     | "auth_user_metadata"
+    | "auth_identity_repair"
+    | "auth_identity_link_repair"
     | "phone_provider_fallback"
   authLoginEmail: string | null
 }) {

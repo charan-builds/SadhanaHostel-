@@ -69,12 +69,17 @@ describe("tenant isolation and security hardening contracts", () => {
   })
 
   it("keeps finance role support aligned between RLS helpers and API services", () => {
-    const hardening = migration("20260523003000_security_tenant_isolation_hardening.sql")
+    const hardening = migration("20260528003000_actor_permission_operations_hardening.sql")
     const paymentsService = projectFile("src/services/payments.service.ts")
 
-    expect(hardening).toMatch(/array\['owner',\s*'admin',\s*'finance'\]/i)
-    expect(paymentsService).toMatch(/async\s+verifyPayment[\s\S]*requireRole\(FINANCE_ROLES\)/)
-    expect(paymentsService).toMatch(/async\s+rejectPayment[\s\S]*requireRole\(FINANCE_ROLES\)/)
+    expect(hardening).toMatch(/'finance\.manage'/i)
+    expect(hardening).toMatch(/'payments\.verify'/i)
+    expect(paymentsService).toMatch(
+      /async\s+verifyPayment[\s\S]*requirePermission\("payments\.verify"\)/
+    )
+    expect(paymentsService).toMatch(
+      /async\s+rejectPayment[\s\S]*requirePermission\("payments\.verify"\)/
+    )
   })
 
   it("enforces upload, payment, invite, and reservation tenant-scope invariants in the database", () => {
@@ -89,18 +94,23 @@ describe("tenant isolation and security hardening contracts", () => {
   })
 
   it("authorizes private realtime topics by tenant and hostel scope", () => {
-    const realtime = migration("20260523005000_realtime_tenant_authorization.sql")
+    const realtime = [
+      migration("20260523005000_realtime_tenant_authorization.sql"),
+      migration("20260529001000_realtime_resident_channel_authorization.sql"),
+    ].join("\n")
     const provider = projectFile("src/lib/realtime/realtime-provider.tsx")
-    const channelHook = projectFile("src/lib/realtime/use-realtime-channel.ts")
+    const channelRegistry = projectFile("src/lib/realtime/realtime-channel-registry.ts")
     const publisher = projectFile("src/services/realtime/event-publisher.ts")
 
     expect(realtime).toMatch(/on\s+realtime\.messages/i)
     expect(realtime).toMatch(/for\s+select\s+to\s+authenticated/i)
     expect(realtime).toMatch(/realtime\.topic\(\)/i)
     expect(realtime).toMatch(/realtime_topic_organization_id/i)
+    expect(realtime).toMatch(/realtime_topic_resident_id/i)
     expect(realtime).toMatch(/has_role_in_organization/i)
+    expect(realtime).toMatch(/:resident:/i)
     expect(provider).toMatch(/tenant:\$\{organizationId\}:hostel:\$\{hostelId\}/)
-    expect(channelHook).toMatch(/private:\s*true/)
+    expect(channelRegistry).toMatch(/private:\s*true/)
     expect(publisher).toMatch(/private:\s*true/)
   })
 
@@ -168,6 +178,57 @@ describe("tenant isolation and security hardening contracts", () => {
     expect(residentsService).toMatch(
       /async\s+onboardResident[\s\S]*requireAdmin\(\)[\s\S]*requireHostelAccess[\s\S]*createSupabaseAdminClient\(\)\.rpc\("onboard_resident"/
     )
+  })
+
+  it("keeps role assignment privilege escalation blocked in the database", () => {
+    const roleGuard = migration("20260528001000_role_assignment_escalation_guard.sql")
+    const launchHardening = migration("20260530001000_launch_blocker_rbac_notice_hardening.sql")
+
+    expect(roleGuard).toMatch(/create\s+or\s+replace\s+function\s+public\.can_assign_user_role/i)
+    expect(roleGuard).toMatch(/create\s+trigger\s+protect_user_role_assignment/i)
+    expect(roleGuard).toMatch(/super_admin_role_assignment_forbidden/i)
+    expect(roleGuard).toMatch(/privileged_role_assignment_requires_owner/i)
+    expect(roleGuard).toMatch(/last_privileged_user_role_blocked/i)
+    expect(roleGuard).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.assign_default_role[\s\S]*can_assign_user_role/
+    )
+    expect(roleGuard).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.onboard_admin[\s\S]*can_assign_user_role/
+    )
+    expect(launchHardening).toMatch(/active user_roles are authoritative/i)
+    expect(launchHardening).toMatch(/not\s+exists\s+\(select\s+1\s+from\s+active_assignments\)/i)
+    expect(launchHardening).toMatch(/users\.default_role is only a legacy fallback/i)
+  })
+
+  it("keeps role-targeted notices tenant and hostel scoped", () => {
+    const launchHardening = migration("20260530001000_launch_blocker_rbac_notice_hardening.sql")
+
+    expect(launchHardening).toMatch(/create\s+or\s+replace\s+function\s+public\.can_read_notice/i)
+    expect(launchHardening).toMatch(/n\.audience_type\s+=\s+'roles'/i)
+    expect(launchHardening).toMatch(/public\.belongs_to_organization\(n\.organization_id\)/i)
+    expect(launchHardening).toMatch(/effective_notice_roles\.role::text\s+in/i)
+    expect(launchHardening).toMatch(/ur\.organization_id\s+=\s+n\.organization_id/i)
+    expect(launchHardening).toMatch(/ur\.hostel_id\s+is\s+null[\s\S]*ur\.hostel_id\s+=\s+n\.hostel_id/i)
+  })
+
+  it("allows resident onboarding student ID documents through RLS", () => {
+    const roleGuard = migration("20260528001000_role_assignment_escalation_guard.sql")
+
+    expect(roleGuard).toMatch(/drop\s+policy\s+if\s+exists\s+"documents_insert_owner_or_admin"/i)
+    expect(roleGuard).toMatch(/document_type\s+in\s*\([\s\S]*'student_id'/i)
+  })
+
+  it("keeps resident self-onboarding possible without opening admin-only fields", () => {
+    const roleGuard = migration("20260528001000_role_assignment_escalation_guard.sql")
+
+    expect(roleGuard).toMatch(/create\s+or\s+replace\s+function\s+public\.protect_resident_profile_update/i)
+    expect(roleGuard).toMatch(/resident_profile_self_update_protected_fields/i)
+    expect(roleGuard).toMatch(/aadhaar_document_id[\s\S]*profile_image_document_id[\s\S]*student_id_document_id/)
+    expect(roleGuard).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.transition_resident_onboarding_atomic[\s\S]*v_is_self_submission/
+    )
+    expect(roleGuard).toMatch(/resident_onboarding_requirements_missing/)
+    expect(roleGuard).toMatch(/if\s+v_is_admin_transition\s+then[\s\S]*insert\s+into\s+public\.audit_logs/i)
   })
 
   it("enforces explicit hostel scope on finance, analytics, exports, and automation surfaces", () => {

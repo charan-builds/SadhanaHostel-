@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
 import { humanizeEnum } from "@/lib/format"
+import { useRealtimeStaffAccess } from "@/lib/realtime"
 import {
   useCreateStaffAccess,
   useHostels,
@@ -87,6 +88,8 @@ export function AdminStaffAccessClient() {
   const revokeStaff = useRevokeStaffAccess()
   const resetPassword = useResetStaffPassword()
 
+  useRealtimeStaffAccess({ enabled: Boolean(organizationId) })
+
   const rows = useMemo(() => staffQuery.data?.data ?? [], [staffQuery.data?.data])
   const summary = useMemo(
     () => ({
@@ -112,13 +115,17 @@ export function AdminStaffAccessClient() {
       return
     }
 
-    await updateStaff.mutateAsync({
-      organizationId,
-      targetUserId: row.user_id,
-      roleAssignmentId: row.id,
-      status: nextStatus,
-    })
-    toast.success("Staff access updated.")
+    try {
+      await updateStaff.mutateAsync({
+        organizationId,
+        targetUserId: row.user_id,
+        roleAssignmentId: row.id,
+        status: nextStatus,
+      })
+      toast.success("Staff access updated.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update staff access.")
+    }
   }
 
   async function confirmRevoke() {
@@ -139,11 +146,15 @@ export function AdminStaffAccessClient() {
       return
     }
 
-    const result = await resetPassword.mutateAsync({
-      organizationId,
-      targetUserId: row.user_id,
-    })
-    setPasswordResult(result)
+    try {
+      const result = await resetPassword.mutateAsync({
+        organizationId,
+        targetUserId: row.user_id,
+      })
+      setPasswordResult(result)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to reset staff password.")
+    }
   }
 
   return (
@@ -339,7 +350,7 @@ export function AdminStaffAccessClient() {
         description="This removes operational access and blocks future sessions for this app profile."
         confirmLabel={revokeStaff.isPending ? "Revoking..." : "Revoke access"}
         variant="danger"
-        onConfirm={() => void confirmRevoke()}
+        onConfirm={confirmRevoke}
       />
     </div>
   )
@@ -359,6 +370,7 @@ function StaffCreateDialog({
   onCreated: (result: CreatedStaffAccess) => void
 }) {
   const createStaff = useCreateStaffAccess()
+  const [actionError, setActionError] = useState<unknown>(null)
   const [form, setForm] = useState<CreateStaffUserInput>({
     organizationId,
     hostelId: defaultHostelId,
@@ -376,10 +388,16 @@ function StaffCreateDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const result = await createStaff.mutateAsync(form)
 
-    toast.success("Staff access created.")
-    onCreated(result)
+    try {
+      setActionError(null)
+      const result = await createStaff.mutateAsync(form)
+
+      toast.success("Staff access created.")
+      onCreated(result)
+    } catch (error) {
+      setActionError(error)
+    }
   }
 
   function update<K extends keyof CreateStaffUserInput>(key: K, value: CreateStaffUserInput[K]) {
@@ -398,6 +416,12 @@ function StaffCreateDialog({
             Create a Supabase Auth account, assign a scoped role, and generate safe first access.
           </DialogDescription>
         </DialogHeader>
+        {actionError ? (
+          <APIErrorState
+            title="Staff access could not be created"
+            error={actionError}
+          />
+        ) : null}
         <div className="grid gap-4 py-4 md:grid-cols-2">
           <Field label="Full name">
             <Input required value={form.fullName} onChange={(event) => update("fullName", event.target.value)} />

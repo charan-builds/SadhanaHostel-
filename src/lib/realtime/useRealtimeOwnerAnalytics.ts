@@ -5,8 +5,19 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import { queryKeys } from "@/lib/react-query"
 
+import { scheduleRealtimeInvalidations } from "./realtime-invalidation"
 import { useRealtimeContext } from "./realtime-provider"
 import { useRealtimeChannel } from "./use-realtime-channel"
+
+const OWNER_ANALYTICS_REALTIME_EVENTS = [
+  "vacancy.changed",
+  "reservation.created",
+  "reservation.confirmed",
+  "reservation.expired",
+  "reservation.converted",
+  "payment.status_changed",
+  "room.allocation_changed",
+] as const
 
 export function useRealtimeOwnerAnalytics(options?: { enabled?: boolean }) {
   const queryClient = useQueryClient()
@@ -16,67 +27,18 @@ export function useRealtimeOwnerAnalytics(options?: { enabled?: boolean }) {
       return
     }
 
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.analytics.all({
+    scheduleRealtimeInvalidations(queryClient, [
+      queryKeys.analytics.all({
         organizationId,
         hostelId: defaultHostelId,
       }),
-    })
+    ])
   }, [defaultHostelId, organizationId, queryClient])
 
   useRealtimeChannel({
     organizationId,
     hostelId: defaultHostelId,
-    event: "vacancy.changed",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "reservation.created",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "reservation.confirmed",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "reservation.expired",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "reservation.converted",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "payment.status_changed",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "resident.onboarding_updated",
-    enabled: options?.enabled,
-    onEvent,
-  })
-  useRealtimeChannel({
-    organizationId,
-    hostelId: defaultHostelId,
-    event: "room.allocation_changed",
+    event: OWNER_ANALYTICS_REALTIME_EVENTS,
     enabled: options?.enabled,
     onEvent,
   })

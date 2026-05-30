@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, RotateCcw, Send } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTableShell } from "@/components/shared/data-table-shell"
+import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
@@ -22,6 +23,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { callHref, whatsappHref } from "@/constants/hostel"
 import { useCurrentResident, useCreateSupportRequest, useSupportRequests } from "@/hooks"
+import { createRequestId } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import type { SupportRequestCreateInput } from "@/validations/support.validation"
@@ -61,13 +63,39 @@ export function ResidentSupportClient() {
     pageSize: 20,
   })
   const createRequest = useCreateSupportRequest()
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
+  const [idempotencyKey, setIdempotencyKey] = useState(() => createRequestId())
 
   if (!organizationId) {
     return (
       <EmptyState
         title="Organization access pending"
         message="Ask hostel administration to finish linking your resident account before raising support."
+      />
+    )
+  }
+
+  if (resident.isLoading) {
+    return <LoadingState variant="cards" />
+  }
+
+  if (resident.isError) {
+    return (
+      <APIErrorState
+        title="Support profile could not be loaded"
+        error={resident.error}
+        onRetry={() => void resident.refetch()}
+        action={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <a href={callHref}>Call admin</a>
+            </Button>
+            <Button asChild size="sm">
+              <a href={whatsappHref} target="_blank" rel="noreferrer">
+                WhatsApp
+              </a>
+            </Button>
+          </>
+        }
       />
     )
   }
@@ -93,7 +121,7 @@ export function ResidentSupportClient() {
       setLastGuidance(result.guidance)
       setDescription("")
       setSubject(defaultSubject(category))
-      setIdempotencyKey(crypto.randomUUID())
+      setIdempotencyKey(createRequestId())
       await requests.refetch()
       toast.success(result.reused ? "Existing recovery request reopened." : "Support request sent.")
     } catch (error) {
@@ -242,13 +270,6 @@ export function ResidentSupportClient() {
             )}
           </div>
 
-          {resident.error ? (
-            <APIErrorState
-              title="Resident profile not linked"
-              message="Support requests can still be handled by WhatsApp while staff links your resident profile."
-              onRetry={() => void resident.refetch()}
-            />
-          ) : null}
         </div>
       </section>
 

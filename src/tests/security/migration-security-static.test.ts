@@ -264,6 +264,47 @@ describe("static migration security checks", () => {
     )
   })
 
+  it("keeps resident auth identity repair service-role-only and alias-unique", () => {
+    const repair = migration("20260528002000_resident_auth_identity_canonicalization.sql")
+
+    expect(repair).toMatch(/resident_internal_auth_email/i)
+    expect(repair).toMatch(/sync_resident_auth_alias_metadata/i)
+    expect(repair).toMatch(/repair_resident_auth_identity_atomic/i)
+    expect(repair).toMatch(/is_service_context\(\)/i)
+    expect(repair).toMatch(/pg_advisory_xact_lock/i)
+    expect(repair).toMatch(/users_resident_auth_login_email_uidx/i)
+    expect(repair).toMatch(/users_resident_internal_auth_email_uidx/i)
+    expect(repair).toMatch(/users_resident_phone_uidx/i)
+    expect(repair).toMatch(/resident\.auth_identity_repair/i)
+    expect(repair).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.repair_resident_auth_identity_atomic/i
+    )
+    expect(repair).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.repair_resident_auth_identity_atomic/i
+    )
+  })
+
+  it("hardens actor attribution and database permissions through centralized helpers", () => {
+    const hardening = migration("20260528003000_actor_permission_operations_hardening.sql")
+    const launchHardening = migration("20260530001000_launch_blocker_rbac_notice_hardening.sql")
+
+    expect(hardening).toMatch(/create\s+or\s+replace\s+function\s+public\.assert_trusted_actor/i)
+    expect(hardening).toMatch(/p_actor_user_id\s+<>\s+v_auth_user_id/i)
+    expect(hardening).toMatch(/actor_spoofing_detected/i)
+    expect(hardening).toMatch(/create\s+or\s+replace\s+function\s+public\.role_has_permission/i)
+    expect(hardening).toMatch(/create\s+or\s+replace\s+function\s+public\.has_permission_in_organization/i)
+    expect(hardening).toMatch(/create\s+or\s+replace\s+function\s+public\.can_manage_finance/i)
+    expect(hardening).toMatch(/'finance\.manage'/i)
+    expect(hardening).toMatch(/create\s+or\s+replace\s+function\s+public\.enforce_actor_column_trust/i)
+    expect(hardening).toMatch(/actor_column_spoofing_detected/i)
+    expect(hardening).toMatch(/create\s+trigger\s+enforce_actor_column_trust/i)
+    expect(hardening).toMatch(/SECURITY DEFINER ownership alone is not treated as service context/i)
+    expect(launchHardening).toMatch(/create\s+or\s+replace\s+function\s+public\.has_permission_in_organization/i)
+    expect(launchHardening).toMatch(/with\s+active_assignments\s+as/i)
+    expect(launchHardening).toMatch(/not\s+exists\s+\(select\s+1\s+from\s+active_assignments\)/i)
+    expect(launchHardening).toMatch(/create\s+or\s+replace\s+function\s+public\.get_current_user_role/i)
+  })
+
   it("normalizes phone identities through a protected migration helper", () => {
     const normalization = migration("20260526001000_phone_identity_normalization.sql")
     const helperBlock = normalization.slice(

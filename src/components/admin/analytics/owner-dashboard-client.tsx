@@ -43,6 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
 import { useRealtimeOwnerAnalytics } from "@/lib/realtime"
@@ -99,8 +100,12 @@ export function OwnerDashboardClient() {
       anchor.click()
       URL.revokeObjectURL(url)
       toast.success("Owner analytics export started.")
-    } catch {
-      toast.error("Owner analytics export failed.")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Owner analytics export failed."
+      )
     } finally {
       setDownloading(null)
     }

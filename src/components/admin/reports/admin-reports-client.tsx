@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useAuth } from "@/lib/auth"
+import { FrontendApiError } from "@/lib/api-client"
 import { formatCurrency } from "@/lib/format"
 import { useDashboardAnalytics } from "@/hooks"
 import { reportsSdk } from "@/sdk/reports.sdk"
@@ -57,8 +58,12 @@ export function AdminReportsClient() {
       anchor.click()
       URL.revokeObjectURL(url)
       toast.success("Report export started.")
-    } catch {
-      toast.error("Report export failed.")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Report export failed."
+      )
     } finally {
       setDownloading(null)
     }

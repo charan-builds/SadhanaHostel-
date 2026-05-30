@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { AppSupabaseClient } from "@/repositories/types"
 import {
@@ -29,7 +28,7 @@ export class AuditService {
   async list(categoryInput: unknown, input: unknown) {
     const category = auditCategorySchema.parse(categoryInput)
     const values = auditListSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("reports.export")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,

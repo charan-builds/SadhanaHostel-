@@ -69,7 +69,7 @@ function createServiceHarness(input: {
     from: vi.fn((table: string) => createQuery(rowsByTable[table] ?? [])),
   }
   const authService = {
-    requireRole: vi.fn().mockResolvedValue(
+    requirePermission: vi.fn().mockResolvedValue(
       adminAuthContext({
         roles: input.roles ?? ["owner"],
         primaryRole: (input.roles ?? ["owner"])[0],
@@ -196,6 +196,69 @@ describe("IdentityReconciliationService", () => {
           authUserId: residentAuth.id,
           safeAutoRepair: true,
           recommendedRepairAction: "delete_orphan_auth",
+        }),
+      ])
+    )
+  })
+
+  it("detects resident password alias desynchronization before phone login fails", async () => {
+    const authAlias = "resident-00000000000040008000000000000012@auth.sadhanahostel.invalid"
+    const residentAuth = residentAuthUser({
+      id: RESIDENT_USER_ID,
+      email: authAlias,
+      user_metadata: {
+        organization_id: TEST_ORGANIZATION_ID,
+        hostel_id: TEST_HOSTEL_ID,
+        resident_id: RESIDENT_USER_ID,
+        auth_login_email: authAlias,
+        internal_auth_email: authAlias,
+      },
+    })
+    const harness = createServiceHarness({
+      authUsers: [residentAuth],
+      residents: [
+        {
+          id: RESIDENT_USER_ID,
+          organization_id: TEST_ORGANIZATION_ID,
+          hostel_id: TEST_HOSTEL_ID,
+          user_id: RESIDENT_USER_ID,
+          full_name: "Resident Test",
+          email: null,
+          phone: "+919000000002",
+          status: "draft",
+          is_active: true,
+          deleted_at: null,
+        },
+      ],
+      users: [
+        userFixture({
+          id: RESIDENT_USER_ID,
+          default_role: "resident",
+          email: null,
+          phone: "+919000000002",
+          metadata: {},
+        }),
+      ],
+      userRoles: [
+        userRoleFixture({
+          user_id: RESIDENT_USER_ID,
+          role: "resident",
+        }),
+      ],
+    })
+
+    const report = await harness.service.scan({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `resident-auth-alias-desync:${RESIDENT_USER_ID}`,
+          category: "invalid_linkage",
+          severity: "high",
+          recommendedRepairAction: "relink_resident",
         }),
       ])
     )

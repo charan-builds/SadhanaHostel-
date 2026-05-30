@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -183,7 +182,7 @@ export class ResidentOnboardingService {
 
   async listVerificationQueue(input: unknown) {
     const values = onboardingQueueSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -204,7 +203,7 @@ export class ResidentOnboardingService {
 
   async review(input: unknown) {
     const values = onboardingReviewSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("residents.manage")
 
     const resident = assertFound(
       await this.residentsRepository.getById(values.residentId, values.organizationId),

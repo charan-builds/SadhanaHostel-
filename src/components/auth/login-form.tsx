@@ -14,7 +14,7 @@ import { APIErrorState } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ADMIN_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES } from "@/constants/auth"
+import { ADMIN_PORTAL_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES } from "@/constants/auth"
 import { authSdk, type SessionOverview } from "@/sdk"
 import { useAuth, resolveHomeRoute } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
@@ -400,7 +400,7 @@ function resolveRedirect(
 }
 
 function isSessionAllowed(session: SessionOverview, area: LoginArea) {
-  const allowedRoles = area === "admin" ? ADMIN_ROLES : RESIDENT_ROLES
+  const allowedRoles = area === "admin" ? ADMIN_PORTAL_ROLES : RESIDENT_ROLES
 
   return session.roles.some((role) => (allowedRoles as readonly string[]).includes(role))
 }

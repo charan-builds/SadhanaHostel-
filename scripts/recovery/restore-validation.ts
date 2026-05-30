@@ -63,6 +63,71 @@ async function main() {
       `
     )
   )
+  checks.push(
+    await validate(
+      client,
+      "no orphan audit actors",
+      `
+        select count(*)::int as violations
+        from public.audit_logs audit
+        left join public.users users
+          on users.id = audit.actor_user_id
+        where audit.actor_user_id is not null
+          and users.id is null
+      `
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "resident auth links resolve to public users",
+      `
+        select count(*)::int as violations
+        from public.residents residents
+        left join public.users users
+          on users.id = residents.user_id
+        where residents.deleted_at is null
+          and residents.user_id is not null
+          and users.id is null
+      `
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "no duplicate active resident phone identities",
+      `
+        with duplicate_phones as (
+          select organization_id, phone
+          from public.residents
+          where deleted_at is null
+            and is_active is true
+            and phone is not null
+          group by organization_id, phone
+          having count(*) > 1
+        )
+        select count(*)::int as violations
+        from duplicate_phones
+      `
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "private storage buckets remain private",
+      `
+        select count(*)::int as violations
+        from storage.buckets
+        where id = any(array[
+          'resident-documents',
+          'payment-screenshots',
+          'payment-qr-codes',
+          'invoices'
+        ]::text[])
+          and "public" is true
+      `
+    )
+  )
 
   await client.end()
 

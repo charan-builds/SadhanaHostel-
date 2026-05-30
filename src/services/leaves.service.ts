@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -42,7 +42,7 @@ export class LeavesService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    if (!context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))) {
+    if (!anyRoleHasPermission(context.roles, "leaves.manage")) {
       const resident = await this.residentsRepository.getByUserId(
         context.authUser.id,
         values.organizationId
@@ -81,7 +81,7 @@ export class LeavesService {
       values.organizationId
     )
     const existingResident = assertFound(resident, "Resident not found.")
-    const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const isAdmin = anyRoleHasPermission(context.roles, "leaves.manage")
 
     if (!isAdmin && existingResident.user_id !== context.authUser.id) {
       throw forbidden("Residents can only apply leave for themselves.")
@@ -120,7 +120,7 @@ export class LeavesService {
 
   async reviewLeave(input: unknown) {
     const values = reviewLeaveRequestSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("leaves.manage")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 

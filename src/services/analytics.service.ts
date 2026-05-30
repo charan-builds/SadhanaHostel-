@@ -2,7 +2,6 @@ import "server-only"
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import {
   buildTenantCacheKey,
   getOrSetCache,
@@ -46,7 +45,7 @@ export class AnalyticsService {
 
   async getAdminDashboard(input: unknown) {
     const values = dashboardAnalyticsSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("analytics.view")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -84,7 +83,7 @@ export class AnalyticsService {
 
   async getAdvancedAnalytics(input: unknown) {
     const values = advancedAnalyticsSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("analytics.view")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -129,7 +128,7 @@ export class AnalyticsService {
 
   async getOwnerDashboard(input: unknown) {
     const values = ownerAnalyticsSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "finance"])
+    const context = await this.authService.requirePermission("analytics.view")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,

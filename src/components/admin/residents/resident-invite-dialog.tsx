@@ -51,6 +51,7 @@ export function ResidentInviteDialog({
   const [deliveryChannel, setDeliveryChannel] = useState<DeliveryChannel>("copy_link")
   const [activationLink, setActivationLink] = useState<string | null>(null)
   const [whatsappShareUrl, setWhatsappShareUrl] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<unknown>(null)
   const invites = useResidentInvites({
     organizationId,
     residentId: resident?.id,
@@ -66,34 +67,49 @@ export function ResidentInviteDialog({
       return
     }
 
-    const result = await createInvite.mutateAsync({
-      organizationId,
-      residentId: resident.id,
-      deliveryChannel,
-      expiresInHours: 72,
-    })
+    try {
+      setActionError(null)
+      const result = await createInvite.mutateAsync({
+        organizationId,
+        residentId: resident.id,
+        deliveryChannel,
+        expiresInHours: 72,
+      })
 
-    setActivationLink(result.activationLink)
-    setWhatsappShareUrl(result.whatsappShareUrl)
-    toast.success("Resident invite created.")
+      setActivationLink(result.activationLink)
+      setWhatsappShareUrl(result.whatsappShareUrl)
+      toast.success("Resident invite created.")
+    } catch (error) {
+      setActionError(error)
+    }
   }
 
   async function resend(inviteId: string) {
-    const result = await resendInvite.mutateAsync({
-      organizationId,
-      inviteId,
-    })
+    try {
+      setActionError(null)
+      const result = await resendInvite.mutateAsync({
+        organizationId,
+        inviteId,
+      })
 
-    setActivationLink(result.activationLink)
-    setWhatsappShareUrl(result.whatsappShareUrl)
-    toast.success("New invite link generated.")
+      setActivationLink(result.activationLink)
+      setWhatsappShareUrl(result.whatsappShareUrl)
+      toast.success("New invite link generated.")
+    } catch (error) {
+      setActionError(error)
+    }
   }
 
   async function revoke(inviteId: string) {
-    await revokeInvite.mutateAsync({ organizationId, inviteId })
-    setActivationLink(null)
-    setWhatsappShareUrl(null)
-    toast.success("Invite revoked.")
+    try {
+      setActionError(null)
+      await revokeInvite.mutateAsync({ organizationId, inviteId })
+      setActivationLink(null)
+      setWhatsappShareUrl(null)
+      toast.success("Invite revoked.")
+    } catch (error) {
+      setActionError(error)
+    }
   }
 
   async function copyLink() {
@@ -101,8 +117,12 @@ export function ResidentInviteDialog({
       return
     }
 
-    await navigator.clipboard.writeText(activationLink)
-    toast.success("Invite link copied.")
+    try {
+      await navigator.clipboard.writeText(activationLink)
+      toast.success("Invite link copied.")
+    } catch {
+      toast.error("Copy failed. Select and copy the invite link manually.")
+    }
   }
 
   return (
@@ -145,6 +165,13 @@ export function ResidentInviteDialog({
               />
             ) : (
               <>
+                {actionError ? (
+                  <APIErrorState
+                    title="Invite action failed"
+                    error={actionError}
+                    onRetry={() => setActionError(null)}
+                  />
+                ) : null}
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">Delivery mode</label>

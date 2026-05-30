@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
+import { FrontendApiError } from "@/lib/api-client"
 import { formatDate, humanizeEnum } from "@/lib/format"
 import {
   useCurrentResident,
@@ -128,11 +129,20 @@ export function ResidentProfileClient() {
       return
     }
 
-    await updateProfile.mutateAsync({
-      organizationId,
-      ...values,
-    })
-    toast.success("Profile updated.")
+    try {
+      await updateProfile.mutateAsync({
+        organizationId,
+        ...values,
+      })
+      toast.success("Profile updated.")
+    } catch (error) {
+      form.setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Unable to update profile. Please retry.",
+      })
+    }
   }
 
   async function uploadAadhaar(file: File | null) {
@@ -140,21 +150,29 @@ export function ResidentProfileClient() {
       return
     }
 
-    setAadhaarUploadProgress(0)
-    const result = await documentUpload.mutateAsync({
-      input: {
-        organizationId,
-        hostelId: resident.hostel_id,
-        residentId: resident.id,
-        documentType: "aadhaar",
-        isPublic: false,
-      },
-      file,
-    })
+    try {
+      setAadhaarUploadProgress(0)
+      const result = await documentUpload.mutateAsync({
+        input: {
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+          documentType: "aadhaar",
+          isPublic: false,
+        },
+        file,
+      })
 
-    setLatestAadhaarUpload(result)
-    void residentQuery.refetch()
-    toast.success("Aadhaar document uploaded.")
+      setLatestAadhaarUpload(result)
+      void residentQuery.refetch()
+      toast.success("Aadhaar document uploaded.")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Aadhaar upload failed. Please retry."
+      )
+    }
   }
 
   async function uploadProfilePhoto(file: File | null) {
@@ -162,19 +180,27 @@ export function ResidentProfileClient() {
       return
     }
 
-    setPhotoUploadProgress(0)
-    const result = await profilePhotoUpload.mutateAsync({
-      input: {
-        organizationId,
-        hostelId: resident.hostel_id,
-        residentId: resident.id,
-      },
-      file,
-    })
+    try {
+      setPhotoUploadProgress(0)
+      const result = await profilePhotoUpload.mutateAsync({
+        input: {
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+        },
+        file,
+      })
 
-    setLatestPhotoUpload(result)
-    void residentQuery.refetch()
-    toast.success("Profile photo uploaded.")
+      setLatestPhotoUpload(result)
+      void residentQuery.refetch()
+      toast.success("Profile photo uploaded.")
+    } catch (error) {
+      toast.error(
+        error instanceof FrontendApiError
+          ? error.message
+          : "Profile photo upload failed. Please retry."
+      )
+    }
   }
 
   if (residentQuery.isLoading) {
@@ -229,6 +255,14 @@ export function ResidentProfileClient() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {form.formState.errors.root?.message ? (
+              <div className="mb-5">
+                <APIErrorState
+                  title="Profile update failed"
+                  message={form.formState.errors.root.message}
+                />
+              </div>
+            ) : null}
             <form className="grid gap-5" onSubmit={form.handleSubmit(onSubmit)}>
               <div className="grid gap-4 md:grid-cols-2">
                 <ReadOnlyField label="Full name" value={resident.full_name} />

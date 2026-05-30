@@ -81,4 +81,80 @@ describe("api client utilities", () => {
       requestId: "req-2",
     } satisfies Partial<FrontendApiError>)
   })
+
+  it("converts malformed JSON into a recoverable frontend API error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("{not-json", {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-request-id": "req-bad-json",
+          },
+        })
+      )
+    )
+
+    await expect(apiFetch("/api/test", { retry: 0 })).rejects.toMatchObject({
+      name: "FrontendApiError",
+      code: "MALFORMED_API_RESPONSE",
+      requestId: "req-bad-json",
+    } satisfies Partial<FrontendApiError>)
+  })
+
+  it("does not retry authentication failures", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Authentication is required.",
+            requestId: "req-auth",
+          },
+        }),
+        {
+          status: 401,
+          headers: {
+            "content-type": "application/json",
+          },
+        }
+      )
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(apiFetch("/api/protected", { retry: 2 })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      status: 401,
+    } satisfies Partial<FrontendApiError>)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries transient network failures without surfacing a false auth failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: { recovered: true },
+            message: "ok",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req-recovered",
+            },
+          }
+        )
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(
+      apiFetch<{ recovered: boolean }>("/api/flaky-network", { retry: 1 })
+    ).resolves.toEqual({ recovered: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

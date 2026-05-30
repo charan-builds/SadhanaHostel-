@@ -1,17 +1,20 @@
 "use client"
 
-import { useEffect } from "react"
-import type { RealtimeChannel } from "@supabase/supabase-js"
+import { useEffect, useMemo } from "react"
+import * as Sentry from "@sentry/nextjs"
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import type { RealtimeEventType } from "@/services/realtime/event-types"
 
 import { buildTenantChannelName } from "./realtime-provider"
+import { getRealtimeEventBus } from "./realtime-event-bus"
 
 type UseRealtimeChannelOptions = {
   organizationId: string | null
   hostelId?: string | null
-  event: string
+  channelName?: string | null
+  event: RealtimeEventType | readonly RealtimeEventType[]
   enabled?: boolean
+  throttleMs?: number
   onEvent: (payload: unknown) => void
 }
 
@@ -19,35 +22,59 @@ export function useRealtimeChannel(options: UseRealtimeChannelOptions) {
   const {
     organizationId,
     hostelId,
+    channelName,
     event,
     enabled = true,
+    throttleMs,
     onEvent,
   } = options
+  const realtimeEvents = useMemo(() => normalizeRealtimeEvents(event), [event])
+  const resolvedChannelName = channelName ?? (
+    organizationId ? buildTenantChannelName(organizationId, hostelId) : null
+  )
 
   useEffect(() => {
-    if (!organizationId || !enabled) {
+    if (!organizationId || !enabled || !resolvedChannelName) {
       return
     }
 
-    const supabase = createSupabaseBrowserClient()
-    const channelName = buildTenantChannelName(organizationId, hostelId)
-    let channel: RealtimeChannel | null = supabase.channel(channelName, {
-      config: {
-        private: true,
-      },
-    })
-
-    channel
-      .on("broadcast", { event }, (payload) => {
-        onEvent(payload.payload)
+    const bus = getRealtimeEventBus()
+    const releases = realtimeEvents.map((realtimeEvent) =>
+      bus.subscribe({
+        channelName: resolvedChannelName,
+        event: realtimeEvent,
+        throttleMs,
+        handler: (payload) => {
+          try {
+            onEvent(payload)
+          } catch (error) {
+            Sentry.captureException(error, {
+              tags: {
+                realtime_event: realtimeEvent,
+                realtime_channel: resolvedChannelName,
+              },
+            })
+          }
+        },
       })
-      .subscribe()
+    )
 
     return () => {
-      if (channel) {
-        void supabase.removeChannel(channel)
-        channel = null
+      for (const release of releases) {
+        release()
       }
     }
-  }, [enabled, event, hostelId, onEvent, organizationId])
+  }, [enabled, onEvent, organizationId, realtimeEvents, resolvedChannelName, throttleMs])
+}
+
+export function normalizeRealtimeEvents(
+  event: RealtimeEventType | readonly RealtimeEventType[]
+) {
+  return Array.isArray(event) ? [...new Set(event)] : [event]
+}
+
+export function buildRealtimeEventsDependencyKey(
+  event: RealtimeEventType | readonly RealtimeEventType[]
+) {
+  return normalizeRealtimeEvents(event).join("\u001f")
 }

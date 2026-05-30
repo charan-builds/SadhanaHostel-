@@ -89,28 +89,6 @@ export async function getOrSetCache<T>(
   return setCache(key, await loader(), options)
 }
 
-export function invalidateCacheKey(key: string) {
-  cacheStore.delete(key)
-}
-
-export function invalidateCacheByTag(tag: string) {
-  cacheStore.forEach((entry, key) => {
-    if (entry.tags.includes(tag)) {
-      cacheStore.delete(key)
-    }
-  })
-}
-
-export function invalidateTenantCache(organizationId: string) {
-  const prefix = `tenant:${organizationId}:`
-
-  cacheStore.forEach((_entry, key) => {
-    if (key.startsWith(prefix)) {
-      cacheStore.delete(key)
-    }
-  })
-}
-
 export function clearCache() {
   cacheStore.clear()
 }
@@ -151,8 +129,112 @@ async function setRedisCache<T>(
     "PX",
     options.ttlMs,
   ])
+  await registerRedisCacheIndexes(config, key, options)
 
   return value
+}
+
+export async function invalidateCacheKey(key: string) {
+  cacheStore.delete(key)
+
+  const redisConfig = getRedisConfig()
+
+  if (!redisConfig) {
+    return
+  }
+
+  try {
+    await runRedisCommand<number>(redisConfig, ["DEL", key])
+  } catch {
+    // Cache invalidation must not break the primary workflow.
+  }
+}
+
+export async function invalidateCacheByTag(tag: string) {
+  cacheStore.forEach((entry, key) => {
+    if (entry.tags.includes(tag)) {
+      cacheStore.delete(key)
+    }
+  })
+
+  const redisConfig = getRedisConfig()
+
+  if (!redisConfig) {
+    return
+  }
+
+  try {
+    await invalidateRedisIndex(redisConfig, redisTagKey(tag))
+  } catch {
+    // Cache invalidation must not break the primary workflow.
+  }
+}
+
+export async function invalidateTenantCache(organizationId: string) {
+  const prefix = `tenant:${organizationId}:`
+
+  cacheStore.forEach((_entry, key) => {
+    if (key.startsWith(prefix)) {
+      cacheStore.delete(key)
+    }
+  })
+
+  const redisConfig = getRedisConfig()
+
+  if (!redisConfig) {
+    return
+  }
+
+  try {
+    await invalidateRedisIndex(redisConfig, redisTenantKey(organizationId))
+  } catch {
+    // Cache invalidation must not break the primary workflow.
+  }
+}
+
+async function registerRedisCacheIndexes(
+  config: RedisConfig,
+  key: string,
+  options: CacheSetOptions
+) {
+  const indexKeys = [
+    ...(options.tags ?? []).map(redisTagKey),
+    ...redisTenantIndexKeys(key),
+  ]
+
+  await Promise.all(
+    indexKeys.map((indexKey) =>
+      runRedisCommand<number>(config, ["SADD", indexKey, key])
+    )
+  )
+}
+
+async function invalidateRedisIndex(config: RedisConfig, indexKey: string) {
+  const keys = await runRedisCommand<string[]>(config, ["SMEMBERS", indexKey])
+
+  if (keys.length > 0) {
+    await runRedisCommand<number>(config, ["DEL", ...keys])
+  }
+
+  await runRedisCommand<number>(config, ["DEL", indexKey])
+}
+
+function redisTagKey(tag: string) {
+  return `cache-tag:${tag}`
+}
+
+function redisTenantKey(organizationId: string) {
+  return `cache-tenant:${organizationId}`
+}
+
+function redisTenantIndexKeys(key: string) {
+  const [prefix, organizationId] = key.split(":")
+
+  if (prefix !== "tenant" || !organizationId) {
+    return []
+  }
+
+  return [redisTenantKey(organizationId)]
 }
 
 async function runRedisCommand<T>(

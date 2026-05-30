@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { throwRepositoryError } from "@/repositories/types"
@@ -71,7 +70,7 @@ export class ReportBuilderService {
   async build(typeInput: unknown, input: unknown): Promise<ReportDefinition> {
     const type = reportTypeSchema.parse(typeInput)
     const values = reportRequestSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("reports.export")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,

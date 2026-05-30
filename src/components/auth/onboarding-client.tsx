@@ -155,17 +155,26 @@ export function OnboardingClient() {
       return
     }
 
-    await aadhaarUpload.mutateAsync({
-      input: {
-        organizationId,
-        hostelId: resident.hostel_id,
-        residentId: resident.id,
-        documentType: "aadhaar",
-        isPublic: false,
-      },
-      file,
-    })
-    toast.success("Aadhaar document uploaded.")
+    try {
+      await aadhaarUpload.mutateAsync({
+        input: {
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+          documentType: "aadhaar",
+          isPublic: false,
+        },
+        file,
+      })
+      toast.success("Aadhaar document uploaded.")
+    } catch (error) {
+      setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Aadhaar upload failed. Please retry.",
+      })
+    }
   }
 
   async function uploadPhoto(file: File | undefined) {
@@ -173,15 +182,24 @@ export function OnboardingClient() {
       return
     }
 
-    await photoUpload.mutateAsync({
-      input: {
-        organizationId,
-        hostelId: resident.hostel_id,
-        residentId: resident.id,
-      },
-      file,
-    })
-    toast.success("Profile photo uploaded.")
+    try {
+      await photoUpload.mutateAsync({
+        input: {
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+        },
+        file,
+      })
+      toast.success("Profile photo uploaded.")
+    } catch (error) {
+      setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Profile photo upload failed. Please retry.",
+      })
+    }
   }
 
   return (

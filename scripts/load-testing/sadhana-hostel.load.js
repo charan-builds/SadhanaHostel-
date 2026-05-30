@@ -75,6 +75,33 @@ function buildScenarios() {
     }
   }
 
+  if (ACTIVE_SCENARIOS.has("uploads")) {
+    const uploadVus = Number(__ENV.LOAD_TEST_UPLOAD_VUS || 2)
+
+    scenarios.upload_workflows = {
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "15s", target: uploadVus },
+        {
+          duration: __ENV.LOAD_TEST_UPLOAD_DURATION || __ENV.LOAD_TEST_DURATION || "2m",
+          target: uploadVus,
+        },
+        { duration: "15s", target: 0 },
+      ],
+      exec: "uploadWorkflow",
+    }
+  }
+
+  if (ACTIVE_SCENARIOS.has("realtime")) {
+    scenarios.realtime_reconnect_pressure = {
+      executor: "constant-vus",
+      vus: Number(__ENV.LOAD_TEST_REALTIME_VUS || 5),
+      duration: __ENV.LOAD_TEST_REALTIME_DURATION || __ENV.LOAD_TEST_DURATION || "2m",
+      exec: "realtimeWorkflow",
+    }
+  }
+
   return scenarios
 }
 
@@ -95,6 +122,10 @@ function buildThresholds() {
     thresholds.sadhana_export_latency = ["p(95)<5000"]
   }
 
+  if (ACTIVE_SCENARIOS.has("uploads")) {
+    thresholds.sadhana_upload_failures = ["count==0"]
+  }
+
   return thresholds
 }
 
@@ -104,7 +135,9 @@ export function healthWorkflow() {
     const ready = http.get(`${BASE_URL}/api/health/ready`, jsonHeaders())
 
     recordCheck(live, "live health is ok", (response) => response.status === 200)
-    recordCheck(ready, "ready health returns safe status", (response) => [200, 503].includes(response.status))
+    recordCheck(ready, "ready health returns safe status", (response) =>
+      [200, 503].includes(response.status)
+    )
   })
 
   sleep(1)
@@ -124,7 +157,9 @@ export function residentWorkflow() {
       `${BASE_URL}/api/payments/resident/${RESIDENT_ID}?organizationId=${ORG_ID}`,
       authHeaders(true, jar)
     )
-    recordCheck(payments, "resident payments scoped response", (response) => [200, 401, 403].includes(response.status))
+    recordCheck(payments, "resident payments scoped response", (response) =>
+      [200, 401, 403].includes(response.status)
+    )
 
     if (ENABLE_MUTATIONS) {
       const payment = createUpiPayment(jar)
@@ -136,11 +171,21 @@ export function residentWorkflow() {
   })
 
   group("resident leave and notices", () => {
-    const leaves = http.get(`${BASE_URL}/api/leaves?organizationId=${ORG_ID}&residentId=${RESIDENT_ID}`, authHeaders(true, jar))
-    const notices = http.get(`${BASE_URL}/api/notices?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`, authHeaders(true, jar))
+    const leaves = http.get(
+      `${BASE_URL}/api/leaves?organizationId=${ORG_ID}&residentId=${RESIDENT_ID}`,
+      authHeaders(true, jar)
+    )
+    const notices = http.get(
+      `${BASE_URL}/api/notices?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`,
+      authHeaders(true, jar)
+    )
 
-    recordCheck(leaves, "resident leaves response scoped", (response) => [200, 401, 403].includes(response.status))
-    recordCheck(notices, "notices response scoped", (response) => [200, 401, 403].includes(response.status))
+    recordCheck(leaves, "resident leaves response scoped", (response) =>
+      [200, 401, 403].includes(response.status)
+    )
+    recordCheck(notices, "notices response scoped", (response) =>
+      [200, 401, 403].includes(response.status)
+    )
   })
 
   realtimeChecks.add(1)
@@ -189,6 +234,87 @@ export function adminWorkflow() {
   sleep(1)
 }
 
+export function uploadWorkflow() {
+  const jar = http.cookieJar()
+
+  group("resident upload mutation guard", () => {
+    const loginResponse = login(jar, RESIDENT_EMAIL, RESIDENT_PASSWORD)
+    loginLatency.add(loginResponse.timings.duration)
+    const loginOk = recordCheck(
+      loginResponse,
+      "upload actor login accepted",
+      (res) => res.status === 200
+    )
+
+    if (!ENABLE_MUTATIONS) {
+      workflowSuccessRate.add(true)
+      return
+    }
+
+    if (!loginOk) {
+      uploadFailures.add(1)
+      return
+    }
+
+    const payment = createUpiPayment(jar)
+
+    if (!payment?.id) {
+      uploadFailures.add(1)
+      return
+    }
+
+    uploadPaymentProof(payment.id, jar)
+  })
+
+  sleep(1)
+}
+
+export function realtimeWorkflow() {
+  const jar = http.cookieJar()
+
+  group("realtime reconnect-adjacent reads", () => {
+    const loginResponse = login(
+      jar,
+      ADMIN_EMAIL || RESIDENT_EMAIL,
+      ADMIN_PASSWORD || RESIDENT_PASSWORD
+    )
+    loginLatency.add(loginResponse.timings.duration)
+    recordCheck(loginResponse, "realtime actor login accepted", (res) =>
+      [200, 401].includes(res.status)
+    )
+
+    const health = http.get(`${BASE_URL}/api/health/ready`, {
+      headers: {
+        accept: "application/json",
+        connection: "close",
+        "x-request-id": `k6-realtime-${Date.now()}-${__VU}-${__ITER}`,
+      },
+    })
+    recordCheck(health, "realtime readiness survives reconnect pressure", (res) =>
+      [200, 503].includes(res.status)
+    )
+
+    const payments = http.get(
+      `${BASE_URL}/api/payments?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`,
+      authHeaders(true, jar)
+    )
+    recordCheck(payments, "realtime payment feed remains tenant scoped", (res) =>
+      [200, 401, 403].includes(res.status)
+    )
+
+    const admissions = http.get(
+      `${BASE_URL}/api/admissions/vacancy?organizationId=${ORG_ID}&hostelId=${HOSTEL_ID}`,
+      authHeaders(true, jar)
+    )
+    recordCheck(admissions, "realtime vacancy feed remains tenant scoped", (res) =>
+      [200, 401, 403].includes(res.status)
+    )
+  })
+
+  realtimeChecks.add(1)
+  sleep(1)
+}
+
 function login(jar, email, password) {
   if (!email || !password) {
     return {
@@ -226,7 +352,11 @@ function createUpiPayment(jar) {
     authHeaders(true, jar)
   )
 
-  const ok = recordCheck(response, "payment create accepted", (res) => res.status === 201 || res.status === 200)
+  const ok = recordCheck(
+    response,
+    "payment create accepted",
+    (res) => res.status === 201 || res.status === 200
+  )
 
   if (!ok) {
     paymentFailures.add(1)
@@ -249,7 +379,11 @@ function uploadPaymentProof(paymentId, jar) {
     paymentId,
     file: http.file("synthetic payment proof", "payment-proof.txt", "image/png"),
   }
-  const response = http.post(`${BASE_URL}/api/uploads/payment-proof`, payload, authHeaders(false, jar))
+  const response = http.post(
+    `${BASE_URL}/api/uploads/payment-proof`,
+    payload,
+    authHeaders(false, jar)
+  )
   const ok = recordCheck(response, "payment proof upload accepted", (res) => res.status === 201)
 
   if (!ok) {
@@ -311,6 +445,7 @@ function toSummary(data) {
   return {
     finishedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
+    activeScenarios: Array.from(ACTIVE_SCENARIOS),
     mutationsEnabled: ENABLE_MUTATIONS,
     metrics: {
       httpReqDurationP95: metricValues("http_req_duration")["p(95)"],
@@ -319,6 +454,7 @@ function toSummary(data) {
       apiErrors: metricValues("sadhana_api_errors").count,
       paymentFailures: metricValues("sadhana_payment_failures").count,
       uploadFailures: metricValues("sadhana_upload_failures").count,
+      realtimeChecks: metricValues("sadhana_realtime_checks").count,
     },
   }
 }
@@ -331,6 +467,7 @@ function toMarkdownSummary(data) {
     "",
     `- Finished: ${summary.finishedAt}`,
     `- Base URL: ${summary.baseUrl}`,
+    `- Active scenarios: ${summary.activeScenarios.join(", ")}`,
     `- Mutations enabled: ${summary.mutationsEnabled}`,
     `- HTTP p95: ${summary.metrics.httpReqDurationP95 ?? "n/a"} ms`,
     `- HTTP failed rate: ${summary.metrics.httpReqFailedRate ?? "n/a"}`,
@@ -338,6 +475,7 @@ function toMarkdownSummary(data) {
     `- API errors: ${summary.metrics.apiErrors ?? 0}`,
     `- Payment failures: ${summary.metrics.paymentFailures ?? 0}`,
     `- Upload failures: ${summary.metrics.uploadFailures ?? 0}`,
+    `- Realtime checks: ${summary.metrics.realtimeChecks ?? 0}`,
     "",
   ].join("\n")
 }

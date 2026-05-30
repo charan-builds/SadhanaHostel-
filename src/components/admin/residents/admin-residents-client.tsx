@@ -426,7 +426,7 @@ export function AdminResidentsClient() {
         title={`Check out ${checkoutTarget?.full_name ?? "resident"}?`}
         description="Checkout releases the active room allocation, updates vacancy, and keeps the resident record visible for operational history."
         confirmLabel={checkoutResident.isPending ? "Checking out..." : "Check out"}
-        onConfirm={() => void confirmCheckout()}
+        onConfirm={confirmCheckout}
       />
 
       <ConfirmDialog
@@ -436,7 +436,7 @@ export function AdminResidentsClient() {
         description="The resident will be archived through the production API. Financial records remain immutable."
         confirmLabel={deactivateResident.isPending ? "Deactivating..." : "Deactivate"}
         variant="danger"
-        onConfirm={() => void confirmDeactivate()}
+        onConfirm={confirmDeactivate}
       />
 
       <ConfirmDialog
@@ -445,7 +445,7 @@ export function AdminResidentsClient() {
         title={`Repair lifecycle for ${repairTarget?.full_name ?? "resident"}?`}
         description="This safely checks auth linkage, duplicate invites, stale onboarding, active allocations, invalid dues, and occupancy snapshots for this resident. All changes are tenant-scoped and audit logged."
         confirmLabel={repairResidentLifecycle.isPending ? "Repairing..." : "Repair lifecycle"}
-        onConfirm={() => void confirmRepair()}
+        onConfirm={confirmRepair}
       />
 
       <ResidentInviteDialog

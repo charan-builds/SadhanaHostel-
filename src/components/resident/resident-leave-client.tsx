@@ -64,7 +64,10 @@ export function ResidentLeaveClient() {
     pageSize: 50,
   })
   const createLeave = useCreateLeave()
-  useRealtimeLeaves({ enabled: Boolean(organizationId) })
+  useRealtimeLeaves({
+    enabled: Boolean(organizationId && resident.data?.id),
+    residentId: resident.data?.id,
+  })
   const {
     register,
     control,

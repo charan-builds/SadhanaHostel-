@@ -1,5 +1,10 @@
-import { apiClient } from "@/lib/api-client"
-import { getCurrentAccessToken } from "@/lib/api-client"
+import {
+  FrontendApiError,
+  apiClient,
+  getCurrentAccessToken,
+  notifyApiAuthFailure,
+  type ApiResponse,
+} from "@/lib/api-client"
 import { buildApiUrl, createRequestId } from "@/lib/api-client/request-builder"
 import type { z } from "zod"
 
@@ -176,23 +181,27 @@ export const analyticsSdk = {
 
   async downloadOwner(params: OwnerAnalyticsExportInput): Promise<OwnerAnalyticsDownload> {
     const token = await getCurrentAccessToken()
+    const requestId = createRequestId()
+    const path = "/api/v1/analytics/owner/export"
     const headers = new Headers({
       accept: params.format === "pdf" ? "application/pdf" : "text/csv",
-      "x-request-id": createRequestId(),
+      "x-request-id": requestId,
     })
 
     if (token) {
       headers.set("authorization", `Bearer ${token}`)
     }
 
-    const response = await fetch(buildApiUrl("/api/v1/analytics/owner/export", params), {
+    const response = await fetch(buildApiUrl(path, params), {
       method: "GET",
       credentials: "include",
       headers,
     })
 
     if (!response.ok) {
-      throw new Error(`Owner analytics export failed with status ${response.status}.`)
+      const error = await downloadError(response, requestId)
+      notifyApiAuthFailure(path, error)
+      throw error
     }
 
     return {
@@ -204,6 +213,34 @@ export const analyticsSdk = {
       contentType: response.headers.get("content-type") ?? "application/octet-stream",
     }
   },
+}
+
+async function downloadError(response: Response, requestId: string) {
+  const payload = await readApiErrorPayload(response)
+
+  return new FrontendApiError({
+    code: payload?.error.code ?? `HTTP_${response.status}`,
+    message:
+      payload?.error.message ??
+      `Owner analytics export failed. Status ${response.status}.`,
+    status: response.status,
+    requestId: payload?.error.requestId ?? response.headers.get("x-request-id") ?? requestId,
+    details: payload?.error.details,
+  })
+}
+
+async function readApiErrorPayload(response: Response) {
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    return null
+  }
+
+  try {
+    const payload = (await response.json()) as ApiResponse<unknown>
+
+    return payload.success === false ? payload : null
+  } catch {
+    return null
+  }
 }
 
 function getFileName(contentDisposition: string | null, format: "csv" | "pdf") {

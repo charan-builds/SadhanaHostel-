@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { useBootstrapAdminTenant, useSetupStatus } from "@/hooks"
 import {
@@ -110,13 +111,22 @@ export function AdminSetupWizardClient() {
   }
 
   async function onSubmit(values: SetupFormValues) {
-    const parsedValues = bootstrapAdminTenantSchema.parse(values)
+    try {
+      const parsedValues = bootstrapAdminTenantSchema.parse(values)
 
-    await bootstrap.mutateAsync(parsedValues as BootstrapAdminTenantInput)
-    await refreshSession()
-    toast.success("Admin workspace created. You can manage the hostel from here now.")
-    router.replace("/admin/dashboard" as Route)
-    router.refresh()
+      await bootstrap.mutateAsync(parsedValues as BootstrapAdminTenantInput)
+      await refreshSession()
+      toast.success("Admin workspace created. You can manage the hostel from here now.")
+      router.replace("/admin/dashboard" as Route)
+      router.refresh()
+    } catch (error) {
+      form.setError("root", {
+        message:
+          error instanceof FrontendApiError
+            ? error.message
+            : "Admin workspace setup could not be completed. Please retry.",
+      })
+    }
   }
 
   if (setupQuery.isLoading) {
@@ -229,7 +239,17 @@ export function AdminSetupWizardClient() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>{renderStep(stepIndex, form)}</CardContent>
+          <CardContent>
+            {form.formState.errors.root?.message ? (
+              <div className="mb-5">
+                <APIErrorState
+                  title="Setup failed"
+                  message={form.formState.errors.root.message}
+                />
+              </div>
+            ) : null}
+            {renderStep(stepIndex, form)}
+          </CardContent>
         </Card>
 
         <aside className="grid content-start gap-4">

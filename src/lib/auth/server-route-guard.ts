@@ -6,11 +6,10 @@ import { redirect } from "next/navigation"
 
 import {
   AUTH_REDIRECTS,
-  FINANCE_ROLES,
-  OPERATIONS_ROLES,
   PROTECTED_ROUTE_POLICIES,
-  ADMIN_ROLES,
+  anyRoleHasPermission,
   type AppRole,
+  type PermissionKey,
   type ProtectedRouteArea,
 } from "@/constants/auth"
 import { toApiError } from "@/lib/api/api-error"
@@ -33,11 +32,11 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
   }
 
   if (area === "admin") {
-    const routeAllowedRoles = getAdminRouteAllowedRoles(requestedPath)
+    const routeRequiredPermission = getAdminRouteRequiredPermission(requestedPath)
 
     if (
-      routeAllowedRoles &&
-      !context.roles.some((role) => routeAllowedRoles.includes(role))
+      routeRequiredPermission &&
+      !anyRoleHasPermission(context.roles, routeRequiredPermission)
     ) {
       redirect(policy.unauthorizedPath)
     }
@@ -86,39 +85,43 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
   return context
 }
 
-function getAdminRouteAllowedRoles(requestedPath: string): readonly AppRole[] | null {
+function getAdminRouteRequiredPermission(requestedPath: string): PermissionKey | null {
   const pathname = requestedPath.split("?")[0]
 
   if (
     pathname.startsWith("/admin/settings") ||
     pathname.startsWith("/admin/operations/automation") ||
-    pathname.startsWith("/admin/launch-readiness") ||
+    pathname.startsWith("/admin/launch-readiness")
+  ) {
+    return "settings.manage"
+  }
+
+  if (
     pathname.startsWith("/admin/finance/payment-security") ||
     pathname.startsWith("/admin/website") ||
     pathname.startsWith("/admin/gallery")
   ) {
-    return ADMIN_ROLES
+    return pathname.startsWith("/admin/finance/payment-security")
+      ? "finance.manage"
+      : "cms.manage"
   }
 
-  if (
-    pathname.startsWith("/admin/payments") ||
-    pathname.startsWith("/admin/reports") ||
-    pathname.startsWith("/admin/owner-dashboard")
-  ) {
-    return FINANCE_ROLES
-  }
+  if (pathname.startsWith("/admin/payments")) return "finance.manage"
+  if (pathname.startsWith("/admin/reports")) return "reports.export"
+  if (pathname.startsWith("/admin/owner-dashboard")) return "analytics.view"
 
   if (
     pathname.startsWith("/admin/leads") ||
     pathname.startsWith("/admin/reservations") ||
-    pathname.startsWith("/admin/vacancy") ||
-    pathname.startsWith("/admin/residents") ||
-    pathname.startsWith("/admin/rooms") ||
-    pathname.startsWith("/admin/leaves") ||
-    pathname.startsWith("/admin/notices")
+    pathname.startsWith("/admin/vacancy")
   ) {
-    return OPERATIONS_ROLES
+    return "admissions.manage"
   }
+
+  if (pathname.startsWith("/admin/residents")) return "residents.manage"
+  if (pathname.startsWith("/admin/rooms")) return "rooms.manage"
+  if (pathname.startsWith("/admin/leaves")) return "leaves.manage"
+  if (pathname.startsWith("/admin/notices")) return "notices.manage"
 
   return null
 }

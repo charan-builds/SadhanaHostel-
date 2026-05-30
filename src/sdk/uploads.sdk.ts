@@ -1,7 +1,9 @@
 import {
   FrontendApiError,
   apiClient,
+  createRequestId,
   getCurrentAccessToken,
+  notifyApiAuthFailure,
   type ApiResponse,
 } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
@@ -29,6 +31,7 @@ export type PaymentProofPreview = {
 export type UploadOptions = {
   onProgress?: (progress: UploadProgress) => void
   signal?: AbortSignal
+  timeoutMs?: number
 }
 
 export const uploadsSdk = {
@@ -91,11 +94,17 @@ async function uploadWithProgress<TData>(
 
   return new Promise<TData>((resolve, reject) => {
     const request = new XMLHttpRequest()
+    const requestId = createRequestId()
+    const rejectUpload = (error: FrontendApiError) => {
+      notifyApiAuthFailure(path, error)
+      reject(error)
+    }
 
     request.open("POST", path)
     request.withCredentials = true
+    request.timeout = options?.timeoutMs ?? 30_000
     request.setRequestHeader("accept", "application/json")
-    request.setRequestHeader("x-request-id", crypto.randomUUID())
+    request.setRequestHeader("x-request-id", requestId)
 
     if (token) {
       request.setRequestHeader("authorization", `Bearer ${token}`)
@@ -121,7 +130,7 @@ async function uploadWithProgress<TData>(
         return
       }
 
-      reject(
+      rejectUpload(
         new FrontendApiError({
           code: payload.error.code,
           message: payload.error.message,
@@ -133,21 +142,34 @@ async function uploadWithProgress<TData>(
     }
 
     request.onerror = () => {
-      reject(
+      rejectUpload(
         new FrontendApiError({
           code: "UPLOAD_NETWORK_ERROR",
           message: "Upload failed. Please check your connection and try again.",
           status: request.status || 0,
+          requestId,
         })
       )
     }
 
     request.onabort = () => {
-      reject(
+      rejectUpload(
         new FrontendApiError({
           code: "UPLOAD_ABORTED",
           message: "Upload was cancelled.",
           status: 0,
+          requestId,
+        })
+      )
+    }
+
+    request.ontimeout = () => {
+      rejectUpload(
+        new FrontendApiError({
+          code: "UPLOAD_TIMEOUT",
+          message: "Upload timed out. Check your connection and retry.",
+          status: 0,
+          requestId,
         })
       )
     }
@@ -159,13 +181,25 @@ async function uploadWithProgress<TData>(
 
 function parseUploadResponse<TData>(request: XMLHttpRequest): ApiResponse<TData> {
   try {
-    return JSON.parse(request.responseText) as ApiResponse<TData>
+    const payload = JSON.parse(request.responseText) as unknown
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "success" in payload &&
+      ((payload as { success?: unknown }).success === true ||
+        (payload as { success?: unknown }).success === false)
+    ) {
+      return payload as ApiResponse<TData>
+    }
+
+    throw new Error("Malformed upload response")
   } catch {
     return {
       success: false,
       error: {
-        code: `HTTP_${request.status}`,
-        message: request.statusText || "Upload failed.",
+        code: request.status ? `HTTP_${request.status}` : "UPLOAD_RESPONSE_ERROR",
+        message: request.statusText || "Upload response could not be read.",
         requestId: request.getResponseHeader("x-request-id") ?? undefined,
       },
     }

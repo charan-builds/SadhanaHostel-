@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ADMIN_ROLES } from "@/constants/auth"
+import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
 import { authSdk } from "@/sdk"
 import { resolveHomeRoute, useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -47,7 +47,7 @@ export function PublicAuthActions({
   const authenticated = Boolean(session?.authenticated)
   const dashboardHref = resolveHomeRoute(session) as Route
   const isAdmin = Boolean(
-    session?.roles.some((role) => (ADMIN_ROLES as readonly string[]).includes(role))
+    session?.roles.some((role) => (ADMIN_PORTAL_ROLES as readonly string[]).includes(role))
   )
   const dashboardLabel = isAdmin ? "Admin Dashboard" : "My Dashboard"
 

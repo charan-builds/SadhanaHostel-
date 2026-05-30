@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { runJob, type JobDefinition, jobRegistry } from "@/jobs"
 import { cronRegistry } from "@/jobs/scheduler/cron-registry"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -37,7 +36,7 @@ export class AutomationService {
 
   async getDashboard(input: unknown): Promise<AutomationDashboard> {
     const values = automationDashboardQuerySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
     const organizationId = values.organizationId ?? context.organizationId
     const hostelId = values.hostelId ?? context.hostelIds[0] ?? null
 
@@ -105,7 +104,7 @@ export class AutomationService {
 
   async run(input: unknown): Promise<AutomationRunResult> {
     const values = automationRunSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -172,7 +171,7 @@ export class AutomationService {
 
   async updateSettings(input: unknown) {
     const values = automationSettingsSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 

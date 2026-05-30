@@ -18,7 +18,10 @@ import { adminAuthContext } from "@/tests/helpers"
 
 const OTHER_HOSTEL_ID = "00000000-0000-4000-8000-000000000099"
 
-function createResidentDiagnosticDb(rows: Array<Record<string, unknown>>) {
+function createResidentDiagnosticDb(
+  rows: Array<Record<string, unknown>>,
+  extras: Record<string, unknown> = {}
+) {
   const result = { data: rows, error: null }
   const builder = {
     select: vi.fn(() => builder),
@@ -32,6 +35,7 @@ function createResidentDiagnosticDb(rows: Array<Record<string, unknown>>) {
   return {
     from: vi.fn(() => builder),
     builder,
+    ...extras,
   }
 }
 
@@ -82,6 +86,162 @@ describe("AuthService tenant and hostel guards", () => {
   })
 })
 
+describe("AuthService permission guards", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("allows a role with the requested capability", async () => {
+    const service = new AuthService({} as never)
+    vi.spyOn(service, "getCurrentContext").mockResolvedValue(
+      adminAuthContext({
+        roles: ["finance"],
+        primaryRole: "finance",
+      })
+    )
+
+    await expect(service.requirePermission("finance.manage")).resolves.toMatchObject({
+      primaryRole: "finance",
+    })
+  })
+
+  it("rejects a role without the requested capability", async () => {
+    const service = new AuthService({} as never)
+    vi.spyOn(service, "getCurrentContext").mockResolvedValue(
+      adminAuthContext({
+        roles: ["staff"],
+        primaryRole: "staff",
+      })
+    )
+
+    await expect(service.requirePermission("rooms.manage")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    })
+  })
+
+  it("does not retain a stale privileged default_role when active role assignments exist", () => {
+    const service = new AuthService({} as never)
+    const roles = (
+      service as unknown as {
+        resolveRoles(
+          profile: ReturnType<typeof userFixture>,
+          roleAssignments: ReturnType<typeof userRoleFixture>[]
+        ): string[]
+      }
+    ).resolveRoles(
+      userFixture({ default_role: "admin" }),
+      [
+        userRoleFixture({
+          role: "receptionist",
+          status: "active",
+        }),
+        userRoleFixture({
+          id: "00000000-0000-4000-8000-000000000031",
+          role: "admin",
+          status: "suspended",
+        }),
+      ]
+    )
+
+    expect(roles).toEqual(["receptionist"])
+  })
+
+  it("keeps default_role as a legacy fallback when no active assignments exist", () => {
+    const service = new AuthService({} as never)
+    const roles = (
+      service as unknown as {
+        resolveRoles(
+          profile: ReturnType<typeof userFixture>,
+          roleAssignments: ReturnType<typeof userRoleFixture>[]
+        ): string[]
+      }
+    ).resolveRoles(userFixture({ default_role: "owner" }), [])
+
+    expect(roles).toEqual(["owner"])
+  })
+
+  it("blocks expired staff temporary passwords marked by force_password_reset", async () => {
+    const signOut = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const service = new AuthService({
+      auth: {
+        signInWithPassword: vi.fn().mockResolvedValue({ data: {}, error: null }),
+        signOut,
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: authUserFixture() },
+          error: null,
+        }),
+      },
+    } as never)
+
+    vi.spyOn(UsersRepository.prototype, "getById").mockResolvedValue(
+      userFixture({
+        default_role: "admin",
+        metadata: {
+          force_password_reset: true,
+          temporary_password_expires_at: new Date(Date.now() - 60_000).toISOString(),
+        },
+      })
+    )
+    vi.spyOn(UsersRepository.prototype, "getRoleAssignments").mockResolvedValue([
+      userRoleFixture({ role: "admin" }),
+    ])
+
+    await expect(
+      service.login({
+        identifier: "admin.test@sadhanahostel.example",
+        password: "Temporary123!",
+      })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message:
+        "This temporary password has expired. Ask hostel administration to resend resident access.",
+    })
+    expect(signOut).toHaveBeenCalledOnce()
+  })
+
+  it("rejects password reset redirects outside the configured app origin", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.sadhanahostel.example"
+    const resetPasswordForEmail = vi.fn()
+    const service = new AuthService({
+      auth: { resetPasswordForEmail },
+    } as never)
+
+    await expect(
+      service.resetPassword({
+        email: "admin.test@sadhanahostel.example",
+        redirectTo: "https://evil.example/login",
+      })
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Password reset redirect URL is not allowed.",
+    })
+    expect(resetPasswordForEmail).not.toHaveBeenCalled()
+    process.env.NEXT_PUBLIC_APP_URL = originalAppUrl
+  })
+
+  it("allows password reset redirects to known same-origin auth paths", async () => {
+    const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.sadhanahostel.example"
+    const resetPasswordForEmail = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const service = new AuthService({
+      auth: { resetPasswordForEmail },
+    } as never)
+
+    await expect(
+      service.resetPassword({
+        email: "admin.test@sadhanahostel.example",
+        redirectTo: "https://app.sadhanahostel.example/login",
+      })
+    ).resolves.toEqual({ email: "admin.test@sadhanahostel.example" })
+    expect(resetPasswordForEmail).toHaveBeenCalledWith(
+      "admin.test@sadhanahostel.example",
+      { redirectTo: "https://app.sadhanahostel.example/login" }
+    )
+    process.env.NEXT_PUBLIC_APP_URL = originalAppUrl
+  })
+})
+
 describe("AuthService resident phone-first access", () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -120,7 +280,7 @@ describe("AuthService resident phone-first access", () => {
       data: { user: null },
       error: { message: "Invalid credentials" },
     })
-    const authLoginEmail = "resident-00000000000040008000000000000088@auth.sadhanahostel.invalid"
+    const authLoginEmail = "resident-00000000000040008000000000000012@auth.sadhanahostel.invalid"
     const adminDb = createResidentDiagnosticDb([
       {
         id: RESIDENT_USER_ID,
@@ -160,14 +320,214 @@ describe("AuthService resident phone-first access", () => {
       })
     ).rejects.toMatchObject({
       code: "UNAUTHORIZED",
-      message:
-        "Phone login could not be completed because resident password access is not synchronized. Ask hostel administration to reset resident access or run auth linkage repair.",
+      message: "Invalid phone/email or password.",
     })
 
     expect(signInWithPassword).toHaveBeenCalledWith({
       email: authLoginEmail,
       password: "Temporary123!",
     })
+  })
+
+  it("repairs a missing public alias from Supabase auth metadata before phone password login", async () => {
+    const authLoginEmail = "resident-00000000000040008000000000000012@auth.sadhanahostel.invalid"
+    const updateUserById = vi.fn().mockResolvedValue({
+      data: {
+        user: authUserFixture({
+          id: RESIDENT_USER_ID,
+          email: authLoginEmail,
+          phone: "+919000000002",
+          user_metadata: {
+            organization_id: TEST_ORGANIZATION_ID,
+            hostel_id: TEST_HOSTEL_ID,
+            resident_id: RESIDENT_USER_ID,
+            auth_login_email: authLoginEmail,
+            internal_auth_email: authLoginEmail,
+          },
+        } as never),
+      },
+      error: null,
+    })
+    const rpc = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const adminDb = createResidentDiagnosticDb(
+      [
+        {
+          id: RESIDENT_USER_ID,
+          organization_id: TEST_ORGANIZATION_ID,
+          hostel_id: TEST_HOSTEL_ID,
+          user_id: RESIDENT_USER_ID,
+          status: "draft",
+          onboarding_status: "activated",
+          is_active: true,
+          email: null,
+          phone: "+91 90000 00002",
+        },
+      ],
+      {
+        auth: {
+          admin: {
+            getUserById: vi.fn().mockResolvedValue({
+              data: {
+                user: authUserFixture({
+                  id: RESIDENT_USER_ID,
+                  email: authLoginEmail,
+                  phone: "+919000000002",
+                  user_metadata: {
+                    organization_id: TEST_ORGANIZATION_ID,
+                    hostel_id: TEST_HOSTEL_ID,
+                    resident_id: RESIDENT_USER_ID,
+                    auth_login_email: authLoginEmail,
+                    internal_auth_email: authLoginEmail,
+                  },
+                } as never),
+              },
+              error: null,
+            }),
+            updateUserById,
+          },
+        },
+        rpc,
+      }
+    )
+
+    vi.spyOn(supabaseAdmin, "createSupabaseAdminClient").mockReturnValue(adminDb as never)
+    vi.spyOn(UsersRepository.prototype, "getById").mockResolvedValue(
+      userFixture({
+        id: RESIDENT_USER_ID,
+        email: null,
+        phone: "+919000000002",
+        default_role: "resident",
+        metadata: {},
+      })
+    )
+
+    const service = new AuthService({} as never)
+    const credentials = await (
+      service as unknown as {
+        buildPasswordCredentialsForLogin(identifier: string, password: string): Promise<unknown>
+      }
+    ).buildPasswordCredentialsForLogin("90000 00002", "Temporary123!")
+
+    expect(credentials).toEqual({
+      email: authLoginEmail,
+      password: "Temporary123!",
+    })
+    expect(updateUserById).toHaveBeenCalledWith(
+      RESIDENT_USER_ID,
+      expect.objectContaining({
+        user_metadata: expect.objectContaining({
+          auth_login_email: authLoginEmail,
+          internal_auth_email: authLoginEmail,
+          resident_auth_identity_version: 2,
+        }),
+      })
+    )
+    expect(rpc).toHaveBeenCalledWith("repair_resident_auth_identity_atomic", {
+      p_organization_id: TEST_ORGANIZATION_ID,
+      p_resident_id: RESIDENT_USER_ID,
+      p_auth_user_id: RESIDENT_USER_ID,
+      p_auth_login_email: authLoginEmail,
+      p_internal_auth_email: authLoginEmail,
+      p_reason: "login_alias_metadata_missing",
+    })
+  })
+
+  it("recreates the deterministic internal alias when a linked phone auth user lost email metadata", async () => {
+    const authLoginEmail = "resident-00000000000040008000000000000012@auth.sadhanahostel.invalid"
+    const updateUserById = vi.fn().mockResolvedValue({
+      data: {
+        user: authUserFixture({
+          id: RESIDENT_USER_ID,
+          email: authLoginEmail,
+          phone: "+919000000002",
+          user_metadata: {
+            auth_login_email: authLoginEmail,
+            internal_auth_email: authLoginEmail,
+          },
+        } as never),
+      },
+      error: null,
+    })
+    const rpc = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const adminDb = createResidentDiagnosticDb(
+      [
+        {
+          id: RESIDENT_USER_ID,
+          organization_id: TEST_ORGANIZATION_ID,
+          hostel_id: TEST_HOSTEL_ID,
+          user_id: RESIDENT_USER_ID,
+          status: "draft",
+          onboarding_status: "activated",
+          is_active: true,
+          email: null,
+          phone: "+91 90000 00002",
+        },
+      ],
+      {
+        auth: {
+          admin: {
+            getUserById: vi.fn().mockResolvedValue({
+              data: {
+                user: authUserFixture({
+                  id: RESIDENT_USER_ID,
+                  email: undefined,
+                  phone: "+919000000002",
+                  user_metadata: {
+                    organization_id: TEST_ORGANIZATION_ID,
+                    hostel_id: TEST_HOSTEL_ID,
+                    resident_id: RESIDENT_USER_ID,
+                  },
+                } as never),
+              },
+              error: null,
+            }),
+            updateUserById,
+          },
+        },
+        rpc,
+      }
+    )
+
+    vi.spyOn(supabaseAdmin, "createSupabaseAdminClient").mockReturnValue(adminDb as never)
+    vi.spyOn(UsersRepository.prototype, "getById").mockResolvedValue(
+      userFixture({
+        id: RESIDENT_USER_ID,
+        email: null,
+        phone: "+919000000002",
+        default_role: "resident",
+        metadata: {},
+      })
+    )
+
+    const service = new AuthService({} as never)
+    const credentials = await (
+      service as unknown as {
+        buildPasswordCredentialsForLogin(identifier: string, password: string): Promise<unknown>
+      }
+    ).buildPasswordCredentialsForLogin("90000 00002", "Temporary123!")
+
+    expect(credentials).toEqual({
+      email: authLoginEmail,
+      password: "Temporary123!",
+    })
+    expect(updateUserById).toHaveBeenCalledWith(
+      RESIDENT_USER_ID,
+      expect.objectContaining({
+        email: authLoginEmail,
+        email_confirm: true,
+        user_metadata: expect.objectContaining({
+          auth_login_email: authLoginEmail,
+          internal_auth_email: authLoginEmail,
+        }),
+      })
+    )
+    expect(rpc).toHaveBeenCalledWith(
+      "repair_resident_auth_identity_atomic",
+      expect.objectContaining({
+        p_auth_login_email: authLoginEmail,
+        p_internal_auth_email: authLoginEmail,
+      })
+    )
   })
 
   it("requests resident OTP without creating unaudited auth accounts", async () => {

@@ -568,7 +568,7 @@ export function AdminAutomationClient() {
         description="This permanently removes residents, invites, onboarding records, allocations, payments, invoices, leads, reservations, resident notifications, linked resident auth users, and private resident/payment files for the selected tenant scope. Admin access and configuration are preserved."
         confirmLabel={resetDemoData.isPending ? "Resetting..." : "Reset demo data"}
         variant="danger"
-        onConfirm={() => void runDemoDataReset(false)}
+        onConfirm={() => runDemoDataReset(false)}
       />
     </div>
   )

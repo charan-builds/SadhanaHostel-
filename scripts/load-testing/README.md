@@ -44,10 +44,16 @@ Read-only smoke pressure:
 npm run load:k6
 ```
 
+Full pre-production pressure profile:
+
+```bash
+LOAD_TEST_SCENARIOS=health,resident,admin,uploads,realtime npm run load:k6
+```
+
 Payment and upload workflow validation:
 
 ```bash
-LOAD_TEST_MUTATIONS=true npm run load:k6
+LOAD_TEST_SCENARIOS=health,resident,admin,uploads,realtime LOAD_TEST_MUTATIONS=true npm run load:k6
 ```
 
 Tune users:
@@ -63,6 +69,14 @@ LOAD_TEST_ADMIN_VUS=5 LOAD_TEST_RESIDENT_VUS=30 LOAD_TEST_DURATION=5m npm run lo
 - stdout JSON summary
 
 These files are generated artifacts and should be reviewed after a staging run.
+
+## Scenario Notes
+
+- `health` checks live/ready endpoints under light pressure.
+- `resident` exercises login, resident payments, leaves, notices, and optional payment creation.
+- `admin` exercises login, dashboard analytics, search, and exports.
+- `uploads` is mutation-gated; it creates a staging payment and uploads a synthetic proof only when `LOAD_TEST_MUTATIONS=true`.
+- `realtime` applies reconnect-adjacent pressure to readiness, payment feed, and vacancy feed endpoints. Browser websocket behavior must still be validated with real Playwright/mobile soak sessions.
 
 ## Launch Thresholds
 

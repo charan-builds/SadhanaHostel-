@@ -1,19 +1,55 @@
 "use client"
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { FrontendApiError } from "@/lib/api-client"
 import { authSdk, type SessionOverview } from "@/sdk"
 
 export async function loadSessionOverview() {
-  return authSdk.session()
+  try {
+    return await authSdk.session()
+  } catch (error) {
+    if (error instanceof FrontendApiError && error.status === 401) {
+      return anonymousSessionOverview()
+    }
+
+    throw error
+  }
 }
 
-export function subscribeToSessionChanges(callback: () => void) {
+export function subscribeToSessionChanges(callback: (event: string) => void) {
   const supabase = createSupabaseBrowserClient()
-  const { data } = supabase.auth.onAuthStateChange(() => {
-    callback()
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+
+    timeout = setTimeout(() => {
+      callback(event)
+    }, 0)
   })
 
-  return () => data.subscription.unsubscribe()
+  return () => {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+
+    data.subscription.unsubscribe()
+  }
+}
+
+export function anonymousSessionOverview(): SessionOverview {
+  return {
+    authenticated: false,
+    user: null,
+    profile: null,
+    roles: [],
+    primaryRole: null,
+    organizationId: null,
+    hostelIds: [],
+    onboardingRequired: false,
+    redirectTo: "/login",
+  }
 }
 
 export function resolveHomeRoute(session: SessionOverview | null) {

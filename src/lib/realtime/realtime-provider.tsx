@@ -46,3 +46,11 @@ export function buildTenantChannelName(organizationId: string, hostelId?: string
     ? `tenant:${organizationId}:hostel:${hostelId}`
     : `tenant:${organizationId}:global`
 }
+
+export function buildResidentChannelName(
+  organizationId: string,
+  hostelId: string,
+  residentId: string
+) {
+  return `${buildTenantChannelName(organizationId, hostelId)}:resident:${residentId}`
+}

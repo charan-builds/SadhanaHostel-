@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest, notFound } from "@/lib/api/api-error"
 import {
   buildTenantCacheKey,
@@ -75,7 +74,7 @@ export class WebsiteService {
 
   async updateSetting(input: unknown) {
     const values = updateWebsiteSettingSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("cms.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : undefined
     const existingSetting = await this.websiteRepository.getSettingById(
       values.settingId,
@@ -103,7 +102,7 @@ export class WebsiteService {
       updated_by: context.authUser.id,
     })
 
-    invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
 
     return setting
   }
@@ -132,7 +131,7 @@ export class WebsiteService {
 
   async createFacility(input: unknown) {
     const values = createFacilitySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("cms.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
     const hostelId = this.authService.resolveHostelScope(
       context,
@@ -156,7 +155,7 @@ export class WebsiteService {
       updated_by: context.authUser.id,
     })
 
-    invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
 
     return facility
   }
@@ -185,7 +184,7 @@ export class WebsiteService {
 
   async createGalleryItem(input: unknown) {
     const values = createGalleryItemSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("cms.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
     const hostelId = this.authService.resolveHostelScope(
       context,
@@ -208,14 +207,14 @@ export class WebsiteService {
       updated_by: context.authUser.id,
     })
 
-    invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
 
     return item
   }
 
   async uploadGalleryImage(input: unknown, file: File) {
     const values = uploadGalleryImageSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("cms.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
     const hostelId = this.authService.resolveHostelScope(
       context,
@@ -269,7 +268,7 @@ export class WebsiteService {
         updated_by: context.authUser.id,
       })
 
-      invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+      await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
       logAuditEvent({
         action: "cms.gallery.uploaded",
         actorUserId: context.authUser.id,

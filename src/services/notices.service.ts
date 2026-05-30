@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { notFound } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { NoticesRepository } from "@/repositories/notices.repository"
@@ -35,7 +35,7 @@ export class NoticesService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    const isAdmin = context.roles.some((role) => [...ADMIN_ROLES, "staff"].includes(role))
+    const isAdmin = anyRoleHasPermission(context.roles, "notices.manage")
     const hostelId = isAdmin
       ? this.authService.resolveHostelScope(context, values.organizationId, values.hostelId)
       : values.hostelId
@@ -50,7 +50,7 @@ export class NoticesService {
 
   async createNotice(input: unknown) {
     const values = createNoticeSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("notices.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : null
     const hostelId = this.authService.resolveHostelScope(
       context,
@@ -77,7 +77,7 @@ export class NoticesService {
 
   async updateNotice(input: unknown) {
     const values = updateNoticeSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("notices.manage")
     const publishedAt = values.status === "published" ? new Date().toISOString() : undefined
     const existingNotice = await this.noticesRepository.getById(
       values.noticeId,

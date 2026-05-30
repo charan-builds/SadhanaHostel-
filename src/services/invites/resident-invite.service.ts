@@ -29,6 +29,7 @@ import {
   getResidentIdentityMode,
   getResidentIdentityRequirement,
 } from "@/lib/resident-identity"
+import { buildResidentInternalAuthEmail } from "@/lib/resident-auth-identity"
 import type {
   ResidentActivationResult,
   ResidentInviteCreated,
@@ -739,7 +740,7 @@ export class ResidentInviteService {
   private async findAuthUserForInvite(invite: ResidentInviteRow) {
     const normalizedEmail = normalizeEmail(invite.email)
     const normalizedPhone = normalizeOptionalPhoneNumber(invite.phone)
-    const internalAuthEmail = buildInternalResidentAuthEmail(invite.resident_id)
+    const internalAuthEmail = buildResidentInternalAuthEmail(invite.resident_id)
 
     for (let page = 1; page <= 20; page += 1) {
       const { data, error } = await this.db.auth.admin.listUsers({
@@ -1692,7 +1693,7 @@ function buildInviteAuthIdentity(invite: ResidentInviteRow): InviteAuthIdentity 
   const email = normalizeEmail(invite.email)
   const phone = normalizeResidentInvitePhone(invite.phone)
   const internalAuthEmail = !email
-    ? buildInternalResidentAuthEmail(invite.resident_id)
+    ? buildResidentInternalAuthEmail(invite.resident_id)
     : undefined
 
   if (!email && !phone) {
@@ -1706,10 +1707,6 @@ function buildInviteAuthIdentity(invite: ResidentInviteRow): InviteAuthIdentity 
     internalAuthEmail,
     mode: email && phone ? "email_and_phone" : email ? "email" : "phone",
   }
-}
-
-function buildInternalResidentAuthEmail(residentId: string) {
-  return `resident-${residentId.replace(/-/g, "")}@auth.sadhanahostel.invalid`
 }
 
 function normalizeResidentInvitePhone(phone?: string | null) {

@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { conflict } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -34,7 +33,7 @@ export class RoomsService {
 
   async listRooms(input: unknown) {
     const values = roomListSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
     const hostelId = this.authService.resolveHostelScope(
       context,
       values.organizationId,
@@ -49,7 +48,7 @@ export class RoomsService {
 
   async createRoom(input: unknown) {
     const values = createRoomSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -76,7 +75,7 @@ export class RoomsService {
   }
 
   async getRoom(roomId: string, organizationId: string) {
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
 
     const [room, occupancy, allocations] = await Promise.all([
       this.roomsRepository.getById(roomId, organizationId),
@@ -96,7 +95,7 @@ export class RoomsService {
 
   async updateRoom(input: unknown) {
     const values = updateRoomSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
 
     const existingRoom = assertFound(
       await this.roomsRepository.getById(values.roomId, values.organizationId),
@@ -130,7 +129,7 @@ export class RoomsService {
 
   async allocateRoom(input: unknown) {
     const values = allocateRoomSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
@@ -158,7 +157,7 @@ export class RoomsService {
 
   async transferRoom(input: unknown) {
     const values = transferRoomSchema.parse(input)
-    const context = await this.authService.requireRole([...ADMIN_ROLES, "staff"])
+    const context = await this.authService.requirePermission("rooms.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 

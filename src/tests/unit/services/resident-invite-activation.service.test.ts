@@ -466,6 +466,79 @@ describe("ResidentInviteService activation bootstrap", () => {
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
+  it("keeps repeated activation refresh and duplicate-click retries idempotent", async () => {
+    const token = generateSignedInviteToken()
+    let invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
+    let resident = residentFixture({
+      user_id: null,
+      status: "draft",
+      email: invite.email,
+      phone: invite.phone,
+    })
+    const authUsers: User[] = []
+    const harness = createServiceHarness(invite)
+
+    harness.invitesRepository.findByTokenHash.mockImplementation(async () => invite)
+    harness.invitesRepository.listForResident.mockImplementation(async () => [invite])
+    harness.residentsRepository.getById.mockImplementation(async () => resident)
+    harness.db.auth.admin.listUsers.mockImplementation(async () => ({
+      data: { users: [...authUsers] },
+      error: null,
+    }))
+    harness.db.auth.admin.createUser.mockImplementation(async () => {
+      const user = authUserFixture({
+        user_metadata: {
+          organization_id: invite.organization_id,
+          resident_id: invite.resident_id,
+          activated_from_invite: true,
+        },
+      })
+      authUsers.push(user)
+
+      return { data: { user }, error: null }
+    })
+    harness.invitesRepository.activateInviteAtomic.mockImplementation(async () => {
+      invite = {
+        ...invite,
+        status: "used",
+        used_at: "2026-05-23T01:00:00.000Z",
+        updated_by: ACTIVATION_USER_ID,
+      }
+      resident = residentFixture({
+        user_id: ACTIVATION_USER_ID,
+        status: "draft",
+        email: invite.email,
+        phone: invite.phone,
+      })
+
+      return resident
+    })
+
+    const attempts = []
+    for (let index = 0; index < 5; index += 1) {
+      attempts.push(
+        await harness.service.activateInvite({
+          token,
+          password: "StrongPassword123!",
+          confirmPassword: "StrongPassword123!",
+        })
+      )
+    }
+
+    expect(attempts).toEqual(
+      Array.from({ length: 5 }, () => ({
+        authenticatedIdentifier: invite.email,
+        residentId: invite.resident_id,
+        redirectTo: "/resident/onboarding",
+      }))
+    )
+    expect(authUsers).toHaveLength(1)
+    expect(harness.db.auth.admin.createUser).toHaveBeenCalledTimes(1)
+    expect(harness.db.auth.admin.deleteUser).not.toHaveBeenCalled()
+    expect(harness.invitesRepository.activateInviteAtomic).toHaveBeenCalledTimes(1)
+    expect(harness.invitesRepository.recoverUsedInviteActivationAtomic).not.toHaveBeenCalled()
+  })
+
   it("recovers an interrupted activation when the invite is used but resident linkage is missing", async () => {
     const token = generateSignedInviteToken()
     const invite = createInviteFixture({

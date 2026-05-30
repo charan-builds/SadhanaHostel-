@@ -4,7 +4,6 @@ import type { User } from "@supabase/supabase-js"
 
 import {
   ROLE_PERMISSIONS,
-  type AppRole,
   type PermissionKey,
 } from "@/constants/auth"
 import { getServerEnv } from "@/config/env"
@@ -31,7 +30,6 @@ import {
 
 import { AuthService, type AuthContext } from "./auth.service"
 
-const IAM_MANAGER_ROLES = ["super_admin", "owner", "admin"] satisfies AppRole[]
 const DEFAULT_TEMP_PASSWORD_HOURS = 24
 
 export type StaffAccessAccount = StaffAccountRow & {
@@ -214,6 +212,10 @@ export class StaffAccessService {
       throw notFound("Staff role assignment not found.")
     }
 
+    if (existingAssignment.user_id !== values.targetUserId) {
+      throw forbidden("Role assignment does not belong to the target staff user.")
+    }
+
     this.authService.requireHostelAccess(
       context,
       existingAssignment.organization_id,
@@ -263,6 +265,15 @@ export class StaffAccessService {
         deleted_by: values.status === "deleted" ? context.authUser.id : undefined,
       }
     )
+
+    if (values.role) {
+      await this.syncProfileRole({
+        targetUserId: values.targetUserId,
+        organizationId: values.organizationId,
+        role: values.role,
+        actorUserId: context.authUser.id,
+      })
+    }
 
     if (values.status) {
       await this.setAccountState({
@@ -370,7 +381,7 @@ export class StaffAccessService {
   }
 
   private async requireIamManager() {
-    return this.authService.requireRole(IAM_MANAGER_ROLES)
+    return this.authService.requirePermission("iam.manage")
   }
 
   private assertCanAssignRole(context: AuthContext, role: StaffRole) {
@@ -572,6 +583,31 @@ export class StaffAccessService {
         ban_duration: "none",
       })
     }
+  }
+
+  private async syncProfileRole(input: {
+    targetUserId: string
+    organizationId: string
+    role: StaffRole
+    actorUserId: string
+  }) {
+    const user = await this.staffRepository.getUserById(
+      input.targetUserId,
+      input.organizationId
+    )
+
+    if (!user) {
+      throw notFound("Staff user not found.")
+    }
+
+    await this.staffRepository.updateUser(input.targetUserId, {
+      default_role: input.role,
+      metadata: {
+        ...recordFromJson(user.metadata),
+        staff_access_managed: true,
+      } as Json,
+      updated_by: input.actorUserId,
+    })
   }
 
   private async patchUserMetadata(

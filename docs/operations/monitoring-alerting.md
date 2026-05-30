@@ -21,6 +21,9 @@ Define actionable production monitoring for frontend, backend, financial workflo
 | Frontend crash spike | Sentry frontend error rate > 2% for 10 minutes | High | Frontend |
 | API 5xx spike | API error count > 10 in 5 minutes or 5xx rate > 2% | Critical | Backend |
 | Login failures spike | `auth.login` failure rate > 20% for 10 minutes | High | Backend |
+| Auth desync anomaly | Any `auth.resident_password_identity_repair_failed`, duplicate active phone, or orphan resident auth link | Critical | Backend |
+| Activation failure repeat | Same resident or phone fails activation/login repair 3 times in 30 minutes | Critical | Backend |
+| Actor spoofing blocked | Any `actor_spoofing_detected` or `actor_column_spoofing_detected` database error | Critical | Security/backend |
 | Payment verification failure | Any repeated `payments.verify` failure for same tenant | Critical | Finance/backend |
 | Invoice generation failure | `invoice.generated` failure > 0 after payment verification | Critical | Finance/backend |
 | Upload failure spike | Upload failures > 5% for 15 minutes | High | Backend |
@@ -55,6 +58,9 @@ Configure external uptime checks:
 - API latency p50/p95/p99 by route.
 - Error count by route and status.
 - Payment verification successes/failures.
+- Resident activation success/failure and repair attempts.
+- Auth identity repair failures by tenant and resident.
+- Actor spoofing block count by route/RPC.
 - Upload successes/failures by bucket.
 - Cron job duration and status.
 - Realtime publish count by event type.
@@ -63,6 +69,12 @@ Configure external uptime checks:
 ## Escalation
 
 Use `docs/operations/failure-escalation.md` for severity ownership, communication templates, and rollback routing.
+
+## Noise Controls
+
+- Expected unauthorized probes should be tagged as 401/auth-required and sampled or downgraded.
+- Actor spoofing, auth desync, upload integrity, and payment verification failures must not be downgraded.
+- Every actionable alert must include environment, release, route/RPC, request ID, tenant ID, and actor user ID when available.
 
 ## TODO
 

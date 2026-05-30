@@ -17,6 +17,7 @@ These documents are execution checklists, not architecture proposals. Complete t
 7. [Final Security Review](./07-final-security-review.md)
 8. [Soft Launch Strategy](./08-soft-launch-strategy.md)
 9. [Final Production Readiness Report](./09-final-production-readiness-report.md)
+10. [Final Pre-Production Execution Roadmap - 2026-05-28](./12-final-pre-production-execution-roadmap-2026-05-28.md)
 
 ## Local Preflight
 
@@ -44,4 +45,3 @@ The strict mode should fail until required tooling and staging environment varia
 - Backup/restore drill output.
 - Security signoff checklist.
 - Final readiness report with go/no-go decision.
-

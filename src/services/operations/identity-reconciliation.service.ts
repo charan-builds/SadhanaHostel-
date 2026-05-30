@@ -2,10 +2,15 @@ import "server-only"
 
 import type { User } from "@supabase/supabase-js"
 
-import { ADMIN_PORTAL_ROLES, ADMIN_ROLES, type AppRole } from "@/constants/auth"
+import { ADMIN_PORTAL_ROLES, type AppRole } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { normalizeOptionalPhoneNumber } from "@/lib/identity"
 import { logger } from "@/lib/logger"
+import {
+  getResidentMetadataAuthLoginEmail,
+  normalizeEmailCandidate,
+  resolveResidentAuthLoginEmail,
+} from "@/lib/resident-auth-identity"
 import { maskEmail, maskPhone } from "@/lib/security"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -92,7 +97,7 @@ export class IdentityReconciliationService {
 
   async scan(input: unknown): Promise<IdentityReconciliationReport> {
     const values = identityReconciliationQuerySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
     const organizationId = values.organizationId ?? context.organizationId
 
     if (!organizationId) {
@@ -109,7 +114,7 @@ export class IdentityReconciliationService {
 
   async repair(input: unknown): Promise<IdentityRepairResult> {
     const values = identityRepairSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(
       context,
@@ -497,6 +502,39 @@ export class IdentityReconciliationService {
             recommendedRepairAction: "relink_resident",
             safeAutoRepair: false,
           })
+        } else if (linkedResident) {
+          const publicMetadata = recordFromUnknown(publicUser?.metadata)
+          const publicAlias =
+            getResidentMetadataAuthLoginEmail(publicMetadata) ??
+            normalizeEmailCandidate(publicUser?.email)
+          const authAlias = resolveResidentAuthLoginEmail({
+            residentId: linkedResident.id,
+            profileMetadata: publicMetadata,
+            authMetadata: metadata,
+            profileEmail: publicUser?.email,
+            authEmail: authUser.email,
+            residentEmail: linkedResident.email,
+          })
+
+          if (!publicAlias || publicAlias !== authAlias) {
+            findings.push({
+              id: `resident-auth-alias-desync:${authUser.id}`,
+              category: "invalid_linkage",
+              severity: publicAlias ? "medium" : "high",
+              title: "Resident password login alias is not synchronized",
+              description: "The resident can activate successfully but later fail phone/password login when public profile metadata loses the auth alias.",
+              authUserId: authUser.id,
+              residentId: linkedResident.id,
+              organizationId: input.organizationId,
+              hostelId: linkedResident.hostel_id,
+              expectedState: `public.users metadata auth_login_email ${maskEmail(authAlias) ?? "is present"}.`,
+              actualState: publicAlias
+                ? `public.users resolves ${maskEmail(publicAlias) ?? "a different alias"}.`
+                : "public.users has no password-login alias.",
+              recommendedRepairAction: "relink_resident",
+              safeAutoRepair: false,
+            })
+          }
         }
       }
     }

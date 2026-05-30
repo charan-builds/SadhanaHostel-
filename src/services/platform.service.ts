@@ -1,6 +1,5 @@
 import "server-only"
 
-import { ADMIN_ROLES } from "@/constants/auth"
 import { badRequest } from "@/lib/api/api-error"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
@@ -44,7 +43,7 @@ export class PlatformService {
   }
 
   async getSetupStatus(): Promise<SetupStatus> {
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     if (!context.organizationId) {
       return {
@@ -90,13 +89,13 @@ export class PlatformService {
 
   async bootstrapTenant(input: unknown) {
     const values = bootstrapAdminTenantSchema.parse(input)
-    await this.authService.requireRole(ADMIN_ROLES)
+    await this.authService.requirePermission("settings.manage")
 
     return this.organizationsRepository.bootstrapAdminTenant(values)
   }
 
   async getOrganization() {
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     if (!context.organizationId) {
       throw badRequest("Organization setup is required before settings can be loaded.")
@@ -110,7 +109,7 @@ export class PlatformService {
 
   async updateOrganization(input: unknown) {
     const values = updateOrganizationSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -155,7 +154,7 @@ export class PlatformService {
   }
 
   async listHostels() {
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     if (!context.organizationId) {
       throw badRequest("Organization setup is required before hostels can be loaded.")
@@ -168,7 +167,7 @@ export class PlatformService {
 
   async createHostel(input: unknown) {
     const values = hostelCreateSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
@@ -215,7 +214,7 @@ export class PlatformService {
 
   async updateHostel(input: unknown) {
     const values = hostelUpdateSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_ROLES)
+    const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
     const current = assertFound(

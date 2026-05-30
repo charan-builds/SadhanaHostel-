@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 
 import { getSupabasePublicConfig } from "@/lib/env"
 import type { Database } from "@/types/database"
@@ -7,8 +7,16 @@ import type { Database } from "@/types/database"
 export async function createSupabaseServerClient() {
   const { url, anonKey } = getSupabasePublicConfig()
   const cookieStore = await cookies()
+  const headerStore = await headers()
+  const authorization = headerStore.get("authorization")
 
   return createServerClient<Database>(url, anonKey, {
+    global: {
+      headers: {
+        ...(authorization ? { authorization } : {}),
+        "X-Client-Info": "sadhana-hostel-server",
+      },
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll()

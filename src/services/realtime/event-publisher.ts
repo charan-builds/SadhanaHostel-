@@ -12,6 +12,7 @@ export type PublishRealtimeEventInput<TPayload extends Json = Json> = {
   type: RealtimeEventType
   organizationId: string
   hostelId?: string | null
+  residentId?: string | null
   actorUserId?: string | null
   payload: TPayload
 }
@@ -24,11 +25,14 @@ export class RealtimeEventPublisher {
       type: input.type,
       organizationId: input.organizationId,
       hostelId: input.hostelId,
+      residentId: input.residentId,
       actorUserId: input.actorUserId,
       occurredAt: new Date().toISOString(),
       payload: input.payload,
     }
-    const channelName = buildTenantChannelName(input.organizationId, input.hostelId)
+    const channelName = input.residentId && input.hostelId
+      ? buildResidentChannelName(input.organizationId, input.hostelId, input.residentId)
+      : buildTenantChannelName(input.organizationId, input.hostelId)
 
     try {
       const channel = this.db.channel(channelName, {
@@ -83,4 +87,12 @@ export function buildTenantChannelName(organizationId: string, hostelId?: string
   return hostelId
     ? `tenant:${organizationId}:hostel:${hostelId}`
     : `tenant:${organizationId}:global`
+}
+
+export function buildResidentChannelName(
+  organizationId: string,
+  hostelId: string,
+  residentId: string
+) {
+  return `${buildTenantChannelName(organizationId, hostelId)}:resident:${residentId}`
 }

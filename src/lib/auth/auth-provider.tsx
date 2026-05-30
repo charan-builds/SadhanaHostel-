@@ -6,14 +6,17 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { subscribeToApiAuthFailures } from "@/lib/api-client"
 import { queryKeys } from "@/lib/react-query"
 import type { SessionOverview } from "@/sdk"
 
 import {
+  anonymousSessionOverview,
   loadSessionOverview,
   subscribeToSessionChanges,
 } from "./session-manager"
@@ -30,6 +33,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
+  const previousOrganizationId = useRef<string | null>(null)
   const sessionQuery = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: loadSessionOverview,
@@ -41,7 +45,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session })
   }, [queryClient])
 
-  useEffect(() => subscribeToSessionChanges(refreshSession), [refreshSession])
+  const clearTenantQueries = useCallback(() => {
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] === "tenant",
+    })
+  }, [queryClient])
+
+  useEffect(
+    () =>
+      subscribeToSessionChanges((event) => {
+        if (event === "SIGNED_OUT" || event === "USER_DELETED") {
+          queryClient.setQueryData(queryKeys.auth.session, anonymousSessionOverview())
+          clearTenantQueries()
+        }
+
+        void refreshSession()
+      }),
+    [clearTenantQueries, queryClient, refreshSession]
+  )
+
+  useEffect(
+    () =>
+      subscribeToApiAuthFailures(() => {
+        queryClient.setQueryData(queryKeys.auth.session, anonymousSessionOverview())
+        clearTenantQueries()
+        void refreshSession()
+      }),
+    [clearTenantQueries, queryClient, refreshSession]
+  )
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -53,6 +84,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [refreshSession, sessionQuery.data, sessionQuery.isLoading]
   )
+
+  useEffect(() => {
+    const currentOrganizationId = value.organizationId
+    const previous = previousOrganizationId.current
+
+    if (previous && previous !== currentOrganizationId) {
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "tenant" && query.queryKey[1] === previous,
+      })
+    }
+
+    previousOrganizationId.current = currentOrganizationId
+  }, [queryClient, value.organizationId])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

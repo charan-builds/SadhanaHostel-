@@ -13,6 +13,7 @@ import { adminAuthContext } from "@/tests/helpers"
 function createServiceHarness() {
   const authService = {
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
+    requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
     requireHostelAccess: vi.fn(),
     resolveHostelScope: vi.fn((_context, _organizationId, hostelId) => hostelId ?? null),
@@ -299,7 +300,7 @@ describe("ResidentsService", () => {
       }),
     })
 
-    expect(harness.authService.requireRole).toHaveBeenCalled()
+    expect(harness.authService.requirePermission).toHaveBeenCalledWith("settings.manage")
     expect(harness.authService.requireHostelAccess).toHaveBeenCalledWith(
       expect.anything(),
       TEST_ORGANIZATION_ID,

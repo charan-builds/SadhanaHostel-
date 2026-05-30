@@ -1,4 +1,5 @@
 export * from "./api-fetch"
+export * from "./auth-recovery"
 export * from "./auth-token"
 export * from "./client"
 export * from "./request-builder"

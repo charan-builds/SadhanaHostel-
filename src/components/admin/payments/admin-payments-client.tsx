@@ -283,7 +283,7 @@ export function AdminPaymentsClient() {
         title="Verify payment?"
         description="Only verify after checking the UPI reference and uploaded proof. This action is protected by financial audit rules."
         confirmLabel={verifyPayment.isPending ? "Verifying..." : "Verify payment"}
-        onConfirm={() => void confirmVerification()}
+        onConfirm={confirmVerification}
       />
 
       <Dialog

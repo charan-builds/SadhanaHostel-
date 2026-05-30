@@ -108,9 +108,9 @@ export function PaymentSecurityClient() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [failedQrPreviewUrl, setFailedQrPreviewUrl] = useState<string | null>(null)
   const [reactivateTarget, setReactivateTarget] = useState<PaymentSettingView | null>(null)
-  const [validationResult, setValidationResult] =
+  const [validationResultDraft, setValidationResult] =
     useState<PaymentSettingTestResult | null>(null)
-  const [form, setForm] = useState<PaymentSecurityForm>(createDefaultForm(null))
+  const [formDraft, setFormDraft] = useState<PaymentSecurityForm>(createDefaultForm(null))
   const [formSourceKey, setFormSourceKey] = useState("new")
 
   useRealtimePayments({ enabled: Boolean(organizationId) })
@@ -161,11 +161,12 @@ export function PaymentSecurityClient() {
     }
   }, [qrFilePreviewUrl])
 
-  if (formSourceKey !== activeSettingKey && !qrFile) {
-    setForm(createDefaultForm(activeSetting))
-    setValidationResult(null)
-    setFormSourceKey(activeSettingKey)
-  }
+  const shouldUseLoadedSetting = formSourceKey !== activeSettingKey && !qrFile
+  const form = useMemo(
+    () => (shouldUseLoadedSetting ? createDefaultForm(activeSetting) : formDraft),
+    [activeSetting, formDraft, shouldUseLoadedSetting]
+  )
+  const validationResult = shouldUseLoadedSetting ? null : validationResultDraft
 
   const payload = useMemo(
     () =>
@@ -239,7 +240,8 @@ export function PaymentSecurityClient() {
         toast.success("QR image uploaded. Saving payment configuration...")
         nextQrImagePath = uploaded.storagePath
         setFailedQrPreviewUrl(null)
-        setForm((current) => ({ ...current, qrImagePath: uploaded.storagePath }))
+        setFormDraft((current) => ({ ...current, qrImagePath: uploaded.storagePath }))
+        setFormSourceKey(activeSettingKey)
       }
 
       if (selectedQrFile) {
@@ -682,7 +684,7 @@ export function PaymentSecurityClient() {
         title="Reactivate old payment account?"
         description="This will make the selected account active and deactivate the current receiving account for new resident payments."
         confirmLabel="Reactivate"
-        onConfirm={() => reactivateTarget && void reactivate(reactivateTarget)}
+        onConfirm={() => (reactivateTarget ? reactivate(reactivateTarget) : undefined)}
       />
     </ResponsiveContainer>
   )
@@ -691,7 +693,8 @@ export function PaymentSecurityClient() {
     key: TKey,
     value: PaymentSecurityForm[TKey]
   ) {
-    setForm((current) => ({ ...current, [key]: value }))
+    setFormDraft({ ...form, [key]: value })
+    setFormSourceKey(activeSettingKey)
     setValidationResult(null)
   }
 
@@ -732,6 +735,7 @@ export function PaymentSecurityClient() {
 
     setQrFile(selectedFile)
     setQrUploadStatus("selected")
+    setFormSourceKey(activeSettingKey)
     setValidationResult(null)
     toast.info("QR image selected. Click Upload & Save to publish it.")
   }
