@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MotionReveal } from "@/components/shared/motion-reveal"
 
 type SectionItem = {
   title: string
@@ -20,15 +21,17 @@ export function PublicSectionPage({
 }: PublicSectionPageProps) {
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-12">
+      <MotionReveal>
       <section className="max-w-3xl">
         <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           {eyebrow}
         </p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl">
+        <h1 className="text-gradient mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl">
           {title}
         </h1>
         <p className="mt-4 text-lg leading-8 text-muted-foreground">{description}</p>
       </section>
+      </MotionReveal>
 
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (

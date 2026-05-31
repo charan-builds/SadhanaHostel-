@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { Constants } from "@/types/database"
 
 import { dateOnlySchema, moneySchema, paginationSchema, uuidSchema } from "./common.validation"
@@ -21,7 +22,7 @@ export const createRoomSchema = z.object({
   floor: z.string().trim().max(40).optional(),
   blockName: z.string().trim().max(80).optional(),
   capacity: z.coerce.number().int().positive().max(50),
-  baseMonthlyFee: moneySchema.default(0),
+  baseMonthlyFee: moneySchema.default(HOSTEL_FEES.student),
   hasAttachedBathroom: z.boolean().default(false),
   hasAc: z.boolean().default(false),
   description: z.string().trim().max(1000).optional(),
@@ -35,7 +36,7 @@ export const allocateRoomSchema = z.object({
   bedLabel: z.string().trim().max(40).optional(),
   allocatedFrom: dateOnlySchema,
   allocatedTo: dateOnlySchema.optional(),
-  monthlyFeeAmount: moneySchema.default(0),
+  monthlyFeeAmount: moneySchema.default(HOSTEL_FEES.student),
   reason: z.string().trim().max(500).optional(),
 })
 
@@ -47,7 +48,7 @@ export const transferRoomSchema = z.object({
   toRoomId: uuidSchema,
   bedLabel: z.string().trim().max(40).optional(),
   transferDate: dateOnlySchema,
-  monthlyFeeAmount: moneySchema.default(0),
+  monthlyFeeAmount: moneySchema.default(HOSTEL_FEES.student),
   reason: z.string().trim().max(500).optional(),
 })
 

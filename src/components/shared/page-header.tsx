@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { cn } from "@/lib/utils"
 
 type PageHeaderProps = {
@@ -21,11 +22,12 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
+    <MotionReveal>
     <header className={cn("grid gap-4 md:grid-cols-[1fr_auto] md:items-start", className)}>
       <div className="min-w-0">
         {breadcrumbs ? <div className="mb-3 text-sm text-muted-foreground">{breadcrumbs}</div> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground text-balance">
+          <h1 className="text-gradient text-3xl font-semibold tracking-tight text-balance md:text-4xl">
             {title}
           </h1>
           {badge ? <Badge variant="secondary">{badge}</Badge> : null}
@@ -38,5 +40,6 @@ export function PageHeader({
       </div>
       {actions ? <div className="flex flex-wrap gap-2 md:justify-end">{actions}</div> : null}
     </header>
+    </MotionReveal>
   )
 }

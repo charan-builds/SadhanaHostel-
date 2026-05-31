@@ -63,8 +63,8 @@ export function AdminOnboardingVerificationClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization access required"
-        message="Complete admin setup before reviewing resident onboarding."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }

@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MotionReveal } from "@/components/shared/motion-reveal"
 
 type Metric = {
   label: string
@@ -28,10 +29,12 @@ export function WorkspacePage({
 }: WorkspacePageProps) {
   return (
     <>
+      <MotionReveal>
       <section>
-        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-gradient text-3xl font-semibold tracking-tight md:text-4xl">{title}</h1>
         <p className="mt-2 max-w-3xl text-muted-foreground">{description}</p>
       </section>
+      </MotionReveal>
 
       <section className="grid gap-4 md:grid-cols-3">
         {metrics.map((metric) => (

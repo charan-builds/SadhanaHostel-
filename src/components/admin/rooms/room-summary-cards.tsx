@@ -1,4 +1,4 @@
-import { BedDouble, Building2, CheckCircle2, PauseCircle, Users, Wrench } from "lucide-react"
+import { Building2, CheckCircle2, PauseCircle, Users, Wrench } from "lucide-react"
 
 import { StatCard } from "@/components/shared/stat-card"
 import type { MockRoom } from "@/types/frontend"
@@ -12,7 +12,7 @@ export function RoomSummaryCards({ rooms }: RoomSummaryCardsProps) {
   const fullRooms = rooms.filter((room) => room.status === "full").length
   const maintenanceRooms = rooms.filter((room) => room.status === "maintenance").length
   const totalCapacity = rooms.reduce((total, room) => total + room.capacity, 0)
-  const occupiedBeds = rooms.reduce((total, room) => total + room.occupiedCount, 0)
+  const occupiedResidents = rooms.reduce((total, room) => total + room.occupiedCount, 0)
   const inactiveRooms = rooms.filter((room) => room.status === "inactive").length
 
   return (
@@ -34,7 +34,7 @@ export function RoomSummaryCards({ rooms }: RoomSummaryCardsProps) {
       <StatCard
         title="Full Rooms"
         value={fullRooms}
-        description="No beds available"
+        description="No room vacancy"
         icon={PauseCircle}
         tone="info"
       />
@@ -48,14 +48,14 @@ export function RoomSummaryCards({ rooms }: RoomSummaryCardsProps) {
       <StatCard
         title="Total Capacity"
         value={totalCapacity}
-        description="Configured beds"
-        icon={BedDouble}
+        description="Configured student capacity"
+        icon={Building2}
         tone="default"
       />
       <StatCard
-        title="Occupied Beds"
-        value={occupiedBeds}
-        description={`${Math.max(totalCapacity - occupiedBeds, 0)} beds open`}
+        title="Occupied Students"
+        value={occupiedResidents}
+        description={`${Math.max(totalCapacity - occupiedResidents, 0)} vacancies`}
         icon={Users}
         tone="success"
       />

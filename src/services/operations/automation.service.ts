@@ -248,7 +248,7 @@ function fallbackDescription(name: string) {
   }
 
   if (name === "checkout_reconciliation") {
-    return "Release room allocations for checked-out residents and record reconciliation."
+    return "Release room allocations for residents who left and record reconciliation."
   }
 
   return "Manual operational maintenance job."

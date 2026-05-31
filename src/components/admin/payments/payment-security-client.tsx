@@ -56,7 +56,6 @@ import {
   useTestPaymentSettings,
 } from "@/hooks"
 import { FrontendApiError } from "@/lib/api-client"
-import { useAuth } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import { useRealtimePayments } from "@/lib/realtime"
 import type {
@@ -98,9 +97,15 @@ type QrUploadLifecycleStatus =
   | "saved"
   | "failed"
 
-export function PaymentSecurityClient() {
-  const { organizationId, session } = useAuth()
-  const hostelId = session?.hostelIds[0]
+type PaymentSecurityClientProps = {
+  organizationId: string | null
+  hostelId: string | null
+}
+
+export function PaymentSecurityClient({
+  organizationId,
+  hostelId,
+}: PaymentSecurityClientProps) {
   const [qrFile, setQrFile] = useState<File | null>(null)
   const [qrUploadStatus, setQrUploadStatus] =
     useState<QrUploadLifecycleStatus>("idle")
@@ -187,8 +192,8 @@ export function PaymentSecurityClient() {
     return (
       <ResponsiveContainer size="wide" className="px-0 sm:px-0">
         <EmptyState
-          title="Hostel scope required"
-          message="Payment security settings need an assigned organization and hostel."
+          title="Tenant context resolving"
+          message="Sadhana Boys Hostel context is being applied automatically."
         />
       </ResponsiveContainer>
     )
@@ -346,7 +351,7 @@ export function PaymentSecurityClient() {
         <StatusPanel
           label="Account"
           value={activeSetting?.account_name ?? "Not configured"}
-          status={activeSetting?.is_active ? "Active" : "Setup required"}
+          status={activeSetting?.is_active ? "Active" : "Ready to configure"}
         />
         <StatusPanel
           label="UPI ID"

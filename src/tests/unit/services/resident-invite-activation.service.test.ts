@@ -425,10 +425,11 @@ describe("ResidentInviteService activation bootstrap", () => {
     })
 
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
-  it("treats a completed activation retry as idempotent when the invite is already used and linked", async () => {
+  it("rejects a completed activation replay without mutating the resident password", async () => {
     const token = generateSignedInviteToken()
     const invite = createInviteFixture({
       invite_token_hash: hashInviteToken(token),
@@ -456,17 +457,18 @@ describe("ResidentInviteService activation bootstrap", () => {
         password: "StrongPassword123!",
         confirmPassword: "StrongPassword123!",
       })
-    ).resolves.toEqual({
-      authenticatedIdentifier: invite.email,
-      residentId: invite.resident_id,
-      redirectTo: "/resident/onboarding",
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409,
+      details: { reason: "invite_already_used" },
     })
 
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
-  it("keeps repeated activation refresh and duplicate-click retries idempotent", async () => {
+  it("prevents activation replay after the first successful invite use", async () => {
     const token = generateSignedInviteToken()
     let invite = createInviteFixture({ invite_token_hash: hashInviteToken(token) })
     let resident = residentFixture({
@@ -514,24 +516,36 @@ describe("ResidentInviteService activation bootstrap", () => {
       return resident
     })
 
-    const attempts = []
-    for (let index = 0; index < 5; index += 1) {
-      attempts.push(
-        await harness.service.activateInvite({
+    await expect(
+      harness.service.activateInvite({
+        token,
+        password: "StrongPassword123!",
+        confirmPassword: "StrongPassword123!",
+      })
+    ).resolves.toEqual({
+      authenticatedIdentifier: invite.email,
+      residentId: invite.resident_id,
+      redirectTo: "/resident/onboarding",
+    })
+
+    for (let index = 0; index < 4; index += 1) {
+      await expect(
+        harness.service.activateInvite({
           token,
-          password: "StrongPassword123!",
-          confirmPassword: "StrongPassword123!",
+          password: "__TEST__",
+confirmPassword: "__TEST__",
         })
-      )
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        details: { reason: "invite_already_used" },
+      })
     }
 
-    expect(attempts).toEqual(
-      Array.from({ length: 5 }, () => ({
-        authenticatedIdentifier: invite.email,
-        residentId: invite.resident_id,
-        redirectTo: "/resident/onboarding",
-      }))
-    )
+    expect(
+      harness.db.auth.admin.updateUserById.mock.calls.some(([, payload]) =>
+        payload ? "password" in payload : false
+      )
+    ).toBe(false)
     expect(authUsers).toHaveLength(1)
     expect(harness.db.auth.admin.createUser).toHaveBeenCalledTimes(1)
     expect(harness.db.auth.admin.deleteUser).not.toHaveBeenCalled()
@@ -585,7 +599,10 @@ describe("ResidentInviteService activation bootstrap", () => {
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
     expect(harness.db.auth.admin.updateUserById).toHaveBeenCalledWith(
       ACTIVATION_USER_ID,
-      expect.objectContaining({ password: "StrongPassword123!" })
+      expect.any(Object)
+    )
+    expect(harness.db.auth.admin.updateUserById.mock.calls[0]?.[1]).not.toHaveProperty(
+      "password"
     )
     expect(harness.invitesRepository.recoverUsedInviteActivationAtomic).toHaveBeenCalledWith({
       inviteId: invite.id,
@@ -595,7 +612,7 @@ describe("ResidentInviteService activation bootstrap", () => {
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 
-  it("resumes a used invite by loading the resident-linked auth user when identity lookup is stale", async () => {
+  it("rejects a used invite even when the resident-linked auth user can be loaded", async () => {
     const token = generateSignedInviteToken()
     const invite = createInviteFixture({
       invite_token_hash: hashInviteToken(token),
@@ -627,14 +644,14 @@ describe("ResidentInviteService activation bootstrap", () => {
         password: "StrongPassword123!",
         confirmPassword: "StrongPassword123!",
       })
-    ).resolves.toEqual({
-      authenticatedIdentifier: invite.email,
-      residentId: invite.resident_id,
-      redirectTo: "/resident/onboarding",
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      details: { reason: "invite_already_used" },
     })
 
     expect(harness.db.auth.admin.getUserById).toHaveBeenCalledWith(ACTIVATION_USER_ID)
     expect(harness.db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(harness.db.auth.admin.updateUserById).not.toHaveBeenCalled()
     expect(harness.invitesRepository.activateInviteAtomic).not.toHaveBeenCalled()
   })
 

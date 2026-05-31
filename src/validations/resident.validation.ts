@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { Constants } from "@/types/database"
 
 import {
@@ -36,7 +37,7 @@ export const createResidentSchema = z.object({
   emergencyContactName: z.string().trim().max(120).optional(),
   emergencyContactPhone: phoneSchema.optional(),
   permanentAddress: z.string().trim().max(500).optional(),
-  monthlyFeeAmount: moneySchema.default(0),
+  monthlyFeeAmount: moneySchema.default(HOSTEL_FEES.student),
   securityDepositAmount: moneySchema.default(0),
   roomId: uuidSchema.optional(),
   bedLabel: z.string().trim().max(40).optional(),

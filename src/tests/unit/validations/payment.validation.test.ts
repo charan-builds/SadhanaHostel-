@@ -24,6 +24,36 @@ describe("payment validation", () => {
     expect(result.isPartial).toBe(false)
   })
 
+  it("coerces multipart boolean payment flags from true and false strings", () => {
+    const result = submitUpiPaymentSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 6500,
+      transactionId: "upi123456789",
+      idempotencyKey: "payment-idempotency-key",
+      isAdvance: "true",
+      isPartial: "false",
+    })
+
+    expect(result.isAdvance).toBe(true)
+    expect(result.isPartial).toBe(false)
+  })
+
+  it("rejects unsafe multipart boolean payment flags", () => {
+    const result = submitUpiPaymentSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 6500,
+      transactionId: "upi123456789",
+      idempotencyKey: "payment-idempotency-key",
+      isAdvance: "yes",
+    })
+
+    expect(result.success).toBe(false)
+  })
+
   it("rejects non-UPI payment creation during the UPI-first phase", () => {
     const result = createPaymentSchema.safeParse({
       organizationId: TEST_ORGANIZATION_ID,

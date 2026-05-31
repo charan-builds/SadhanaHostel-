@@ -1,6 +1,6 @@
 "use client"
 
-import { Activity, BedDouble, Building2, Clock, ShieldAlert } from "lucide-react"
+import { Activity, Building2, Clock, ShieldAlert, Users } from "lucide-react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
@@ -38,13 +38,16 @@ export function AdminVacancyClient() {
   })
   const summary = vacancy.data?.summary
   const rooms = vacancy.data?.rooms ?? []
+  const totalCapacity = summary?.total_beds ?? 0
+  const occupiedStudents = summary?.occupied_beds ?? 0
+  const studentVacancy = Math.max(totalCapacity - occupiedStudents, 0)
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization context missing"
-        message="Vacancy management requires an organization assignment."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -67,34 +70,34 @@ export function AdminVacancyClient() {
           Live Vacancy
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          Reservation-aware bed availability across occupied, held, and maintenance-blocked
-          capacity.
+          Sadhana Boys Hostel vacancy is tracked as total student capacity minus occupied
+          students.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <VacancyMetric
           title="Total Capacity"
-          value={summary?.total_beds ?? 0}
+          value={totalCapacity}
           icon={Building2}
         />
         <VacancyMetric
-          title="Occupied"
-          value={summary?.occupied_beds ?? 0}
-          icon={BedDouble}
+          title="Occupied Students"
+          value={occupiedStudents}
+          icon={Users}
         />
         <VacancyMetric
-          title="Reserved"
+          title="Admission Holds"
           value={summary?.reserved_beds ?? 0}
           icon={Clock}
         />
         <VacancyMetric
-          title="Available"
-          value={summary?.available_beds ?? 0}
+          title="Vacancy"
+          value={studentVacancy}
           icon={Activity}
         />
         <VacancyMetric
-          title="Maintenance"
+          title="Unavailable"
           value={summary?.maintenance_blocked_beds ?? 0}
           icon={ShieldAlert}
         />
@@ -120,9 +123,9 @@ export function AdminVacancyClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Room-wise Availability</CardTitle>
+          <CardTitle>Room-wise Vacancy</CardTitle>
           <CardDescription>
-            Live calculations include current residents, active reservations, and maintenance holds.
+            Room vacancy is shown as room capacity minus currently occupied students.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -143,11 +146,11 @@ export function AdminVacancyClient() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Room</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>Capacity</TableHead>
                     <TableHead>Occupied</TableHead>
-                    <TableHead>Reserved</TableHead>
-                    <TableHead>Maintenance</TableHead>
-                    <TableHead>Available</TableHead>
+                    <TableHead>Admission holds</TableHead>
+                    <TableHead>Unavailable</TableHead>
+                    <TableHead>Vacancy</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -164,7 +167,9 @@ export function AdminVacancyClient() {
                       <TableCell>{room.occupied_beds}</TableCell>
                       <TableCell>{room.reserved_beds}</TableCell>
                       <TableCell>{room.maintenance_blocked_beds}</TableCell>
-                      <TableCell className="font-medium">{room.available_beds}</TableCell>
+                      <TableCell className="font-medium">
+                        {Math.max(room.total_beds - room.occupied_beds, 0)}
+                      </TableCell>
                       <TableCell>
                         <StatusBadge status={room.room_status} />
                       </TableCell>

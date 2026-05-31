@@ -5,7 +5,6 @@ import type { Route } from "next"
 import {
   AlertTriangle,
   BarChart3,
-  BedDouble,
   Building2,
   CalendarDays,
   CreditCard,
@@ -77,8 +76,8 @@ export function AdminDashboardClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization access required"
-        message="Your admin account is not assigned to an organization yet."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -115,7 +114,7 @@ export function AdminDashboardClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Admin Dashboard"
-        description="Operational overview for resident lifecycle, occupied beds, payments, admissions, and verification work."
+        description="Operational overview for student lifecycle, room occupancy, payments, admissions, and verification work."
         actions={
           <>
             <Button asChild>
@@ -157,14 +156,14 @@ export function AdminDashboardClient() {
           tone={lifecycle?.onboardingResidents ? "warning" : "success"}
         />
         <StatCard
-          title="Occupied Beds"
+          title="Occupied Students"
           value={`${metrics?.occupancy.occupiedBeds ?? 0}/${metrics?.occupancy.capacity ?? 0}`}
           description={`${Math.round(metrics?.occupancy.occupancyRate ?? 0)}% active occupancy`}
-          icon={BedDouble}
+          icon={Users}
           tone="info"
         />
         <StatCard
-          title="Vacant Beds"
+          title="Vacancy"
           value={metrics?.occupancy.vacantBeds ?? 0}
           description={`${rooms.data?.meta.total ?? 0} configured rooms`}
           icon={Building2}
@@ -339,7 +338,7 @@ function buildOperationalAlerts(input: {
   if (input.roomsConfigured === 0 || input.capacity === 0) {
     alerts.push({
       title: "Room inventory is not configured",
-      description: "Create rooms and bed capacity before admitting residents.",
+      description: "Create rooms and student capacity before admitting residents.",
       href: "/admin/rooms",
     })
   }
@@ -347,7 +346,7 @@ function buildOperationalAlerts(input: {
   if (input.onboardingResidents > 0) {
     alerts.push({
       title: `${input.onboardingResidents} resident${input.onboardingResidents === 1 ? "" : "s"} in onboarding`,
-      description: "Draft or invited residents are registered but do not count as occupied beds yet.",
+      description: "Draft or invited residents are registered but do not count as occupied students yet.",
       href: "/admin/residents",
     })
   }
@@ -387,7 +386,7 @@ function buildOperationalAlerts(input: {
   if (input.capacity > 0 && input.vacantBeds <= 2) {
     alerts.push({
       title: "Low vacancy",
-      description: `${input.vacantBeds} vacant bed${input.vacantBeds === 1 ? "" : "s"} remain. Review reservations before confirming more joins.`,
+      description: `${input.vacantBeds} student vacanc${input.vacantBeds === 1 ? "y" : "ies"} remain. Review reservations before confirming more joins.`,
       href: "/admin/vacancy",
     })
   }

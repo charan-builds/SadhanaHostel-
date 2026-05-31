@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { HOSTEL_TOTAL_CAPACITY } from "@/constants/hostel"
 import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { useBootstrapAdminTenant, useSetupStatus } from "@/hooks"
@@ -71,7 +72,7 @@ export function AdminSetupWizardClient() {
       hostelAddress: "",
       hostelCity: "",
       hostelState: "",
-      hostelCapacity: 70,
+      hostelCapacity: HOSTEL_TOTAL_CAPACITY,
       upiId: "",
       paymentAccountName: "Sadhana Boys Hostel",
       paymentInstructions:
@@ -88,7 +89,10 @@ export function AdminSetupWizardClient() {
     () => [
       { label: "Organization", value: watchedValues.organizationName || "Not set" },
       { label: "Hostel", value: watchedValues.hostelName || watchedValues.organizationName || "Not set" },
-      { label: "Capacity", value: `${watchedValues.hostelCapacity || 70} beds` },
+      {
+        label: "Capacity",
+        value: `${watchedValues.hostelCapacity || HOSTEL_TOTAL_CAPACITY} students`,
+      },
       { label: "UPI", value: watchedValues.upiId || "Configure later" },
     ],
     [watchedValues]
@@ -342,7 +346,7 @@ function renderStep(
           <Field form={form} name="hostelCapacity" label="Total hostel capacity" type="number" />
           <div className="rounded-lg border bg-slate-50 p-4 text-sm leading-6 text-muted-foreground">
             Capacity drives public vacancy, reservation checks, room allocation
-            safety, and dashboard occupancy. The default is 70 beds for this hostel.
+            safety, and dashboard occupancy. The default is 70 students for this hostel.
           </div>
         </div>
       )

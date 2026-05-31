@@ -40,7 +40,7 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
   })
 
   if (!organizationId) {
-    return <EmptyState title="Organization access required" message="Your account is missing organization access." />
+    return <EmptyState title="Tenant context resolving" message="Sadhana Boys Hostel context is being applied automatically." />
   }
 
   if (resident.isLoading) {

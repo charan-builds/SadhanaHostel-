@@ -2,6 +2,7 @@ import "server-only"
 
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import {
   ResidentsRepository,
@@ -21,6 +22,7 @@ import { assertFound, AuthService } from "../auth.service"
 import {
   getResidentOnboardingRequirements,
   isResidentOperationallyVerified,
+  isResidentSelfOnboardingComplete,
 } from "./resident-onboarding.policy"
 
 export class ResidentOnboardingService {
@@ -140,9 +142,11 @@ export class ResidentOnboardingService {
       }
     )
 
+    const finalized = await this.finalizeSelfOnboardingIfComplete(updated, context.authUser.id)
+
     return {
-      resident: updated,
-      requirements: getResidentOnboardingRequirements(updated),
+      resident: finalized,
+      requirements: getResidentOnboardingRequirements(finalized),
     }
   }
 
@@ -236,6 +240,29 @@ export class ResidentOnboardingService {
       resident: updated,
       requirements: getResidentOnboardingRequirements(updated),
     }
+  }
+
+  private async finalizeSelfOnboardingIfComplete(
+    resident: ResidentWithOnboarding,
+    actorUserId: string
+  ) {
+    if (
+      isResidentOperationallyVerified(resident) ||
+      !isResidentSelfOnboardingComplete(resident)
+    ) {
+      return resident
+    }
+
+    const adminRepository = new ResidentsRepository(createSupabaseAdminClient())
+
+    return adminRepository.updateExtended(resident.id, resident.organization_id, {
+      status: "active",
+      onboarding_status: "verified",
+      onboarding_completed_at: resident.onboarding_completed_at ?? new Date().toISOString(),
+      onboarding_verified_at: new Date().toISOString(),
+      onboarding_verified_by: actorUserId,
+      updated_by: actorUserId,
+    })
   }
 }
 

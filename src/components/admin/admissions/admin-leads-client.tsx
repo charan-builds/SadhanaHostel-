@@ -81,7 +81,7 @@ export function AdminLeadsClient() {
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
   if (!organizationId) {
-    return <EmptyState title="Organization access required" message="Lead management needs an assigned organization." />
+    return <EmptyState title="Tenant context resolving" message="Sadhana Boys Hostel context is being applied automatically." />
   }
 
   return (

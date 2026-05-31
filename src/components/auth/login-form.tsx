@@ -47,7 +47,7 @@ type LoginArea = "admin" | "resident"
 export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { session, refreshSession, isLoading } = useAuth()
+  const { session, setSession, refreshSession, isLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const {
     register,
@@ -90,7 +90,7 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
         return
       }
 
-      await refreshSession()
+      setSession(nextSession)
       toast.success("Welcome back.")
       router.replace(resolveRedirect(nextSession, nextPath, expectedArea) as Route)
     } catch (error) {
@@ -210,7 +210,7 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
           initialPhone={searchParams.get("phone") ?? ""}
           nextPath={nextPath}
           onSession={async (nextSession) => {
-            await refreshSession()
+            setSession(nextSession)
             toast.success("OTP verified.")
             router.replace(resolveRedirect(nextSession, nextPath, expectedArea) as Route)
           }}

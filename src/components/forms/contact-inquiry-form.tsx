@@ -24,7 +24,7 @@ export function ContactInquiryForm() {
   const [residentType, setResidentType] = useState<ResidentType>("student")
   const vacancy = usePublicVacancy()
   const submitInquiry = useSubmitPublicInquiry()
-  const availableBeds = vacancy.data?.summary?.available_beds
+  const availableVacancies = vacancy.data?.summary?.available_beds
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -68,12 +68,12 @@ export function ContactInquiryForm() {
       <div>
         <h2 className="text-2xl font-semibold text-slate-950">Send an inquiry</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Submit your details so the hostel can check vacancy, follow up, and reserve a bed if
+          Submit your details so the hostel can check vacancy, follow up, and reserve a room if
           suitable.
         </p>
         <VacancyNotice
           isLoading={vacancy.isLoading}
-          availableBeds={availableBeds}
+          availableVacancies={availableVacancies}
         />
       </div>
 
@@ -133,7 +133,6 @@ export function ContactInquiryForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="student">Student</SelectItem>
-              <SelectItem value="employee">Employee</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -200,10 +199,10 @@ export function ContactInquiryForm() {
 
 function VacancyNotice({
   isLoading,
-  availableBeds,
+  availableVacancies,
 }: {
   isLoading: boolean
-  availableBeds?: number
+  availableVacancies?: number
 }) {
   if (isLoading) {
     return (
@@ -213,7 +212,7 @@ function VacancyNotice({
     )
   }
 
-  if (typeof availableBeds !== "number") {
+  if (typeof availableVacancies !== "number") {
     return (
       <p className="mt-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm text-slate-600">
         Vacancy will be confirmed after the hostel team reviews your inquiry.
@@ -223,7 +222,9 @@ function VacancyNotice({
 
   return (
     <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
-      {availableBeds > 0 ? `Beds Available: ${availableBeds}` : "Currently full. Join the waitlist."}
+      {availableVacancies > 0
+        ? `Student Vacancy: ${availableVacancies}`
+        : "Currently full. Join the waitlist."}
     </p>
   )
 }

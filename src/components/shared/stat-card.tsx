@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { cn } from "@/lib/utils"
 
 type StatCardProps = {
@@ -31,14 +32,15 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <article className={cn("rounded-xl border bg-background p-4 shadow-sm", className)}>
+    <MotionReveal className={className}>
+    <article className="saas-surface group rounded-xl p-4 transition-all duration-300 hover:-translate-y-1">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
           <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
         </div>
         {Icon ? (
-          <span className={cn("flex size-10 items-center justify-center rounded-lg", toneClassName[tone])}>
+          <span className={cn("flex size-10 items-center justify-center rounded-lg ring-1 ring-black/5 transition-transform duration-300 group-hover:scale-105", toneClassName[tone])}>
             <Icon className="size-5" aria-hidden="true" />
           </span>
         ) : null}
@@ -48,5 +50,6 @@ export function StatCard({
         {trend ? <div className="text-sm font-medium text-foreground">{trend}</div> : null}
       </div>
     </article>
+    </MotionReveal>
   )
 }

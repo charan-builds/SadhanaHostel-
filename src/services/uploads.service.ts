@@ -4,9 +4,11 @@ import { anyRoleHasPermission } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
+import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import type { Database } from "@/types/database"
@@ -18,7 +20,10 @@ import {
 } from "@/validations/upload.validation"
 
 import { assertFound, AuthService } from "./auth.service"
-import { isResidentOperationallyVerified } from "./onboarding/resident-onboarding.policy"
+import {
+  isResidentOperationallyVerified,
+  isResidentSelfOnboardingComplete,
+} from "./onboarding/resident-onboarding.policy"
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -256,7 +261,7 @@ export class UploadsService {
         input.documentType === "profile_image" ||
         input.documentType === "student_id"
       ) {
-        await this.residentsRepository.update(input.residentId, input.organizationId, {
+        const updatedResident = await this.residentsRepository.update(input.residentId, input.organizationId, {
           aadhaar_document_id:
             input.documentType === "aadhaar"
               ? document.id
@@ -274,6 +279,21 @@ export class UploadsService {
             updated_by: context.authUser.id,
           })
         }
+
+        const existingResidentWithOnboarding = existingResident as ResidentWithOnboarding
+        const completedResident = {
+          ...existingResident,
+          ...updatedResident,
+          student_id_document_id:
+            input.documentType === "student_id"
+              ? document.id
+              : existingResidentWithOnboarding.student_id_document_id,
+        } as ResidentWithOnboarding
+
+        await this.finalizeSelfOnboardingIfComplete(
+          completedResident,
+          context.authUser.id
+        )
       }
 
       const signedUrl = await this.uploadsRepository.createSignedUrl(
@@ -309,6 +329,29 @@ export class UploadsService {
       await this.uploadsRepository.removeObject(input.bucketName, storagePath)
       throw error
     }
+  }
+
+  private async finalizeSelfOnboardingIfComplete(
+    resident: Parameters<typeof isResidentSelfOnboardingComplete>[0],
+    actorUserId: string
+  ) {
+    if (
+      isResidentOperationallyVerified(resident) ||
+      !isResidentSelfOnboardingComplete(resident)
+    ) {
+      return resident
+    }
+
+    const adminRepository = new ResidentsRepository(createSupabaseAdminClient())
+
+    return adminRepository.updateExtended(resident.id, resident.organization_id, {
+      status: "active",
+      onboarding_status: "verified",
+      onboarding_completed_at: resident.onboarding_completed_at ?? new Date().toISOString(),
+      onboarding_verified_at: new Date().toISOString(),
+      onboarding_verified_by: actorUserId,
+      updated_by: actorUserId,
+    })
   }
 
   private validateFile(file: File, allowedMimeTypes: Set<string>, maxBytes: number) {

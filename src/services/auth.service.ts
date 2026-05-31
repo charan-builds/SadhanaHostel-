@@ -180,11 +180,13 @@ export class AuthService {
 
     const roleAssignments = await this.usersRepository.getRoleAssignments(authUser.id)
     const roles = this.resolveRoles(profile, roleAssignments)
-    const organizationId =
-      profile.organization_id ?? roleAssignments[0]?.organization_id ?? null
-    let hostelIds = [
-      ...new Set(roleAssignments.map((role) => role.hostel_id).filter(Boolean)),
-    ] as string[]
+    const tenantScope = await this.resolveTenantScope({
+      profile,
+      roleAssignments,
+      roles,
+    })
+    const organizationId = tenantScope.organizationId
+    let hostelIds = tenantScope.hostelIds
 
     if (
       organizationId &&
@@ -902,6 +904,66 @@ export class AuthService {
     )
   }
 
+  private async resolveTenantScope(input: {
+    profile: UserRow
+    roleAssignments: UserRoleRow[]
+    roles: AppRole[]
+  }) {
+    const defaultTenant = getDefaultTenantFromEnv()
+    const isAdminPortalUser = input.roles.some((role) =>
+      (ADMIN_PORTAL_ROLES as readonly AppRole[]).includes(role)
+    )
+    const organizationId =
+      input.profile.organization_id ??
+      input.roleAssignments[0]?.organization_id ??
+      (isAdminPortalUser ? defaultTenant.organizationId : null) ??
+      (isAdminPortalUser ? await this.resolveOnlyActiveOrganizationId() : null)
+    let hostelIds = [
+      ...new Set(input.roleAssignments.map((role) => role.hostel_id).filter(Boolean)),
+    ] as string[]
+
+    if (
+      organizationId &&
+      hostelIds.length === 0 &&
+      isAdminPortalUser &&
+      defaultTenant.hostelId
+    ) {
+      hostelIds = [defaultTenant.hostelId]
+    }
+
+    if (organizationId && input.profile.organization_id !== organizationId) {
+      const { error } = await createSupabaseAdminClient()
+        .from("users")
+        .update({ organization_id: organizationId })
+        .eq("id", input.profile.id)
+
+      if (error) {
+        logger.warn({
+          event: "auth.single_tenant_profile_cache_failed",
+          message: "Resolved single-tenant organization context but could not cache it on the user profile.",
+          organizationId,
+          userId: input.profile.id,
+          metadata: {
+            error: error.message,
+          },
+        })
+      }
+
+      input.profile.organization_id = organizationId
+    }
+
+    return {
+      organizationId,
+      hostelIds,
+    }
+  }
+
+  private async resolveOnlyActiveOrganizationId() {
+    const organizations = await this.organizationsRepository.listActiveOrganizations()
+
+    return organizations.length === 1 ? organizations[0].id : null
+  }
+
   private async toSessionOverview(context: AuthContext): Promise<SessionOverview> {
     const residentSession = await this.resolveResidentSessionState(context)
     const onboardingRequired = !context.organizationId || residentSession.onboardingRequired
@@ -1235,6 +1297,15 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>
+}
+
+function getDefaultTenantFromEnv() {
+  const env = getServerEnv()
+
+  return {
+    organizationId: env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID ?? null,
+    hostelId: env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID ?? null,
+  }
 }
 
 function buildPasswordCredentials(identifier: string, password: string) {

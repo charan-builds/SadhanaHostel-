@@ -69,13 +69,8 @@ export function AdminOperationalAlertsClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Setup required"
-        message="Finish organization and hostel setup before operational alerts can be calculated."
-        action={
-          <Button asChild>
-            <Link href={"/admin/setup" as Route}>Open setup</Link>
-          </Button>
-        }
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }

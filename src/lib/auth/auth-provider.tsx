@@ -26,7 +26,8 @@ type AuthContextValue = {
   isLoading: boolean
   isAuthenticated: boolean
   organizationId: string | null
-  refreshSession: () => Promise<void>
+  setSession: (session: SessionOverview) => void
+  refreshSession: () => Promise<SessionOverview>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -41,8 +42,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
   })
 
+  const setSession = useCallback(
+    (session: SessionOverview) => {
+      queryClient.setQueryData(queryKeys.auth.session, session)
+    },
+    [queryClient]
+  )
+
   const refreshSession = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session })
+    const session = await queryClient.fetchQuery({
+      queryKey: queryKeys.auth.session,
+      queryFn: loadSessionOverview,
+      staleTime: 0,
+    })
+
+    queryClient.setQueryData(queryKeys.auth.session, session)
+
+    return session
   }, [queryClient])
 
   const clearTenantQueries = useCallback(() => {
@@ -80,9 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: sessionQuery.isLoading,
       isAuthenticated: Boolean(sessionQuery.data?.authenticated),
       organizationId: sessionQuery.data?.organizationId ?? null,
+      setSession,
       refreshSession,
     }),
-    [refreshSession, sessionQuery.data, sessionQuery.isLoading]
+    [refreshSession, sessionQuery.data, sessionQuery.isLoading, setSession]
   )
 
   useEffect(() => {

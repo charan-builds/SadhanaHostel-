@@ -25,7 +25,7 @@ export const publicNavItems: PublicNavItem[] = [
 export const fallbackHomeHighlights: FacilityItem[] = [
   {
     title: "Comfortable stay",
-    description: "Simple, practical hostel living for students and employees in Pulivendula.",
+    description: "Simple, practical hostel living for college students in Pulivendula.",
     icon: "home",
   },
   {
@@ -35,7 +35,7 @@ export const fallbackHomeHighlights: FacilityItem[] = [
   },
   {
     title: "Clear monthly fees",
-    description: "Transparent fee plans for students and working residents.",
+    description: `Fixed student fee of ₹${HOSTEL_FEES.student}/month.`,
     icon: "indian-rupee",
   },
 ]
@@ -62,8 +62,8 @@ export const fallbackFacilities: FacilityItem[] = [
     icon: "droplets",
   },
   {
-    title: "Hot water for employees",
-    description: "Hot water facility available for employee residents.",
+    title: "Student-friendly rooms",
+    description: "Room capacity is managed for hostel students, not separate cot plans.",
     icon: "bath",
   },
   {
@@ -77,9 +77,9 @@ export const fallbackFacilities: FacilityItem[] = [
     icon: "sparkles",
   },
   {
-    title: "Cots for employees",
-    description: "Cot facilities arranged for employee room plans.",
-    icon: "bed",
+    title: "Near college route",
+    description: HOSTEL_LOCATION.note,
+    icon: "map-pin",
   },
 ]
 
@@ -91,14 +91,6 @@ export const fallbackRoomTypes: RoomTypeCard[] = [
     description: "Affordable rooms with a study-friendly stay.",
     features: ["Affordable rooms", "Study-friendly stay", "Near college route"],
     icon: "graduation-cap",
-  },
-  {
-    title: "Employees",
-    price: HOSTEL_FEES.employee,
-    priceLabel: `₹${HOSTEL_FEES.employee}/month`,
-    description: "Rooms for employees with attached bathroom facilities and vehicle access.",
-    features: ["Attached bathroom facilities", "Parking", "Vehicle access"],
-    icon: "briefcase-business",
   },
 ]
 
@@ -148,8 +140,8 @@ export const fallbackTestimonials: TestimonialItem[] = [
   },
   {
     name: "Suresh Naik",
-    role: "Employee resident",
-    quote: "Parking and attached bathroom facilities make the stay practical for employees.",
+    role: "Student resident",
+    quote: "Rooms are practical for college students and the monthly fee is clear.",
   },
 ]
 
@@ -157,10 +149,6 @@ export const fallbackFaqItems = [
   {
     question: "What is the monthly fee for students?",
     answer: `The student fee is ₹${HOSTEL_FEES.student}/month.`,
-  },
-  {
-    question: "What is the monthly fee for employees?",
-    answer: `The employee fee is ₹${HOSTEL_FEES.employee}/month.`,
   },
   {
     question: "Where is the hostel located?",

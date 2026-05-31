@@ -2,7 +2,6 @@ import {
   FrontendApiError,
   apiClient,
   createRequestId,
-  getCurrentAccessToken,
   notifyApiAuthFailure,
   type ApiResponse,
 } from "@/lib/api-client"
@@ -90,8 +89,6 @@ async function uploadWithProgress<TData>(
   formData: FormData,
   options?: UploadOptions
 ) {
-  const token = await getCurrentAccessToken()
-
   return new Promise<TData>((resolve, reject) => {
     const request = new XMLHttpRequest()
     const requestId = createRequestId()
@@ -105,10 +102,6 @@ async function uploadWithProgress<TData>(
     request.timeout = options?.timeoutMs ?? 30_000
     request.setRequestHeader("accept", "application/json")
     request.setRequestHeader("x-request-id", requestId)
-
-    if (token) {
-      request.setRequestHeader("authorization", `Bearer ${token}`)
-    }
 
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) {

@@ -5,6 +5,7 @@ import { CalendarCheck, Loader2, MessageCircle, Plus, Search } from "lucide-reac
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
+import { LoadingState } from "@/components/shared/loading-state"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
 import { Button } from "@/components/ui/button"
@@ -70,7 +71,7 @@ const reservationStatuses: Array<ReservationStatus | "all"> = [
 ]
 
 export function AdminReservationsClient() {
-  const { organizationId, session } = useAuth()
+  const { organizationId, session, isLoading } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -105,11 +106,15 @@ export function AdminReservationsClient() {
   const leadsById = new Map((leads.data?.data ?? []).map((lead) => [lead.id, lead]))
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
+  if (isLoading) {
+    return <LoadingState rows={4} />
+  }
+
   if (!organizationId || !hostelId) {
     return (
       <EmptyState
-        title="Hostel context required"
-        message="Reservations need an active organization and hostel assignment."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -123,7 +128,7 @@ export function AdminReservationsClient() {
             Reservations
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Hold beds for qualified leads, track booking advances, and convert confirmed
+            Hold student spots for qualified leads, track booking advances, and convert confirmed
             reservations into residents.
           </p>
         </div>
@@ -194,7 +199,7 @@ export function AdminReservationsClient() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Reservation</TableHead>
-                    <TableHead>Beds</TableHead>
+                    <TableHead>Students</TableHead>
                     <TableHead>Reserved Until</TableHead>
                     <TableHead>Advance</TableHead>
                     <TableHead>Status</TableHead>
@@ -313,7 +318,7 @@ function CreateReservationDialog({
           <DialogHeader>
             <DialogTitle>Create Reservation</DialogTitle>
             <DialogDescription>
-              Reserve beds for a lead. Capacity validation happens inside PostgreSQL.
+              Reserve student capacity for a lead. Capacity validation happens inside PostgreSQL.
             </DialogDescription>
           </DialogHeader>
 
@@ -347,7 +352,7 @@ function CreateReservationDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Beds">
+            <Field label="Students">
               <Input name="reservedBedCount" type="number" min={1} max={10} defaultValue={1} />
             </Field>
             <Field label="Hold until">
@@ -373,7 +378,7 @@ function CreateReservationDialog({
             </Button>
             <Button type="submit" disabled={createReservation.isPending} className="gap-2">
               {createReservation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Reserve beds
+              Reserve spot
             </Button>
           </DialogFooter>
         </form>
@@ -474,7 +479,7 @@ function ReservationActionDialog({
       reservationId: reservation.id,
       reason: "Cancelled from admissions dashboard.",
     })
-    toast.success("Reservation cancelled and beds released.")
+    toast.success("Reservation cancelled and student spot released.")
     onOpenChange(false)
   }
 
@@ -535,7 +540,7 @@ function ReservationActionDialog({
               {reservation.id.slice(0, 8).toUpperCase()}
             </div>
             <p className="mt-2 text-muted-foreground">
-              {reservation.reserved_bed_count} bed(s) held until{" "}
+              {reservation.reserved_bed_count} student spot(s) held until{" "}
               {formatDateTime(reservation.reserved_until)}.
             </p>
           </div>

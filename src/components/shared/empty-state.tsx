@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 import { Inbox } from "lucide-react"
 
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { cn } from "@/lib/utils"
 
 type EmptyStateProps = {
@@ -20,8 +21,9 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div className={cn("rounded-xl border bg-background p-8 text-center", className)}>
-      <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+    <MotionReveal className={className}>
+    <div className="saas-surface rounded-xl p-8 text-center">
+      <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/15">
         <Icon className="size-6" aria-hidden="true" />
       </span>
       <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>
@@ -32,5 +34,6 @@ export function EmptyState({
       ) : null}
       {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </div>
+    </MotionReveal>
   )
 }

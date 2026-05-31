@@ -71,7 +71,7 @@ export function AdminPaymentsClient() {
   )
 
   if (!organizationId) {
-    return <EmptyState title="Organization access required" message="Payments need an assigned organization." />
+    return <EmptyState title="Tenant context resolving" message="Sadhana Boys Hostel context is being applied automatically." />
   }
 
   const pendingPayments = payments.data?.data.filter((payment) => payment.status === "pending") ?? []

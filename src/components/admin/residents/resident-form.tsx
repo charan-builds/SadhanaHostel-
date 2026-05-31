@@ -150,7 +150,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   async function onSubmit(values: ResidentFormValues) {
     if (!organizationId || !hostelId) {
       setError("root", {
-        message: "Your admin account is not assigned to an organization and hostel.",
+        message: "Sadhana Boys Hostel context is still being applied. Refresh and try again.",
       })
       return
     }
@@ -189,7 +189,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             emergencyContactName: values.emergencyContactName || undefined,
             emergencyContactPhone: values.emergencyContactPhone || undefined,
             permanentAddress: values.permanentAddress || undefined,
-            monthlyFeeAmount: values.monthlyFeeAmount,
+            monthlyFeeAmount:
+              values.residentType === "student" ? HOSTEL_FEES.student : values.monthlyFeeAmount,
             securityDepositAmount: values.securityDepositAmount,
             notes: values.notes || undefined,
             status: values.status,
@@ -212,10 +213,11 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             emergencyContactName: undefined,
             emergencyContactPhone: undefined,
             permanentAddress: undefined,
-            monthlyFeeAmount: values.monthlyFeeAmount,
+            monthlyFeeAmount:
+              values.residentType === "student" ? HOSTEL_FEES.student : values.monthlyFeeAmount,
             securityDepositAmount: values.securityDepositAmount,
             roomId: values.roomId || undefined,
-            bedLabel: values.bedLabel || undefined,
+            bedLabel: undefined,
             allocatedFrom: values.allocatedFrom || undefined,
             notes: values.notes || undefined,
             inviteDeliveryChannel:
@@ -386,7 +388,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
           </>
         ) : null}
         <Field id="monthlyFeeAmount" label="Monthly fee" error={errors.monthlyFeeAmount?.message}>
-          <Input id="monthlyFeeAmount" type="number" {...register("monthlyFeeAmount")} />
+          <Input id="monthlyFeeAmount" type="number" readOnly {...register("monthlyFeeAmount")} />
         </Field>
         {!isCreate ? (
           <Field id="securityDepositAmount" label="Security deposit" error={errors.securityDepositAmount?.message}>
@@ -422,16 +424,13 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                       <SelectItem value="none">Do not assign yet</SelectItem>
                       {availableRooms.map((room) => (
                         <SelectItem key={room.room_id} value={room.room_id}>
-                          {room.room_number} · {room.available_beds} beds available
+                          {room.room_number} · {room.available_beds} student vacancies
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-            </Field>
-            <Field id="bedLabel" label="Bed label" error={errors.bedLabel?.message}>
-              <Input id="bedLabel" placeholder="A, B, 1, 2" {...register("bedLabel")} />
             </Field>
             <Field id="allocatedFrom" label="Allocated from" error={errors.allocatedFrom?.message}>
               <Input id="allocatedFrom" type="date" {...register("allocatedFrom")} />

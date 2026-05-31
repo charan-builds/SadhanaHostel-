@@ -58,7 +58,7 @@ export function AdminTopbar() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b bg-white/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-20 border-b border-white/70 bg-white/78 shadow-sm shadow-slate-950/5 backdrop-blur-2xl">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
         <AdminMobileSidebar />
 
@@ -70,7 +70,7 @@ export function AdminTopbar() {
           <Input
             type="search"
             placeholder="Search residents, rooms, payments..."
-            className="h-9 max-w-md bg-slate-50 pl-8"
+            className="h-10 max-w-md bg-white/70 pl-8"
             aria-label="Search admin workspace"
             readOnly
           />

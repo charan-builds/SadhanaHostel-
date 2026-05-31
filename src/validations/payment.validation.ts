@@ -46,6 +46,24 @@ const utrRegexSchema = z
     }
   }, "UTR regex must be a valid regular expression.")
 
+const multipartBooleanSchema = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value
+  }
+
+  const normalized = value.trim().toLowerCase()
+
+  if (normalized === "true") {
+    return true
+  }
+
+  if (normalized === "false") {
+    return false
+  }
+
+  return value
+}, z.boolean())
+
 export const paymentListSchema = paginationSchema.extend({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
@@ -68,8 +86,8 @@ export const createPaymentSchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(256).optional(),
   manualReference: z.string().trim().max(120).optional(),
   notes: z.string().trim().max(1000).optional(),
-  isAdvance: z.boolean().default(false),
-  isPartial: z.boolean().default(false),
+  isAdvance: multipartBooleanSchema.default(false),
+  isPartial: multipartBooleanSchema.default(false),
 })
 
 export const submitUpiPaymentSchema = createPaymentSchema.extend({

@@ -72,3 +72,12 @@ export function isResidentOperationallyVerified(resident: ResidentWithOnboarding
     !resident.checkout_on
   )
 }
+
+export function isResidentSelfOnboardingComplete(resident: ResidentWithOnboarding) {
+  return (
+    getResidentOnboardingRequirements(resident).missing.length === 0 &&
+    resident.is_active !== false &&
+    Boolean(resident.user_id) &&
+    !resident.checkout_on
+  )
+}

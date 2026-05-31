@@ -3,6 +3,7 @@ import "server-only"
 import { randomUUID } from "node:crypto"
 
 import { anyRoleHasPermission } from "@/constants/auth"
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -171,7 +172,7 @@ export class ResidentsService {
         emergency_contact_name: values.emergencyContactName,
         emergency_contact_phone: values.emergencyContactPhone,
         permanent_address: values.permanentAddress,
-        monthly_fee_amount: values.monthlyFeeAmount,
+        monthly_fee_amount: resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount),
         security_deposit_amount: values.securityDepositAmount,
         notes: values.notes,
         status: "draft",
@@ -244,7 +245,10 @@ export class ResidentsService {
       emergency_contact_name: values.emergencyContactName,
       emergency_contact_phone: values.emergencyContactPhone,
       permanent_address: values.permanentAddress,
-      monthly_fee_amount: values.monthlyFeeAmount,
+      monthly_fee_amount:
+        values.residentType === undefined
+          ? values.monthlyFeeAmount
+          : resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount),
       security_deposit_amount: values.securityDepositAmount,
       notes: values.notes,
       status: values.status,
@@ -348,7 +352,7 @@ export class ResidentsService {
         residentId: values.residentId,
         organizationId: values.organizationId,
         checkoutDate: values.checkoutDate ?? new Date().toISOString().slice(0, 10),
-        reason: values.reason ?? "Resident checked out from admin residents workflow.",
+        reason: values.reason ?? "Resident left from admin residents workflow.",
         actorUserId: context.authUser.id,
       })
 
@@ -472,6 +476,14 @@ function generateDraftAdmissionNumber() {
   const suffix = randomUUID().slice(0, 8).toUpperCase()
 
   return `DRAFT-${timestamp}-${suffix}`
+}
+
+function resolveResidentMonthlyFee(residentType: string | undefined, monthlyFeeAmount: number | undefined) {
+  if (!residentType || residentType === "student") {
+    return HOSTEL_FEES.student
+  }
+
+  return monthlyFeeAmount ?? HOSTEL_FEES.student
 }
 
 function duplicateResidentConflict(

@@ -1,5 +1,6 @@
 export const HOSTEL_NAME = "Sadhana Boys Hostel"
 export const HOSTEL_SHORT_NAME = "Sadhana Hostel"
+export const HOSTEL_TOTAL_CAPACITY = 70
 
 export const HOSTEL_CONTACT = {
   phone: "7013762904",

@@ -641,6 +641,7 @@ export class ResidentInviteService {
     residentName: string
     password: string
     existingAuthUser?: User | null
+    updatePassword?: boolean
   }): Promise<ActivationAuthIdentity> {
     const identity = buildInviteAuthIdentity(input.invite)
     const existing = input.existingAuthUser ?? await this.findAuthUserForInvite(input.invite)
@@ -653,8 +654,11 @@ export class ResidentInviteService {
       await this.assertExistingUserIsSafe(existing, input.invite)
 
       const payload: Parameters<typeof this.db.auth.admin.updateUserById>[1] = {
-        password: input.password,
         user_metadata: userMetadata,
+      }
+
+      if (input.updatePassword !== false) {
+        payload.password = input.password
       }
 
       if (identity.authEmail) {
@@ -918,56 +922,7 @@ export class ResidentInviteService {
       return this.recoverUsedInviteWithoutResidentLink(input)
     }
 
-    if (!input.authUser) {
-      throw conflict(
-        "This invite was consumed but the login account cannot be found. Ask hostel administration to rebuild auth linkage."
-      )
-    }
-
-    if (residentUserId !== input.authUser.id) {
-      const linkedAuthUser = await this.findAuthUserForResidentLink(input.resident)
-
-      if (!linkedAuthUser) {
-        throw conflict(
-          "This invite was consumed by a different login account. Ask hostel administration to review onboarding access."
-        )
-      }
-
-      await this.logActivationTrace("activation_replay_link_recovered", "warn", {
-        invite: input.invite,
-        resident: input.resident,
-        authUser: linkedAuthUser,
-        correlationId: input.correlationId,
-        requestedIdentity: input.requestedIdentity,
-        recovery: {
-          requestedAuthUserId: input.authUser.id,
-          residentUserId,
-        },
-      })
-
-      input.authUser = linkedAuthUser
-    }
-
-    await this.assertExistingUserIsSafe(input.authUser, input.invite)
-
-    const authIdentity = await this.upsertAuthUserForInvite({
-      invite: input.invite,
-      residentName: input.resident.full_name,
-      password: input.password,
-      existingAuthUser: input.authUser,
-    })
-
-    await this.syncActivatedPublicProfile({
-      invite: input.invite,
-      resident: input.resident,
-      authIdentity,
-    })
-
-    return {
-      authenticatedIdentifier: getActivationLoginIdentifier(authIdentity.user, input.invite),
-      residentId: input.invite.resident_id,
-      redirectTo: AUTH_REDIRECTS.residentOnboarding,
-    }
+    throw inviteAlreadyUsedConflict()
   }
 
   private async recoverUsedInviteWithoutResidentLink(input: {
@@ -1000,6 +955,7 @@ export class ResidentInviteService {
         password: input.password,
         correlationId: input.correlationId,
         requestedIdentity: input.requestedIdentity,
+        updatePassword: false,
       }).then((result) => {
         if (!result) {
           throw conflict(
@@ -1028,6 +984,7 @@ export class ResidentInviteService {
       residentName: input.resident.full_name,
       password: input.password,
       existingAuthUser: input.authUser,
+      updatePassword: false,
     })
 
     try {
@@ -1095,6 +1052,7 @@ export class ResidentInviteService {
     password: string
     correlationId: string
     requestedIdentity: ReturnType<typeof getRequestedActivationIdentity>
+    updatePassword?: boolean
   }): Promise<ResidentActivationResult | null> {
     if (!input.authUser) {
       return null
@@ -1151,6 +1109,7 @@ export class ResidentInviteService {
       resident: linkedResident,
       password: input.password,
       existingAuthUser: input.authUser,
+      updatePassword: input.updatePassword,
     })
 
     await this.syncActivatedPublicProfile({
@@ -1205,6 +1164,7 @@ export class ResidentInviteService {
     resident: NonNullable<Awaited<ReturnType<ResidentsRepository["getById"]>>>
     password: string
     existingAuthUser: User
+    updatePassword?: boolean
   }): Promise<ActivationAuthIdentity> {
     const identity = buildInviteAuthIdentity(input.invite)
     const userMetadata = {
@@ -1213,8 +1173,11 @@ export class ResidentInviteService {
       activation_recovery: "existing_linked_resident",
     }
     const payload: Parameters<typeof this.db.auth.admin.updateUserById>[1] = {
-      password: input.password,
       user_metadata: userMetadata,
+    }
+
+    if (input.updatePassword !== false) {
+      payload.password = input.password
     }
 
     if (identity.authEmail) {
@@ -1300,7 +1263,7 @@ export class ResidentInviteService {
 
     if (residentStatus === "checked_out" || residentStatus === "archived" || checkoutOn) {
       throw conflict(
-        "This resident has already checked out or been archived. Ask hostel administration to reopen onboarding before activation."
+        "This resident has already left or been archived. Ask hostel administration to reopen onboarding before activation."
       )
     }
 
@@ -1670,7 +1633,7 @@ function assertLinkedResidentCanRecover(
 
   if (status === "checked_out" || status === "archived" || checkoutOn) {
     throw conflict(
-      "This phone is linked to a checked-out or archived resident account. Ask hostel administration to reopen or merge the resident record before retrying."
+      "This phone is linked to a resident account that already left or was archived. Ask hostel administration to reopen or merge the resident record before retrying."
     )
   }
 }
@@ -1935,6 +1898,13 @@ function humanizeActivationState(value: string) {
   return value.replace(/_/g, " ")
 }
 
+function inviteAlreadyUsedConflict(): never {
+  throw conflict(
+    "This invite was already used. Sign in with your resident account or ask the hostel office to resend access.",
+    { reason: "invite_already_used" }
+  )
+}
+
 function mapActivationBootstrapError(
   error: unknown,
   context?: {
@@ -1959,7 +1929,7 @@ function mapActivationBootstrapError(
   }
 
   if (message.includes("invite_already_used")) {
-    throw conflict("This invite was already used. Sign in with your resident account or ask the hostel office to resend access.")
+    throw inviteAlreadyUsedConflict()
   }
 
   if (message.includes("resident_already_linked")) {
@@ -1996,7 +1966,7 @@ function mapActivationBootstrapError(
 
   if (message.includes("resident_activation_checked_out")) {
     throw conflict(
-      "This resident has already checked out. Reopen the resident lifecycle from the admin panel before activation."
+      "This resident has already left. Reopen the resident lifecycle from the admin panel before activation."
     )
   }
 

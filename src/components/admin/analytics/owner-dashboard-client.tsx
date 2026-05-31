@@ -1,14 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
   BarChart3,
-  BedDouble,
   Download,
   IndianRupee,
   Loader2,
   TrendingUp,
+  Users,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -60,7 +60,7 @@ export function OwnerDashboardClient() {
   const [fromDate, setFromDate] = useState(() => monthsAgoInput(5))
   const [toDate, setToDate] = useState(() => todayInput())
   const [downloading, setDownloading] = useState<ExportFormat | null>(null)
-  const hostelId = hostelFilter === "all" ? undefined : hostelFilter
+  const hostelId = hostelFilter === "all" ? defaultHostelId : hostelFilter
   const ownerAnalytics = useOwnerAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
@@ -70,13 +70,20 @@ export function OwnerDashboardClient() {
 
   useRealtimeOwnerAnalytics({ enabled: Boolean(organizationId) })
 
+  useEffect(() => {
+    if (defaultHostelId && hostelFilter === "all") {
+      setHostelFilter(defaultHostelId)
+    }
+  }, [defaultHostelId, hostelFilter])
+
   const selectedHostelLabel = useMemo(() => {
     if (hostelFilter === "all") {
-      return "All hostels"
+      return "Sadhana Boys Hostel"
     }
 
     return hostels.data?.find((hostel) => hostel.id === hostelFilter)?.name ?? "Selected hostel"
   }, [hostelFilter, hostels.data])
+  const showHostelFilter = (hostels.data?.length ?? 0) > 1
 
   async function download(format: ExportFormat) {
     if (!organizationId) {
@@ -114,8 +121,8 @@ export function OwnerDashboardClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization access required"
-        message="Your admin account must be linked to an organization before owner analytics can load."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -186,19 +193,22 @@ export function OwnerDashboardClient() {
         <CardContent className="grid gap-3 pt-0 sm:grid-cols-2 lg:grid-cols-4">
           <div className="grid gap-2">
             <Label htmlFor="owner-hostel-filter">Hostel</Label>
-            <Select value={hostelFilter} onValueChange={setHostelFilter}>
-              <SelectTrigger id="owner-hostel-filter" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All hostels</SelectItem>
-                {hostels.data?.map((hostel) => (
-                  <SelectItem key={hostel.id} value={hostel.id}>
-                    {hostel.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {showHostelFilter ? (
+              <Select value={hostelFilter} onValueChange={setHostelFilter}>
+                <SelectTrigger id="owner-hostel-filter" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {hostels.data?.map((hostel) => (
+                    <SelectItem key={hostel.id} value={hostel.id}>
+                      {hostel.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input id="owner-hostel-filter" value={selectedHostelLabel} readOnly />
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="owner-from-date">From</Label>
@@ -236,8 +246,8 @@ export function OwnerDashboardClient() {
         <StatCard
           title="Occupancy"
           value={`${data.summary.occupancyRate}%`}
-          description={`${data.capacity.occupiedBeds}/${data.capacity.totalBeds} beds occupied`}
-          icon={BedDouble}
+          description={`${data.capacity.occupiedBeds}/${data.capacity.totalBeds} students occupied`}
+          icon={Users}
           tone={data.summary.occupancyRate >= 85 ? "success" : "warning"}
         />
         <StatCard
@@ -268,7 +278,7 @@ export function OwnerDashboardClient() {
           <CardHeader>
             <CardTitle>Revenue and Occupancy Trend</CardTitle>
             <CardDescription>
-              Monthly owner view across collections, billed dues, and occupied beds.
+              Monthly owner view across collections, billed dues, and occupied students.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -292,7 +302,7 @@ export function OwnerDashboardClient() {
             <ForecastMetric
               label="Forecast occupancy"
               value={`${data.forecasts.occupancy.forecastOccupancyRate}%`}
-              detail={`${data.forecasts.occupancy.forecastOccupiedBeds} occupied beds expected`}
+              detail={`${data.forecasts.occupancy.forecastOccupiedBeds} occupied students expected`}
             />
             <ForecastMetric
               label="Expected vacancies"
@@ -334,7 +344,7 @@ export function OwnerDashboardClient() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Bed Availability</CardTitle>
+            <CardTitle>Student Vacancy</CardTitle>
             <CardDescription>
               {data.capacity.lastCalculatedAt
                 ? `Last calculated ${formatDateTime(data.capacity.lastCalculatedAt)}`
@@ -345,13 +355,13 @@ export function OwnerDashboardClient() {
             <DonutMetric
               value={data.capacity.occupiedBeds}
               total={data.capacity.totalBeds}
-              label={`${data.capacity.availableBeds} beds available`}
+              label={`${data.capacity.availableBeds} student vacancies`}
             />
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <CapacityItem label="Reserved" value={data.capacity.reservedBeds} />
               <CapacityItem label="Maintenance" value={data.capacity.maintenanceBlockedBeds} />
-              <CapacityItem label="Available" value={data.capacity.availableBeds} />
-              <CapacityItem label="Total beds" value={data.capacity.totalBeds} />
+              <CapacityItem label="Vacancy" value={data.capacity.availableBeds} />
+              <CapacityItem label="Total capacity" value={data.capacity.totalBeds} />
             </div>
           </CardContent>
         </Card>

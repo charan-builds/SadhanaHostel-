@@ -317,8 +317,8 @@ export class SupportService {
       alerts.push({
         id: "capacity.low",
         severity: vacancy.available_beds <= 0 ? "critical" : "high",
-        title: vacancy.available_beds <= 0 ? "No beds available" : "Capacity risk",
-        description: `Only ${vacancy.available_beds} beds are currently available after occupancy and reservations.`,
+        title: vacancy.available_beds <= 0 ? "No student vacancy" : "Capacity risk",
+        description: `Only ${vacancy.available_beds} student vacancies are currently available after occupancy.`,
         count: vacancy.available_beds,
         href: "/admin/vacancy",
         ctaLabel: "Check vacancy",

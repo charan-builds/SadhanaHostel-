@@ -111,7 +111,7 @@ const operationLinks: Array<{
 }> = [
   {
     title: "Residents",
-    description: "Create, invite, verify, suspend, transfer, checkout, and repair residents.",
+    description: "Create, invite, verify, suspend, transfer, mark left, and repair residents.",
     href: "/admin/residents",
     icon: Users,
   },
@@ -423,13 +423,8 @@ export function AdminSettingsClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Setup required"
-        message="Create your organization and first hostel before editing settings."
-        action={
-          <Button asChild>
-            <Link href={"/admin/setup" as Route}>Open setup wizard</Link>
-          </Button>
-        }
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -691,7 +686,7 @@ export function AdminSettingsClient() {
                     <div>
                       <h2 className="font-semibold">{hostel.name}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {hostel.code} · {hostel.capacity} beds
+                        {hostel.code} · {hostel.capacity} student capacity
                       </p>
                     </div>
                     <StatusBadge status={hostel.is_active ? "active" : "inactive"} />

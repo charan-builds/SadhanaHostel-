@@ -136,9 +136,9 @@ export function AdminResidentsClient() {
       residentId: checkoutTarget.id,
       organizationId,
       checkoutDate: new Date().toISOString().slice(0, 10),
-      reason: "Resident checked out from admin residents table.",
+      reason: "Resident left the hostel from admin residents table.",
     })
-    toast.success("Resident checked out and occupancy released.")
+    toast.success("Resident marked as left and room occupancy released.")
     setCheckoutTarget(null)
   }
 
@@ -168,8 +168,8 @@ export function AdminResidentsClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization access required"
-        message="Your admin account needs an organization assignment before residents can load."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -196,7 +196,7 @@ export function AdminResidentsClient() {
         <SummaryCard label="Verified Residents" value={summary.verified} />
         <SummaryCard label="Pending Verification" value={summary.pendingVerification} />
         <SummaryCard label="Suspended Residents" value={summary.suspended} />
-        <SummaryCard label="Checked-out Residents" value={summary.checkedOut} />
+        <SummaryCard label="Left Residents" value={summary.checkedOut} />
         <SummaryCard label="Monthly Fees on This Page" value={formatCurrency(summary.monthlyFees)} />
       </section>
 
@@ -277,7 +277,7 @@ export function AdminResidentsClient() {
               <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="checked_out">Checked out</SelectItem>
+              <SelectItem value="checked_out">Left hostel</SelectItem>
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
@@ -364,7 +364,7 @@ export function AdminResidentsClient() {
                         onClick={() => setCheckoutTarget(resident)}
                       >
                         <LogOut className="size-3.5" aria-hidden="true" />
-                        Checkout
+                        Mark left
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => setDeactivateTarget(resident)}>
                         <UserX className="size-3.5" aria-hidden="true" />
@@ -423,9 +423,9 @@ export function AdminResidentsClient() {
       <ConfirmDialog
         open={Boolean(checkoutTarget)}
         onOpenChange={(open) => !open && setCheckoutTarget(null)}
-        title={`Check out ${checkoutTarget?.full_name ?? "resident"}?`}
-        description="Checkout releases the active room allocation, updates vacancy, and keeps the resident record visible for operational history."
-        confirmLabel={checkoutResident.isPending ? "Checking out..." : "Check out"}
+        title={`Mark ${checkoutTarget?.full_name ?? "resident"} as left?`}
+        description="This releases the active room allocation, updates vacancy, and keeps the resident record visible for operational history."
+        confirmLabel={checkoutResident.isPending ? "Marking left..." : "Mark left"}
         onConfirm={confirmCheckout}
       />
 

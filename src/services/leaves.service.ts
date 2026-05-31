@@ -14,7 +14,10 @@ import {
 } from "@/validations/leave.validation"
 
 import { assertFound, AuthService } from "./auth.service"
-import { isResidentOperationallyVerified } from "./onboarding/resident-onboarding.policy"
+import {
+  getResidentOnboardingRequirements,
+  isResidentOperationallyVerified,
+} from "./onboarding/resident-onboarding.policy"
 import { RealtimeService } from "./realtime"
 
 export class LeavesService {
@@ -96,7 +99,7 @@ export class LeavesService {
     }
 
     if (!isAdmin && !isResidentOperationallyVerified(existingResident)) {
-      throw forbidden("Complete resident onboarding verification before applying leave.")
+      throw forbidden(getLeaveVerificationMessage(existingResident))
     }
 
     if (existingResident.hostel_id !== values.hostelId) {
@@ -178,4 +181,20 @@ export class LeavesService {
 
     return updatedLeave
   }
+}
+
+function getLeaveVerificationMessage(
+  resident: Parameters<typeof getResidentOnboardingRequirements>[0]
+) {
+  const requirements = getResidentOnboardingRequirements(resident)
+
+  if (requirements.missing.length > 0) {
+    return "Complete all onboarding requirements and submit them for verification before applying leave."
+  }
+
+  if (resident.onboarding_status === "verification_pending") {
+    return "Your onboarding is pending admin verification. You can apply leave after approval."
+  }
+
+  return "Complete resident onboarding verification before applying leave."
 }

@@ -53,6 +53,8 @@ const publicEnvSchema = z.object({
     .default("local"),
   NEXT_PUBLIC_MAINTENANCE_MODE: booleanEnvSchema("false"),
   NEXT_PUBLIC_FEATURE_FLAGS: optionalEnvString(),
+  NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID: optionalEnvString(z.string().uuid()),
+  NEXT_PUBLIC_DEFAULT_HOSTEL_ID: optionalEnvString(z.string().uuid()),
 })
 
 const serverEnvSchema = publicEnvSchema.extend({
@@ -102,6 +104,8 @@ function readPublicEnv() {
     NEXT_PUBLIC_LAUNCH_MODE: process.env.NEXT_PUBLIC_LAUNCH_MODE,
     NEXT_PUBLIC_MAINTENANCE_MODE: process.env.NEXT_PUBLIC_MAINTENANCE_MODE,
     NEXT_PUBLIC_FEATURE_FLAGS: process.env.NEXT_PUBLIC_FEATURE_FLAGS,
+    NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID: process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID,
+    NEXT_PUBLIC_DEFAULT_HOSTEL_ID: process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID,
   }
 }
 

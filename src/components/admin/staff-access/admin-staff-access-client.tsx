@@ -67,6 +67,7 @@ export function AdminStaffAccessClient() {
   const [role, setRole] = useState<RoleFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("all")
   const [createOpen, setCreateOpen] = useState(false)
+  const [createRole, setCreateRole] = useState<CreateStaffUserInput["role"]>("staff")
   const [accessResult, setAccessResult] = useState<CreatedStaffAccess | null>(null)
   const [passwordResult, setPasswordResult] = useState<StaffPasswordResetResult | null>(null)
   const [revokeTarget, setRevokeTarget] = useState<StaffAccessAccount | null>(null)
@@ -104,8 +105,8 @@ export function AdminStaffAccessClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization setup required"
-        message="Create your organization and first hostel before inviting staff."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -175,17 +176,38 @@ export function AdminStaffAccessClient() {
             </CardDescription>
           </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="size-4" />
-                Add staff
-              </Button>
-            </DialogTrigger>
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              {canManageOwners ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    setCreateRole("admin")
+                    setCreateOpen(true)
+                  }}
+                >
+                  <ShieldCheck className="size-4" />
+                  Add admin
+                </Button>
+              ) : null}
+              <DialogTrigger asChild>
+                <Button
+                  className="gap-2"
+                  onClick={() => setCreateRole("staff")}
+                >
+                  <Plus className="size-4" />
+                  Add staff
+                </Button>
+              </DialogTrigger>
+            </div>
             <StaffCreateDialog
+              key={`${organizationId}-${createRole}`}
               organizationId={organizationId}
               defaultHostelId={hostelId}
               hostels={hostelsQuery.data ?? []}
               canManageOwners={canManageOwners}
+              initialRole={createRole}
               onCreated={(result) => {
                 setAccessResult(result)
                 setCreateOpen(false)
@@ -263,7 +285,14 @@ export function AdminStaffAccessClient() {
                     Clear filters
                   </Button>
                 ) : (
-                  <Button onClick={() => setCreateOpen(true)}>Add staff</Button>
+                  <Button
+                    onClick={() => {
+                      setCreateRole("staff")
+                      setCreateOpen(true)
+                    }}
+                  >
+                    Add staff
+                  </Button>
                 )
               }
             />
@@ -361,23 +390,28 @@ function StaffCreateDialog({
   defaultHostelId,
   hostels,
   canManageOwners,
+  initialRole,
   onCreated,
 }: {
   organizationId: string
   defaultHostelId?: string
   hostels: Array<{ id: string; name: string }>
   canManageOwners: boolean
+  initialRole: CreateStaffUserInput["role"]
   onCreated: (result: CreatedStaffAccess) => void
 }) {
   const createStaff = useCreateStaffAccess()
   const [actionError, setActionError] = useState<unknown>(null)
+  const defaultRole = canManageOwners || (initialRole !== "owner" && initialRole !== "admin")
+    ? initialRole
+    : "staff"
   const [form, setForm] = useState<CreateStaffUserInput>({
     organizationId,
     hostelId: defaultHostelId,
     fullName: "",
     email: "",
     phone: "",
-    role: "staff",
+    role: defaultRole,
     deliveryMode: "invite_link",
     permissions: [],
     expiresInHours: 72,
@@ -411,7 +445,7 @@ function StaffCreateDialog({
     <DialogContent className="sm:max-w-2xl">
       <form onSubmit={submit}>
         <DialogHeader>
-          <DialogTitle>Add Admin or Staff</DialogTitle>
+          <DialogTitle>{form.role === "admin" ? "Add Admin" : "Add Admin or Staff"}</DialogTitle>
           <DialogDescription>
             Create a Supabase Auth account, assign a scoped role, and generate safe first access.
           </DialogDescription>

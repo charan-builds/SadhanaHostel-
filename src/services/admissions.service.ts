@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { RealtimeEventPublisher } from "@/services/realtime"
+import type { HostelVacancyRow, RoomVacancyRow } from "@/types/admissions"
 import type { Json, Tables } from "@/types/database"
 import {
   addLeadNoteSchema,
@@ -524,10 +525,13 @@ export class AdmissionsService {
       this.admissionsRepository.listRoomVacancy(organizationId, hostelId),
     ])
 
+    const normalizedHostels = hostels.map(normalizeHostelVacancy)
+    const normalizedRooms = rooms.map(normalizeRoomVacancy)
+
     return {
-      hostels,
-      rooms,
-      summary: hostels[0] ?? null,
+      hostels: normalizedHostels,
+      rooms: normalizedRooms,
+      summary: normalizedHostels[0] ?? null,
     }
   }
 
@@ -563,6 +567,20 @@ export class AdmissionsService {
   }
 }
 
+function normalizeHostelVacancy(row: HostelVacancyRow): HostelVacancyRow {
+  return {
+    ...row,
+    available_beds: Math.max(row.total_beds - row.occupied_beds, 0),
+  }
+}
+
+function normalizeRoomVacancy(row: RoomVacancyRow): RoomVacancyRow {
+  return {
+    ...row,
+    available_beds: Math.max(row.total_beds - row.occupied_beds, 0),
+  }
+}
+
 function mapAdmissionConflict(error: unknown): never {
   const message = error instanceof Error ? error.message : ""
 
@@ -571,7 +589,7 @@ function mapAdmissionConflict(error: unknown): never {
   }
 
   if (message.includes("room_capacity_exceeded")) {
-    throw conflict("The selected room does not have enough available beds.")
+    throw conflict("The selected room does not have enough student vacancy.")
   }
 
   if (message.includes("lead_not_found")) {

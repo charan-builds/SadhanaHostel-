@@ -32,8 +32,8 @@ export function AdminNotificationsClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization not linked"
-        message="Your admin account must be linked before notifications can be reviewed."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }

@@ -44,7 +44,7 @@ const statusLabels: Record<string, string> = {
   available: "Available",
   archived: "Archived",
   cancelled: "Cancelled",
-  checked_out: "Checked Out",
+  checked_out: "Left Hostel",
   departed: "Departed",
   draft: "Draft",
   failed: "Failed",

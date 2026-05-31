@@ -101,8 +101,8 @@ export function AdminWebsiteClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Organization not linked"
-        message="Your admin account must be linked before CMS content can be managed."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -140,8 +140,7 @@ export function AdminWebsiteClient() {
           ) : settings.length === 0 ? (
             <EmptyState
               title="No website sections yet"
-              message="Open the setup wizard to create starter homepage, SEO, contact, and pricing sections automatically."
-              action={<Button onClick={() => window.location.assign("/admin/setup")}>Open setup wizard</Button>}
+              message="Starter homepage, SEO, contact, and pricing sections have not been created yet."
             />
           ) : (
             <div className="grid gap-3">

@@ -44,6 +44,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
@@ -127,8 +128,8 @@ export function AdminRoomsClient() {
   if (!organizationId || !hostelId) {
     return (
       <EmptyState
-        title="Hostel context missing"
-        message="Your admin account needs an organization and hostel assignment before rooms can be managed."
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -548,7 +549,7 @@ function AllocateRoomDialog({
       residentId: "",
       bedLabel: "",
       allocatedFrom: today,
-      monthlyFeeAmount: room?.base_monthly_fee ?? 0,
+      monthlyFeeAmount: room?.base_monthly_fee ?? HOSTEL_FEES.student,
       reason: "",
     },
   })
@@ -560,7 +561,7 @@ function AllocateRoomDialog({
       residentId: "",
       bedLabel: "",
       allocatedFrom: today,
-      monthlyFeeAmount: room?.base_monthly_fee ?? 0,
+      monthlyFeeAmount: room?.base_monthly_fee ?? HOSTEL_FEES.student,
       reason: "",
     })
   }, [form, room, today])
@@ -576,9 +577,9 @@ function AllocateRoomDialog({
         hostelId,
         toRoomId: room.id,
         residentId: values.residentId,
-        bedLabel: values.bedLabel,
+        bedLabel: values.bedLabel || undefined,
         transferDate: values.allocatedFrom,
-        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee,
+        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee || HOSTEL_FEES.student,
         reason: values.reason,
       })
       toast.success("Resident transferred.")
@@ -588,9 +589,9 @@ function AllocateRoomDialog({
         hostelId,
         roomId: room.id,
         residentId: values.residentId,
-        bedLabel: values.bedLabel,
+        bedLabel: values.bedLabel || undefined,
         allocatedFrom: values.allocatedFrom,
-        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee,
+        monthlyFeeAmount: values.monthlyFeeAmount || room.base_monthly_fee || HOSTEL_FEES.student,
         reason: values.reason,
       })
       toast.success("Room allocated.")
@@ -647,8 +648,8 @@ function AllocateRoomDialog({
               />
             </FormField>
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Bed label" error={form.formState.errors.bedLabel?.message}>
-                <Input {...form.register("bedLabel")} placeholder="A, B, 1, 2" />
+              <FormField label="Room slot note" error={form.formState.errors.bedLabel?.message}>
+                <Input {...form.register("bedLabel")} placeholder="Optional note" />
               </FormField>
               <FormField label="Allocated from" error={form.formState.errors.allocatedFrom?.message}>
                 <Input type="date" {...form.register("allocatedFrom")} />
@@ -700,7 +701,7 @@ function getRoomDefaults(room: Tables<"rooms"> | null): RoomFormInput {
     floor: room?.floor ?? "",
     blockName: room?.block_name ?? "",
     capacity: room?.capacity ?? 1,
-    baseMonthlyFee: room?.base_monthly_fee ?? 0,
+    baseMonthlyFee: room?.base_monthly_fee ?? HOSTEL_FEES.student,
     hasAttachedBathroom: room?.has_attached_bathroom ?? false,
     hasAc: room?.has_ac ?? false,
     status: room?.status ?? "active",

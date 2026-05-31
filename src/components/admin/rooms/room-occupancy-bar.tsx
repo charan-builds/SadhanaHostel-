@@ -22,7 +22,7 @@ export function RoomOccupancyBar({
   showLabel = true,
 }: RoomOccupancyBarProps) {
   const occupancyPercent = getRoomOccupancyPercent(capacity, occupiedCount)
-  const availableBeds = Math.max(capacity - occupiedCount, 0)
+  const vacancies = Math.max(capacity - occupiedCount, 0)
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -31,7 +31,7 @@ export function RoomOccupancyBar({
           <span>
             {occupiedCount}/{capacity} occupied
           </span>
-          <span>{availableBeds} available</span>
+          <span>{vacancies} vacant</span>
         </div>
       ) : null}
       <div

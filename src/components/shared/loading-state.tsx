@@ -9,14 +9,21 @@ type LoadingStateProps = {
 }
 
 function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} />
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-md bg-muted before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.8s_infinite] before:bg-linear-to-r before:from-transparent before:via-white/55 before:to-transparent",
+        className
+      )}
+    />
+  )
 }
 
 function CardSkeletons({ rows }: { rows: number }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="rounded-xl border bg-background p-4">
+        <div key={index} className="saas-surface rounded-xl p-4">
           <SkeletonBlock className="h-4 w-2/3" />
           <SkeletonBlock className="mt-3 h-8 w-1/2" />
           <SkeletonBlock className="mt-4 h-3 w-full" />
@@ -29,7 +36,7 @@ function CardSkeletons({ rows }: { rows: number }) {
 
 function TableSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="rounded-xl border bg-background">
+    <div className="saas-surface rounded-xl">
       <div className="grid grid-cols-4 gap-4 border-b p-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <SkeletonBlock key={index} className="h-4" />
@@ -83,7 +90,7 @@ export function LoadingState({ variant = "spinner", rows = 3, className }: Loadi
   }
 
   return (
-    <div className={cn("flex min-h-40 items-center justify-center rounded-xl border", className)}>
+    <div className={cn("saas-surface flex min-h-40 items-center justify-center rounded-xl", className)}>
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         <span>Loading</span>

@@ -11,7 +11,7 @@ type AdminLayoutShellProps = {
 
 export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
   return (
-    <div className="min-h-svh bg-slate-50">
+    <div className="saas-grid-bg min-h-svh bg-background">
       <AdminSidebar />
       <div className="flex min-h-svh min-w-0 flex-col lg:pl-72">
         <AdminTopbar />

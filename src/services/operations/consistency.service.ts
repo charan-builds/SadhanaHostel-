@@ -472,8 +472,8 @@ export async function scanConsistency(
         "reservations.expired_pending",
         "reservation",
         "high",
-        "Expired reservations still hold beds",
-        "Reservations past reserved_until can block public vacancy and overstate reserved beds.",
+        "Expired reservations still hold student spots",
+        "Reservations past reserved_until can block public vacancy and overstate reserved capacity.",
         staleReservations,
         "expire_reservations",
         rowDetails(staleReservationRows, {
@@ -482,7 +482,7 @@ export async function scanConsistency(
           expectedState: "reservation expired or released after reserved_until",
           actualState: "pending/reserved/confirmed after reserved_until",
           repairAction: "expire_reservations",
-          recommendation: "Run reservation expiry automation to release stale reserved beds.",
+          recommendation: "Run reservation expiry automation to release stale reserved capacity.",
         })
       )
     )
@@ -617,7 +617,7 @@ export async function scanConsistency(
         "occupancy",
         "high",
         "Room allocations ended but remain active",
-        "Active allocations with past end dates can inflate occupied beds and dues generation.",
+        "Active allocations with past end dates can inflate occupied students and dues generation.",
         activeAllocationsPastEndDate,
         "release_stale_allocations",
         rowDetails(activeAllocationsPastEndDateRows, {
@@ -1314,7 +1314,7 @@ async function detectCapacitySnapshotAnomalies(
               tableName: "hostel_capacity",
               anomalyType: "capacity_snapshot_mismatch",
               expectedState: "stored snapshot equals live hostel_vacancy_view",
-              actualState: "stored occupied/reserved/available beds differ from live vacancy",
+              actualState: "stored occupied/reserved/available capacity differs from live vacancy",
               repairAction: "repair_analytics",
               recommendation: "Run analytics repair to refresh hostel capacity and room capacity snapshots from live occupancy views.",
             }
@@ -1391,7 +1391,7 @@ async function detectInvalidDuesAnomalies(
           "payment",
           "high",
           "Inactive residents have open dues",
-          "Draft, unverified, suspended, checked-out, or archived residents must not carry unpaid operational dues unless finance explicitly keeps them open.",
+          "Draft, unverified, suspended, left, or archived residents must not carry unpaid operational dues unless finance explicitly keeps them open.",
           invalidFeeRecords.length + invalidInvoices.length,
           "reconcile_dues",
           [

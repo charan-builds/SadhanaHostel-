@@ -11,6 +11,7 @@ import type { SessionOverview } from "./types"
 export const authSdk = {
   login(input: LoginInput) {
     return apiClient.post<SessionOverview, LoginInput>("/api/auth/login", input, {
+      auth: false,
       retry: 0,
     })
   },
@@ -52,6 +53,7 @@ export const authSdk = {
 
   session() {
     return apiClient.get<SessionOverview>("/api/auth/session", undefined, {
+      auth: false,
       retry: 0,
     })
   },

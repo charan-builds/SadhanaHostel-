@@ -39,13 +39,8 @@ export function LaunchReadinessClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Setup required"
-        message="Finish organization setup before launch diagnostics can be calculated."
-        action={
-          <Button asChild>
-            <Link href={"/admin/setup" as Route}>Open setup</Link>
-          </Button>
-        }
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -158,7 +153,7 @@ export function LaunchReadinessClient() {
             <ActionLink href="/admin/operations/automation" label="Pause automation jobs" />
             <ActionLink href="/admin/alerts" label="Review support blockers" />
             <ActionLink href="/admin/finance/payment-security" label="Verify payment safety" />
-            <ActionLink href="/admin/setup" label="Review tenant setup" />
+            <ActionLink href="/admin/settings" label="Review hostel settings" />
             <div className="grid gap-2 rounded-lg border p-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span>Cron jobs</span>

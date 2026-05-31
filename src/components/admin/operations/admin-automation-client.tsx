@@ -1,8 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
-import type { Route } from "next"
 import { AlertTriangle, Bot, Fingerprint, Loader2, Play, RotateCcw, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -27,9 +25,12 @@ import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import type {
   AutomationJobConfig,
+  AutomationDashboard,
   ConsistencyFinding,
+  ConsistencyRepairAction,
   DemoDataResetReport,
   IdentityReconciliationFinding,
+  IdentityReconciliationReport,
 } from "@/types/operations"
 import type { AutomationJobName } from "@/validations/operations.validation"
 
@@ -199,13 +200,8 @@ export function AdminAutomationClient() {
   if (!organizationId) {
     return (
       <EmptyState
-        title="Setup required"
-        message="Finish organization setup before automation can run safely."
-        action={
-          <Button asChild>
-            <Link href={"/admin/setup" as Route}>Open setup</Link>
-          </Button>
-        }
+        title="Tenant context resolving"
+        message="Sadhana Boys Hostel context is being applied automatically."
       />
     )
   }
@@ -226,7 +222,7 @@ export function AdminAutomationClient() {
     <div className="grid gap-6">
       <PageHeader
         title="Operations Automation"
-        description="Run and control recurring hostel operations: dues, reminders, reservation expiry, invite cleanup, occupancy, checkout reconciliation, and consistency scans."
+        description="Run and control recurring hostel operations: dues, reminders, reservation expiry, invite cleanup, occupancy, student leaving reconciliation, and consistency scans."
         badge={consistency ? `Consistency ${consistency.score}/100` : undefined}
       />
 
@@ -244,6 +240,17 @@ export function AdminAutomationClient() {
           <Metric label="Informational" value={consistency.summaries.informational ?? consistency.summaries.low} />
           <Metric label="Total findings" value={consistency.summaries.totalFindings} />
         </section>
+      ) : null}
+
+      {consistency ? (
+        <RecommendedAutomationPanel
+          consistency={consistency}
+          identityReport={identityReport.data}
+          isRepairingConsistency={repairConsistency.isPending}
+          isRepairingIdentities={repairIdentities.isPending}
+          onConsistencyRepair={(action, dryRun) => void runConsistencyRepair(action, dryRun)}
+          onIdentityRepair={(dryRun) => void runIdentityRepair(dryRun)}
+        />
       ) : null}
 
       <section className="grid gap-4 rounded-lg border bg-background p-4">
@@ -466,6 +473,9 @@ export function AdminAutomationClient() {
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {finding.description}
                 </p>
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  Automation to perform: {automationInstruction(finding.repairAction)}
+                </p>
                 {finding.details?.length ? (
                   <div className="mt-3 space-y-2">
                     {finding.details.slice(0, 5).map((detail, index) => (
@@ -643,9 +653,141 @@ function IdentityFindingRow({ finding }: { finding: IdentityReconciliationFindin
         <p className="mt-1 text-xs text-muted-foreground">
           Expected: {finding.expectedState} Actual: {finding.actualState}
         </p>
+        <p className="mt-1 text-xs font-medium">
+          Automation to perform: {identityAutomationInstruction(finding.recommendedRepairAction)}
+        </p>
       </div>
       <Badge variant="outline">{humanizeEnum(finding.recommendedRepairAction)}</Badge>
     </article>
+  )
+}
+
+function RecommendedAutomationPanel({
+  consistency,
+  identityReport,
+  isRepairingConsistency,
+  isRepairingIdentities,
+  onConsistencyRepair,
+  onIdentityRepair,
+}: {
+  consistency: NonNullable<AutomationDashboard["consistency"]>
+  identityReport?: IdentityReconciliationReport
+  isRepairingConsistency: boolean
+  isRepairingIdentities: boolean
+  onConsistencyRepair: (action: ConsistencyRepairAction, dryRun: boolean) => void
+  onIdentityRepair: (dryRun: boolean) => void
+}) {
+  const consistencyFindings = consistency.findings.filter((finding) =>
+    finding.severity === "critical" || finding.severity === "high"
+  )
+  const identityFindings = identityReport?.findings.filter((finding) =>
+    finding.severity === "critical" || finding.severity === "high"
+  ) ?? []
+
+  if (consistencyFindings.length === 0 && identityFindings.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
+        <h2 className="text-sm font-semibold">Recommended automation for critical issues</h2>
+        <Badge variant="destructive">
+          {consistencyFindings.length + identityFindings.length} urgent finding(s)
+        </Badge>
+      </div>
+      <div className="divide-y rounded-md border bg-background">
+        {consistencyFindings.slice(0, 5).map((finding) => (
+          <article key={finding.id} className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium">{finding.title}</p>
+                <Badge variant={finding.severity === "critical" ? "destructive" : "secondary"}>
+                  {humanizeEnum(finding.severity)}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {automationInstruction(finding.repairAction)}
+              </p>
+            </div>
+            {finding.repairAction !== "review_manually" ? (
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isRepairingConsistency}
+                  onClick={() => onConsistencyRepair(finding.repairAction, true)}
+                >
+                  <RotateCcw className="size-3.5" aria-hidden="true" />
+                  Dry run
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isRepairingConsistency}
+                  onClick={() => onConsistencyRepair(finding.repairAction, false)}
+                >
+                  {isRepairingConsistency ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Play className="size-3.5" aria-hidden="true" />
+                  )}
+                  Run repair
+                </Button>
+              </div>
+            ) : (
+              <Badge variant="outline">Manual review</Badge>
+            )}
+          </article>
+        ))}
+        {identityFindings.slice(0, 5).map((finding) => (
+          <article key={finding.id} className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium">{finding.title}</p>
+                <Badge variant={finding.severity === "critical" ? "destructive" : "secondary"}>
+                  {humanizeEnum(finding.severity)}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {identityAutomationInstruction(finding.recommendedRepairAction)}
+              </p>
+            </div>
+            {finding.safeAutoRepair ? (
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isRepairingIdentities}
+                  onClick={() => onIdentityRepair(true)}
+                >
+                  <RotateCcw className="size-3.5" aria-hidden="true" />
+                  Dry run
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isRepairingIdentities}
+                  onClick={() => onIdentityRepair(false)}
+                >
+                  {isRepairingIdentities ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Fingerprint className="size-3.5" aria-hidden="true" />
+                  )}
+                  Run identity repair
+                </Button>
+              </div>
+            ) : (
+              <Badge variant="outline">Manual review</Badge>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -771,4 +913,36 @@ function currentPeriodMonth() {
   const now = new Date()
 
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`
+}
+
+function automationInstruction(action: ConsistencyRepairAction) {
+  const labels: Record<ConsistencyRepairAction, string> = {
+    cleanup_uploads: "Run Stale Upload Cleanup to remove failed temporary uploads, then retry the document upload.",
+    dedupe_invites: "Run Onboarding Access Repair to expire stale or duplicate invites.",
+    expire_invites: "Run Invite Expiry Automation to close expired activation links.",
+    expire_reservations: "Run Reservation Expiry Automation to release stale reserved capacity.",
+    generate_fees: "Run Monthly Fee Generation after confirming the billing period.",
+    recalculate_occupancy: "Run Repair Occupancy to recompute room and hostel vacancy.",
+    reconcile_dues: "Run Dues Reconciliation to cancel invalid unpaid dues and linked invoices.",
+    release_stale_allocations: "Run Repair Occupancy to close stale allocations and refresh vacancy.",
+    repair_analytics: "Run Analytics Repair to refresh hostel capacity snapshots.",
+    repair_tenant_linkage: "Run Tenant Linkage Repair to rescope records to the correct organization or hostel.",
+    resync_auth_linkage: "Run Auth Linkage Repair to synchronize resident login and onboarding state.",
+    run_consistency_scan: "Run Consistency Scan to refresh the report before applying repairs.",
+    review_manually: "Manual review is required before an automation can safely change data.",
+  }
+
+  return labels[action]
+}
+
+function identityAutomationInstruction(action: IdentityReconciliationFinding["recommendedRepairAction"]) {
+  const labels: Record<IdentityReconciliationFinding["recommendedRepairAction"], string> = {
+    delete_orphan_auth: "Run Identity Repair to remove safe orphan Supabase Auth users.",
+    dedupe_identity: "Review duplicate identities, then run Identity Repair only for safe cleanup items.",
+    relink_resident: "Review the resident record, then run Auth Linkage Repair if the link is safe.",
+    reset_onboarding: "Review onboarding history, then resend activation or reset onboarding from the resident profile.",
+    review_manually: "Manual review is required before an automation can safely change identity data.",
+  }
+
+  return labels[action]
 }

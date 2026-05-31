@@ -1,7 +1,6 @@
 import * as Sentry from "@sentry/nextjs"
 
 import { notifyApiAuthFailure } from "./auth-recovery"
-import { getCurrentAccessToken } from "./auth-token"
 import { buildApiUrl, createRequestId, type QueryParams } from "./request-builder"
 
 const DEFAULT_API_TIMEOUT_MS = 20_000
@@ -92,14 +91,6 @@ async function executeApiFetch<TData, TBody>(
 
   headers.set("x-request-id", requestId)
   headers.set("accept", "application/json")
-
-  if (options.auth !== false) {
-    const token = await getCurrentAccessToken()
-
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`)
-    }
-  }
 
   const body = buildRequestBody(options.body, headers)
   let response: Response

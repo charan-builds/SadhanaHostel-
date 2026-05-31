@@ -1,7 +1,9 @@
 "use client"
 
+import Link from "next/link"
+import type { Route } from "next"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { CalendarPlus, Loader2 } from "lucide-react"
+import { CalendarPlus, Loader2, ShieldCheck } from "lucide-react"
 import { useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -35,6 +37,7 @@ import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { useRealtimeLeaves } from "@/lib/realtime"
+import type { Tables } from "@/types/database"
 
 const leaveSchema = z
   .object({
@@ -104,6 +107,44 @@ export function ResidentLeaveClient() {
         message="Your account is not connected to a resident profile."
         onRetry={() => void resident.refetch()}
       />
+    )
+  }
+
+  const verification = getLeaveVerificationState(resident.data)
+
+  if (!verification.canApplyLeave) {
+    return (
+      <div className="grid gap-6">
+        <PageHeader
+          title="Leave"
+          description="Apply for leave and track approval or rejection status in realtime."
+        />
+        <div className="rounded-xl border bg-background p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+              <ShieldCheck className="size-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold">Verification required</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {verification.message}
+              </p>
+              {verification.missing.length > 0 ? (
+                <div className="mt-4 grid gap-2 text-sm">
+                  {verification.missing.map((item) => (
+                    <div key={item} className="rounded-lg border bg-muted/30 px-3 py-2">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <Button asChild className="mt-5">
+                <Link href={"/resident/onboarding" as Route}>Open onboarding</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -245,4 +286,66 @@ export function ResidentLeaveClient() {
       </section>
     </div>
   )
+}
+
+type LeaveResident = Tables<"residents"> & {
+  onboarding_status?: string | null
+  student_id_document_id?: string | null
+}
+
+function getLeaveVerificationState(resident: LeaveResident) {
+  const missing: string[] = []
+
+  if (!resident.full_name) missing.push("Full name")
+  if (!resident.date_of_birth) missing.push("Date of birth")
+  if (!resident.phone) missing.push("Phone number")
+  if (!resident.parent_name || !resident.parent_phone) missing.push("Guardian details")
+  if (!resident.emergency_contact_name || !resident.emergency_contact_phone) {
+    missing.push("Emergency contact")
+  }
+  if (!resident.permanent_address) missing.push("Permanent address")
+  if (!resident.aadhaar_document_id) missing.push("Aadhaar document")
+  if (!resident.profile_image_document_id) missing.push("Profile photo")
+  if (!resident.student_id_document_id) missing.push("Student ID document")
+  if (!resident.hostel_id) missing.push("Room allocation")
+
+  const canApplyLeave =
+    resident.onboarding_status === "verified" &&
+    resident.status === "active" &&
+    resident.is_active !== false &&
+    Boolean(resident.user_id) &&
+    !resident.checkout_on
+
+  if (canApplyLeave) {
+    return {
+      canApplyLeave,
+      missing,
+      message: "",
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      canApplyLeave,
+      missing,
+      message:
+        "Finish the missing onboarding items below, then submit your profile for admin verification.",
+    }
+  }
+
+  if (resident.onboarding_status === "verification_pending") {
+    return {
+      canApplyLeave,
+      missing,
+      message:
+        "Your profile is complete and waiting for admin approval. Leave requests open after verification.",
+    }
+  }
+
+  return {
+    canApplyLeave,
+    missing,
+    message:
+      "Your resident profile must be verified and active before you can apply for leave.",
+  }
 }

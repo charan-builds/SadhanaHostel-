@@ -1,5 +1,6 @@
 import "server-only"
 
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { conflict } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -61,7 +62,7 @@ export class RoomsService {
       floor: values.floor,
       block_name: values.blockName,
       capacity: values.capacity,
-      base_monthly_fee: values.baseMonthlyFee,
+      base_monthly_fee: values.baseMonthlyFee || HOSTEL_FEES.student,
       has_attached_bathroom: values.hasAttachedBathroom,
       has_ac: values.hasAc,
       description: values.description,
@@ -114,7 +115,8 @@ export class RoomsService {
       floor: values.floor,
       block_name: values.blockName,
       capacity: values.capacity,
-      base_monthly_fee: values.baseMonthlyFee,
+      base_monthly_fee:
+        values.baseMonthlyFee === undefined ? undefined : values.baseMonthlyFee || HOSTEL_FEES.student,
       has_attached_bathroom: values.hasAttachedBathroom,
       has_ac: values.hasAc,
       status: values.status,
@@ -142,7 +144,7 @@ export class RoomsService {
         bedLabel: normalizeOptionalText(values.bedLabel),
         allocatedFrom: values.allocatedFrom,
         allocatedTo: values.allocatedTo,
-        monthlyFeeAmount: values.monthlyFeeAmount,
+        monthlyFeeAmount: values.monthlyFeeAmount || HOSTEL_FEES.student,
         reason: values.reason,
         actorUserId: context.authUser.id,
       })
@@ -170,7 +172,7 @@ export class RoomsService {
         toRoomId: values.toRoomId,
         bedLabel: normalizeOptionalText(values.bedLabel),
         transferDate: values.transferDate,
-        monthlyFeeAmount: values.monthlyFeeAmount,
+        monthlyFeeAmount: values.monthlyFeeAmount || HOSTEL_FEES.student,
         reason: values.reason,
         actorUserId: context.authUser.id,
       })

@@ -70,28 +70,28 @@ export function AdminSidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r bg-white lg:block">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl lg:block">
       <div className="flex h-full flex-col">
-        <div className="border-b px-5 py-5">
+        <div className="border-b border-sidebar-border px-5 py-5">
           <Link
             href="/admin/dashboard"
-            className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40"
             aria-label={`${hostelConfig.name} admin dashboard`}
           >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground shadow-lg shadow-cyan-950/20">
               SB
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-slate-950">
+              <span className="block truncate text-sm font-semibold text-sidebar-foreground">
                 {hostelConfig.shortName}
               </span>
-              <span className="block truncate text-xs text-muted-foreground">Admin Workspace</span>
+              <span className="block truncate text-xs text-sidebar-foreground/60">Admin Workspace</span>
             </span>
           </Link>
 
           <div className="mt-4 flex items-center justify-between gap-3">
             <Badge variant="secondary">Admin</Badge>
-            <span className="text-xs text-muted-foreground">{hostelConfig.location.city}</span>
+            <span className="text-xs text-sidebar-foreground/60">{hostelConfig.location.city}</span>
           </div>
         </div>
 
@@ -106,8 +106,8 @@ export function AdminSidebar() {
                 href={item.href as Route}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  isActive && "bg-blue-50 text-blue-700 shadow-sm",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/68 transition-all duration-200 hover:translate-x-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40",
+                  isActive && "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-cyan-950/20",
                 )}
               >
                 <Icon className="size-4" aria-hidden="true" />
@@ -117,10 +117,10 @@ export function AdminSidebar() {
           })}
         </nav>
 
-        <div className="border-t p-4">
-          <div className="rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-medium text-slate-950">{hostelConfig.name}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        <div className="border-t border-sidebar-border p-4">
+          <div className="rounded-xl border border-sidebar-border bg-white/[0.07] p-3 backdrop-blur">
+            <p className="text-xs font-medium text-sidebar-foreground">{hostelConfig.name}</p>
+            <p className="mt-1 text-xs leading-5 text-sidebar-foreground/60">
               Hostel operations dashboard
             </p>
           </div>

@@ -469,10 +469,7 @@ export class AnalyticsService {
         .filter((reservation) => ["reserved", "confirmed"].includes(reservation.status))
         .reduce((total, reservation) => total + reservation.reserved_bed_count, 0)
     const maintenanceBlockedBeds = capacitySnapshot?.maintenance_blocked_beds ?? 0
-    const availableBeds = Math.max(
-      0,
-      totalBeds - occupiedBeds - reservedBeds - maintenanceBlockedBeds
-    )
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds)
     const verifiedPayments = payments.filter((payment) => payment.status === "verified")
     const pendingFeeRecords = operationalFeeRecords.filter((record) =>
       ["pending", "partial", "overdue"].includes(record.status)
@@ -858,8 +855,8 @@ function buildOwnerInsights(input: {
     insights.push({
       severity: "critical",
       title: "Capacity risk",
-      description: `${input.availableBeds} beds are available. Admissions should prioritize reservation expiry and waitlist handling.`,
-      action: "Review vacancy and upcoming checkouts.",
+      description: `${input.availableBeds} student vacancies are available. Admissions should prioritize lead follow-up and room occupancy.`,
+      action: "Review vacancy and upcoming students leaving.",
     })
   } else if (occupancyRate < 70 && input.totalBeds > 0) {
     insights.push({
