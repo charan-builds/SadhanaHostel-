@@ -1,149 +1,190 @@
-# UI Design System
+# Sadhana Boys Hostel Design System
 
-## Purpose
+## Positioning
 
-Define the visual and interaction standards for the public website, admin ERP dashboard, and resident portal.
+Sadhana Boys Hostel is a premium hostel-management SaaS for operational teams and residents. The interface should feel professional, trustworthy, calm, and fast. Admin surfaces prioritize scanning, comparison, and repeated action. Resident surfaces prioritize mobile clarity. Public pages should communicate quality and confidence without becoming decorative.
 
-## Overview
+## 1. Design Tokens
 
-The platform uses Tailwind CSS and shadcn/ui as the base component system. The UI should feel trustworthy, operational, fast, and maintainable. Admin workflows should prioritize data density and clarity. Resident workflows should prioritize mobile usability and simplicity. Public pages should communicate trust and hostel quality.
+### Color Palette
 
-## Design Principles
-
-- Use consistent spacing, typography, and controls.
-- Prefer reusable components over one-off UI.
-- Keep admin screens efficient and scannable.
-- Keep resident screens simple and mobile-friendly.
-- Avoid visual noise in data-heavy workflows.
-- Use accessible shadcn/ui primitives for forms, dialogs, tables, and menus.
-
-## Component Layers
-
-| Layer | Location | Description |
+| Role | Token | Use |
 | --- | --- | --- |
-| UI primitives | `src/components/ui` | shadcn/ui generated components |
-| Layout components | `src/components/layout` | Public shell, dashboard shell |
-| Shared components | `src/components/shared` | Reusable page and workflow components |
-| Feature components | Future feature folders | Resident forms, payment tables, leave workflows |
+| App canvas | `--background` | Page background and dashboard canvas |
+| Primary ink | `--foreground` | Main content text |
+| Card glass | `--card` | Cards, panels, metric surfaces |
+| Brand blue | `--primary` | Primary actions, active states, links |
+| Trust teal | `--accent`, `--sidebar-primary` | Premium accent, sidebar logo, system highlights |
+| Muted surface | `--muted` | Subtle fills, table headers, inactive areas |
+| Border | `--border`, `--input` | Dividers, form controls, tables |
+| Success | `--success`, `--success-surface` | Paid, approved, active, verified |
+| Warning | `--warning`, `--warning-surface` | Pending, draft, initiated |
+| Info | `--info`, `--info-surface` | Partial, maintenance, informational states |
+| Destructive | `--destructive` | Failed, rejected, overdue, dangerous actions |
+| Sidebar | `--sidebar-*` | Admin/resident navigation shell |
 
-## Typography
+### Typography Scale
 
-| Use | Style Direction |
+| Role | Token | Size | Use |
+| --- | --- | --- | --- |
+| Display | `--text-display` | `56px` | Public hero or rare brand moments |
+| Title | `--text-title` | `36px` | Page headers |
+| Section | `--text-section` | `22px` | Panel and section headings |
+| Body | `--text-body` | `15px` | Main UI copy |
+| Caption | `--text-caption` | `13px` | Metadata, table helpers, badges |
+
+Use `font-heading` for headings and `font-sans` for all product UI. Letter spacing stays at `0`; use weight and contrast instead of compressed tracking.
+
+### Spacing System
+
+| Role | Value | Use |
+| --- | --- | --- |
+| Control | `8px` | Icon gaps, compact input interiors |
+| Card | `16px` | Default card and panel padding |
+| Section | `24px` | Groups inside pages |
+| Page | `32px` | Standard desktop page rhythm |
+| Dashboard | `40px` | Large analytics group separation |
+
+### Radius And Elevation
+
+| Role | Token/Class | Use |
+| --- | --- | --- |
+| Controls | `rounded-lg` | Buttons, inputs, selects |
+| Cards | `rounded-xl` | Panels and cards, capped at a SaaS-friendly radius |
+| Modal/drawer | `rounded-xl` | Dialogs, bottom sheets |
+| Soft shadow | `shadow-soft` / `.saas-surface` | Cards and data panels |
+| Lifted shadow | `shadow-lifted` / `.saas-surface-strong` | Dialogs, drawers, popovers |
+| Focus | `ring-ring/30`, `.focus-ring` | Keyboard focus |
+
+## 2. Tailwind Mapping
+
+Tokens live in [globals.css](../src/app/globals.css) and are mapped through Tailwind v4 `@theme inline`.
+
+Use these Tailwind classes:
+
+| Need | Tailwind Mapping |
 | --- | --- |
-| Page title | Clear, medium-large, restrained |
-| Section heading | Compact and scannable |
-| Body text | High readability |
-| Table text | Dense but legible |
-| Metadata | Muted color, smaller size |
+| Brand action | `bg-primary text-primary-foreground` |
+| Brand hover surface | `bg-primary/5`, `bg-primary/10` |
+| SaaS panel | `saas-surface` or `ds-panel` |
+| Strong overlay | `saas-surface-strong` or `ds-panel-strong` |
+| Dashboard background | `saas-grid-bg bg-background` |
+| Gradient headline | `text-gradient` |
+| Standard control | `ds-control` |
+| Interactive lift | `ds-interactive` |
+| Table row | `ds-table-row` |
+| Success state | `bg-success-surface text-success-foreground border-success/25` |
+| Warning state | `bg-warning-surface text-warning-foreground border-warning/30` |
+| Info state | `bg-info-surface text-info-foreground border-info/25` |
+| Destructive state | `bg-destructive/10 text-destructive border-destructive/25` |
 
-## Color and Status System
+The same token values are mirrored for TypeScript consumers in [tokens.ts](../src/design-system/tokens.ts).
 
-Status colors should be semantic and consistent:
+## 3. Component Architecture
 
-| Status | UI Treatment |
+### UI Primitives
+
+Location: `src/components/ui`
+
+These are shadcn/Radix-compatible primitives. They define the system look for every feature:
+
+| Component | System Behavior |
 | --- | --- |
-| Success | Green-like token, payment success, approved |
-| Warning | Amber-like token, pending, overdue soon |
-| Error | Destructive token, failed, rejected |
-| Neutral | Muted token, draft, inactive |
-| Info | Secondary token, notices, system state |
+| `Button` | Brand, outline, secondary, ghost, destructive, link variants with hover lift |
+| `Card` | Glass panel, subtle border, consistent padding and radius |
+| `Badge` | Compact status and metadata chip |
+| `Alert` | System feedback: default, info, success, warning, destructive |
+| `Input`, `Textarea`, `Select` | Glass controls with consistent height, focus ring, disabled state |
+| `Table` | Dense SaaS table styling, muted headers, row hover states |
+| `Dialog` | Modal overlay with lifted glass panel |
+| `Sheet` | Drawer/bottom-sheet behavior with lifted glass panel |
+| `Tabs`, `DropdownMenu`, `Avatar` | Follow shadcn primitives and inherit system tokens |
 
-TODO: Define exact token mapping after brand palette is finalized.
+### Shared Product Components
 
-## Admin UI Patterns
+Location: `src/components/shared`
 
-Use:
+| Component | Purpose |
+| --- | --- |
+| `PageHeader` | Page title, description, badge, actions |
+| `MetricCard`, `StatCard` | Dashboard KPIs and operational stats |
+| `DataTableShell` | Header, actions, table content, footer, empty state |
+| `EmptyState`, `ErrorState`, `LoadingState` | Workflow feedback states |
+| `StatusBadge` | Business-status rendering using semantic tokens |
+| `MotionReveal` | Reduced-motion-aware Framer Motion reveal wrapper |
+| `SearchAndFilterBar` | List filtering shell |
 
-- Tables for residents, payments, leaves, rooms, invoices.
-- Filter bars for searchable lists.
-- Sheet or dialog for quick edits.
-- Detail pages for complex records.
-- Badges for status.
-- Confirmation dialogs for sensitive actions.
-- Toasts for action feedback.
+### Layout Components
 
-Avoid:
+| Component | Purpose |
+| --- | --- |
+| `AdminLayoutShell` | Admin ERP workspace canvas |
+| `AdminSidebar`, `AdminTopbar`, `AdminMobileSidebar` | Primary admin navigation |
+| `DashboardShell` | Resident workspace and shared dashboard shell |
+| `AuthShell` | Login and activation surfaces |
+| Public components | Marketing/public hostel content with the same brand system |
 
-- Overly decorative dashboards.
-- Marketing-style hero layouts inside admin.
-- Large cards where compact tables are better.
-- Client-only data fetching for sensitive data.
+### Feature Components
 
-## Resident UI Patterns
+Feature folders should compose primitives and shared components. They should not invent new colors, shadows, or form styles. When a pattern repeats across two or more features, promote it to `shared` or `ui`.
 
-Use:
+## Component Style Contracts
 
-- Summary cards.
-- Clear payment status.
-- Simple forms.
-- Step-by-step leave request.
-- Mobile-friendly lists.
-- Download buttons for receipts.
+### Cards
 
-## Public Website UI Patterns
+Use cards for metrics, records, modal-like panels, and repeated items. Default: `rounded-xl`, `saas-surface`, `p-4` or component padding. Cards may lift on hover for clickable/inspectable content.
 
-Use:
+### Buttons
 
-- Strong first viewport brand signal.
-- Real hostel imagery when available.
-- Clear room and facility sections.
-- Inquiry CTA.
-- SEO-friendly structure.
+Use `default` for primary task completion, `outline` for secondary actions, `ghost` for toolbar/navigation actions, and `destructive` for dangerous actions. Buttons with only icons must include an accessible label.
 
-## Form Standards
+### Badges
 
-- Use React Hook Form and Zod.
-- Show field-level validation.
-- Use required labels clearly.
-- Disable submit during pending state.
-- Preserve entered data on validation errors.
-- Confirm destructive actions.
+Use `StatusBadge` for business statuses. Use `Badge` for role, scope, or metadata chips. Avoid using badges as buttons.
 
-## Data Table Standards
+### Alerts
 
-Required features for production tables:
+Use `Alert` for inline feedback that must remain visible. Use `sonner` toasts for transient action confirmation.
 
-- Pagination.
-- Search.
-- Status filter.
-- Date range filter where relevant.
-- Sort by created date or business date.
-- Empty state.
-- Loading state.
-- Row-level actions with permissions.
+### Empty States
 
-## Accessibility Requirements
+Use `EmptyState` with a concise title, one useful sentence, and one action when the user can recover. Empty states should not explain the whole product.
 
-- Keyboard navigable dialogs and menus.
-- Labels for all inputs.
-- Accessible error messages.
-- Sufficient contrast.
-- Avoid text overlap on mobile.
-- Use semantic HTML where practical.
+### Tables
 
-## Performance Notes
+Tables are the default for admin lists. Use dense rows, muted headers, row-level actions, search/filter bars, pagination, loading state, and empty state. Avoid card grids for data that needs comparison.
 
-- Avoid rendering huge tables client-side.
-- Use server-side pagination.
-- Lazy-load heavy modals if needed.
-- Optimize public images.
-- Reuse layout components to reduce UI drift.
+### Forms
 
-## TODO Placeholders
+Labels are required. Inputs use shared primitives only. Field-level errors belong close to fields. Submit buttons show pending state and disable during submission.
 
-- TODO: Define final brand colors.
-- TODO: Define status badge variants.
-- TODO: Define table toolbar component.
-- TODO: Define empty state component.
-- TODO: Define invoice PDF visual template.
-- TODO: Define dashboard chart style.
-- TODO: Define responsive breakpoints for admin tables.
+### Modals
 
-## Future Expansion Notes
+Use `Dialog` for focused decisions or short forms. Keep destructive confirmations explicit.
 
-- Add Storybook or component documentation if team grows.
-- Add design tokens for multi-brand SaaS tenants.
-- Add theme customization per hostel organization.
-- Add PWA-specific mobile UI patterns.
-- Add advanced analytics charts.
+### Drawers
 
+Use `Sheet` for side-panel editing, mobile menus, quick previews, and contextual workflows that should not navigate away.
+
+### Navigation
+
+Admin navigation uses a dark premium sidebar with active-state contrast. Mobile navigation uses sheets. Resident mobile navigation may use bottom navigation for frequent tasks.
+
+## 4. Theme Strategy
+
+The product is token-first:
+
+- Light theme is the default production theme.
+- Dark theme is token-ready via `.dark`, but admin/resident shells should be verified before enabling a user-facing toggle.
+- Tenant theming should only override semantic CSS variables, never component class names.
+- Business statuses must map to semantic tokens, not raw color names.
+- New components should consume `ui` primitives first, then shared components, then local layout classes.
+- Motion must respect reduced-motion preferences through `MotionReveal` or Radix/shadcn animation states.
+
+## Implementation Checklist
+
+- Tokens: implemented in `src/app/globals.css`.
+- Tailwind mapping: implemented through `@theme inline` and utility classes.
+- TypeScript token mirror: implemented in `src/design-system/tokens.ts`.
+- Alerts: implemented in `src/components/ui/alert.tsx`.
+- Tables, forms, modals, drawers, badges, empty/error/loading states: aligned with the token system.

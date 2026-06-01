@@ -149,13 +149,13 @@ export class LaunchReadinessService {
       this.operationsRepository.count("payments", {
         organizationId,
         hostelId,
-        in: { status: ["pending", "submitted", "initiated"] },
+        in: { status: ["pending", "initiated"] },
         deletedAtNull: true,
       }),
       this.operationsRepository.count("payments", {
         organizationId,
         hostelId,
-        in: { status: ["rejected", "failed"] },
+        in: { status: ["failed"] },
         deletedAtNull: true,
       }),
       this.analyticsRepository.listActiveRoomAllocationsForOccupancy(organizationId, hostelId ?? undefined),

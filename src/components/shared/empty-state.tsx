@@ -3,7 +3,6 @@ import type { LucideIcon } from "lucide-react"
 import { Inbox } from "lucide-react"
 
 import { MotionReveal } from "@/components/shared/motion-reveal"
-import { cn } from "@/lib/utils"
 
 type EmptyStateProps = {
   icon?: LucideIcon

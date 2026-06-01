@@ -1,18 +1,20 @@
 import "server-only"
 
-import { randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 
 import { anyRoleHasPermission } from "@/constants/auth"
+import { getServerEnv } from "@/config/env"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { conflict, forbidden } from "@/lib/api/api-error"
-import { logger } from "@/lib/logger"
+import { logAuditEvent, logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { UsersRepository } from "@/repositories/users.repository"
 import type { ResidentInviteCreated } from "@/types/invites"
-import type { ResidentCreateResult } from "@/types/residents"
+import type { ResidentCreateResult, ResidentPasswordResetResult } from "@/types/residents"
 import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import type { RealtimeEventType } from "@/services/realtime/event-types"
 import {
@@ -75,6 +77,84 @@ export class ResidentsService {
       ...values,
       ...(hostelId ? { hostelId } : {}),
     })
+  }
+
+  async resetResidentTemporaryPassword(input: unknown): Promise<ResidentPasswordResetResult> {
+    const values = residentIdMutationSchema.parse(input)
+    const context = await this.authService.requirePermission("residents.manage")
+    const resident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    this.authService.requireHostelAccess(context, resident.organization_id, resident.hostel_id)
+
+    if (!resident.user_id) {
+      throw conflict("Resident portal account is not active yet. Generate an invite first.")
+    }
+
+    const adminDb = createSupabaseAdminClient()
+    const usersRepository = new UsersRepository(adminDb)
+    const profile = await usersRepository.getById(resident.user_id)
+    const { data: authUserResult, error: authUserError } =
+      await adminDb.auth.admin.getUserById(resident.user_id)
+
+    if (authUserError || !authUserResult.user) {
+      throw forbidden(authUserError?.message ?? "Resident auth account could not be loaded.")
+    }
+
+    const temporaryPassword = generateTemporaryPassword()
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    const authMetadata = {
+      ...recordFromUnknown(authUserResult.user.user_metadata),
+      force_password_reset: true,
+      temporary_password_active: true,
+      temporary_password_expires_at: expiresAt,
+      resident_password_reset_by_admin: true,
+    }
+    const { error } = await adminDb.auth.admin.updateUserById(resident.user_id, {
+      password: temporaryPassword,
+      user_metadata: authMetadata,
+    })
+
+    if (error) {
+      throw forbidden(error.message)
+    }
+
+    if (profile) {
+      await usersRepository.updateProfile(resident.user_id, {
+        metadata: {
+          ...recordFromUnknown(profile.metadata),
+          force_password_reset: true,
+          temporary_password_active: true,
+          temporary_password_expires_at: expiresAt,
+          resident_password_reset_by_admin: true,
+        },
+        updated_by: context.authUser.id,
+      })
+    }
+
+    await this.publishResidentEvent("resident.updated", resident, context.authUser.id)
+    logAuditEvent({
+      action: "resident.password_reset",
+      actorUserId: context.authUser.id,
+      organizationId: resident.organization_id,
+      targetTable: "residents",
+      targetId: resident.id,
+      outcome: "success",
+      details: {
+        targetUserId: resident.user_id,
+        expiresAt,
+      },
+    })
+
+    return {
+      residentId: resident.id,
+      targetUserId: resident.user_id,
+      temporaryPassword,
+      expiresAt,
+      loginLink: `${getAppBaseUrl()}/resident/login${resident.phone ? `?phone=${encodeURIComponent(resident.phone)}` : ""}`,
+    }
   }
 
   async getResident(residentId: string, organizationId: string) {
@@ -476,6 +556,22 @@ function generateDraftAdmissionNumber() {
   const suffix = randomUUID().slice(0, 8).toUpperCase()
 
   return `DRAFT-${timestamp}-${suffix}`
+}
+
+function generateTemporaryPassword() {
+  return `Sbh-${randomBytes(9).toString("base64url")}!7`
+}
+
+function getAppBaseUrl() {
+  return getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }
 
 function resolveResidentMonthlyFee(residentType: string | undefined, monthlyFeeAmount: number | undefined) {

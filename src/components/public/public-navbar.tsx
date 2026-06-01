@@ -5,6 +5,7 @@ import type { Route } from "next"
 import { usePathname } from "next/navigation"
 import { BedDouble, MessageCircle, Phone } from "lucide-react"
 
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
@@ -16,7 +17,7 @@ function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function PublicNavbar() {
+export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
   const pathname = usePathname()
 
   return (
@@ -27,9 +28,7 @@ export function PublicNavbar() {
           className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           aria-label={`${hostelConfig.name} home`}
         >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-sm">
-            SB
-          </span>
+          <BrandMark logoUrl={logoUrl} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold leading-5 text-foreground sm:text-base">
               {hostelConfig.name}
@@ -85,7 +84,7 @@ export function PublicNavbar() {
             </a>
           </Button>
           <PublicAuthActions className="hidden md:inline-flex" />
-          <PublicMobileMenu currentPathname={pathname} />
+          <PublicMobileMenu currentPathname={pathname} logoUrl={logoUrl} />
         </div>
       </div>
     </header>

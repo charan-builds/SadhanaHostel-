@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 
+import { PasswordResetGate } from "@/components/auth/password-reset-gate"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionProviders } from "@/components/providers/app-providers"
 import { residentNavigation } from "@/constants/navigation"
@@ -19,7 +20,7 @@ export default async function ResidentLayout({ children }: { children: ReactNode
         description="View profile details, fee status, leave requests, and hostel notices."
         navigation={residentNavigation}
       >
-        {children}
+        <PasswordResetGate area="resident">{children}</PasswordResetGate>
       </DashboardShell>
     </SessionProviders>
   )

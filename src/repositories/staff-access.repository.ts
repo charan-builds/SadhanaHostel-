@@ -41,7 +41,7 @@ export class StaffAccessRepository {
 
     let query = this.db
       .from("user_roles")
-      .select("*, user:users(*), hostel:hostels(id, name, code)")
+      .select("*")
       .eq("organization_id", filters.organizationId)
       .in("role", filters.role ? [filters.role] : staffRoles)
       .is("deleted_at", null)
@@ -61,7 +61,30 @@ export class StaffAccessRepository {
       throwRepositoryError(error, "Unable to list staff access records.")
     }
 
-    const rows = ((data ?? []) as unknown as StaffAccountRow[]).filter((row) => {
+    const roleRows = (data ?? []) as StaffRoleRow[]
+    const usersById = await this.loadUsersById(
+      roleRows.map((row) => row.user_id),
+      filters.organizationId
+    )
+    const hostelsById = await this.loadHostelsById(
+      roleRows.map((row) => row.hostel_id).filter(Boolean) as string[],
+      filters.organizationId
+    )
+    const rows = roleRows.flatMap((row): StaffAccountRow[] => {
+      const user = usersById.get(row.user_id)
+
+      if (!user) {
+        return []
+      }
+
+      return [
+        {
+          ...row,
+          user,
+          hostel: row.hostel_id ? hostelsById.get(row.hostel_id) ?? null : null,
+        },
+      ]
+    }).filter((row) => {
       if (!search) {
         return true
       }
@@ -77,6 +100,51 @@ export class StaffAccessRepository {
       data: rows.slice(from, to),
       meta: createPaginationMeta(rows.length, page, pageSize),
     }
+  }
+
+  private async loadUsersById(userIds: string[], organizationId: string) {
+    const uniqueUserIds = [...new Set(userIds.filter(Boolean))]
+
+    if (uniqueUserIds.length === 0) {
+      return new Map<string, StaffUserRow>()
+    }
+
+    const { data, error } = await this.db
+      .from("users")
+      .select("*")
+      .in("id", uniqueUserIds)
+      .is("deleted_at", null)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load staff user profiles.")
+    }
+
+    const users = (data ?? []).filter(
+      (user) => !user.organization_id || user.organization_id === organizationId
+    )
+
+    return new Map(users.map((user) => [user.id, user]))
+  }
+
+  private async loadHostelsById(hostelIds: string[], organizationId: string) {
+    const uniqueHostelIds = [...new Set(hostelIds.filter(Boolean))]
+
+    if (uniqueHostelIds.length === 0) {
+      return new Map<string, StaffHostelSummary>()
+    }
+
+    const { data, error } = await this.db
+      .from("hostels")
+      .select("id, name, code")
+      .eq("organization_id", organizationId)
+      .in("id", uniqueHostelIds)
+      .is("deleted_at", null)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load staff hostel scopes.")
+    }
+
+    return new Map((data ?? []).map((hostel) => [hostel.id, hostel]))
   }
 
   async getUserByEmail(email: string) {
@@ -126,6 +194,28 @@ export class StaffAccessRepository {
   }
 
   async createRoleAssignment(values: TablesInsert<"user_roles">) {
+    const existing = await this.getRoleAssignmentByScope({
+      organizationId: values.organization_id,
+      hostelId: values.hostel_id ?? null,
+      userId: values.user_id,
+      role: values.role,
+    })
+
+    if (existing) {
+      return this.updateRoleAssignment(existing.id, values.organization_id, {
+        hostel_id: values.hostel_id,
+        role: values.role,
+        permissions: values.permissions,
+        status: values.status,
+        invited_by: values.invited_by,
+        invited_at: values.invited_at,
+        accepted_at: values.accepted_at,
+        updated_by: values.updated_by,
+        deleted_at: null,
+        deleted_by: null,
+      })
+    }
+
     const { data, error } = await this.db
       .from("user_roles")
       .insert(values)
@@ -134,6 +224,35 @@ export class StaffAccessRepository {
 
     if (error) {
       throwRepositoryError(error, "Unable to create staff role assignment.")
+    }
+
+    return data
+  }
+
+  async getRoleAssignmentByScope(input: {
+    organizationId: string
+    hostelId?: string | null
+    userId: string
+    role: AppRole
+  }) {
+    let query = this.db
+      .from("user_roles")
+      .select("*")
+      .eq("organization_id", input.organizationId)
+      .eq("user_id", input.userId)
+      .eq("role", input.role)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+
+    query = input.hostelId
+      ? query.eq("hostel_id", input.hostelId)
+      : query.is("hostel_id", null)
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load existing staff role assignment.")
     }
 
     return data

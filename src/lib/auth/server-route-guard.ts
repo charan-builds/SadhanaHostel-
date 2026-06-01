@@ -147,8 +147,12 @@ async function getAuthenticatedContext(
     const apiError = toApiError(error)
 
     if (apiError.statusCode === 401) {
+      const loginPath = requestedPath.startsWith("/resident")
+        ? AUTH_REDIRECTS.residentLogin
+        : AUTH_REDIRECTS.adminLogin
+
       redirect(
-        `${AUTH_REDIRECTS.login}?next=${encodeURIComponent(requestedPath)}`
+        `${loginPath}?next=${encodeURIComponent(requestedPath)}`
       )
     }
 

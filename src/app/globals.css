@@ -27,6 +27,15 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-surface: var(--info-surface);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -46,6 +55,14 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --text-display: 3.5rem;
+  --text-title: 2.25rem;
+  --text-section: 1.375rem;
+  --text-body: 0.9375rem;
+  --text-caption: 0.8125rem;
+  --shadow-soft: 0 18px 50px -32px rgb(15 23 42 / 45%);
+  --shadow-lifted: 0 24px 70px -42px rgb(15 23 42 / 65%);
+  --shadow-focus: 0 0 0 3px oklch(0.62 0.16 252 / 28%);
 }
 
 :root {
@@ -66,6 +83,15 @@
   --accent: oklch(0.92 0.045 188);
   --accent-foreground: oklch(0.24 0.05 196);
   --destructive: oklch(0.58 0.22 28);
+  --success: oklch(0.56 0.15 158);
+  --success-foreground: oklch(0.18 0.04 158);
+  --success-surface: oklch(0.94 0.045 158);
+  --warning: oklch(0.72 0.16 78);
+  --warning-foreground: oklch(0.28 0.07 72);
+  --warning-surface: oklch(0.96 0.055 86);
+  --info: oklch(0.56 0.17 252);
+  --info-foreground: oklch(0.21 0.06 252);
+  --info-surface: oklch(0.93 0.045 252);
   --border: oklch(0.88 0.018 252);
   --input: oklch(0.9 0.018 252);
   --ring: oklch(0.62 0.16 252);
@@ -101,6 +127,15 @@
   --accent: oklch(0.31 0.06 188);
   --accent-foreground: oklch(0.94 0.04 188);
   --destructive: oklch(0.68 0.18 24);
+  --success: oklch(0.7 0.14 158);
+  --success-foreground: oklch(0.95 0.035 158);
+  --success-surface: oklch(0.28 0.065 158);
+  --warning: oklch(0.79 0.14 82);
+  --warning-foreground: oklch(0.98 0.045 88);
+  --warning-surface: oklch(0.3 0.07 78);
+  --info: oklch(0.7 0.15 252);
+  --info-foreground: oklch(0.95 0.035 252);
+  --info-surface: oklch(0.29 0.07 252);
   --border: oklch(1 0 0 / 11%);
   --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.68 0.16 188);
@@ -141,11 +176,11 @@
 
 @layer utilities {
   .saas-surface {
-    @apply border border-white/70 bg-card/90 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.45)] backdrop-blur-xl;
+    @apply border border-white/70 bg-card/90 shadow-soft backdrop-blur-xl;
   }
 
   .saas-surface-strong {
-    @apply border border-white/80 bg-white/95 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.65)] backdrop-blur-2xl;
+    @apply border border-white/80 bg-white/95 shadow-lifted backdrop-blur-2xl;
   }
 
   .saas-grid-bg {
@@ -162,6 +197,49 @@
 
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40;
+  }
+
+  .ds-control {
+    @apply h-9 rounded-lg border border-input/80 bg-white/70 px-3 text-sm shadow-sm backdrop-blur transition-all focus-visible:border-ring focus-visible:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ds-panel {
+    @apply rounded-xl border border-border/70 bg-card/92 shadow-soft backdrop-blur-xl;
+  }
+
+  .ds-panel-strong {
+    @apply rounded-xl border border-white/80 bg-white/95 shadow-lifted backdrop-blur-2xl;
+  }
+
+  .ds-interactive {
+    @apply transform-gpu transition-[transform,box-shadow,border-color,background-color,color] duration-200 ease-out hover:-translate-y-0.5;
+  }
+
+  .motion-lift {
+    @apply transform-gpu transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lifted;
+  }
+
+  .motion-press {
+    @apply transform-gpu transition-transform duration-150 ease-out active:translate-y-px active:scale-[0.99];
+  }
+
+  .motion-icon {
+    @apply transform-gpu transition-transform duration-200 ease-out group-hover:scale-105 group-hover:-rotate-2;
+  }
+
+  .ds-table-row {
+    @apply border-b transition-colors duration-200 hover:bg-primary/5 data-[state=selected]:bg-primary/10;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

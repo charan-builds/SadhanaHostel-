@@ -1,10 +1,13 @@
+import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
 import { BriefcaseBusiness, CheckCircle2, GraduationCap, MessageCircle, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
+import { hostelImages } from "@/constants/hostel-images"
 import { fallbackRoomTypes } from "@/constants/public-content"
-import type { RoomTypeCard } from "@/types/frontend"
+import { pickGalleryImage, pickRoomGalleryImage } from "@/lib/public-gallery"
+import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
   BriefcaseBusiness,
@@ -22,13 +25,18 @@ const comparisonRows = [
 
 export function RoomsPageContent({
   roomTypes = fallbackRoomTypes,
+  galleryItems,
 }: {
   roomTypes?: RoomTypeCard[]
+  galleryItems?: GalleryItem[]
 }) {
+  const heroImageUrl = pickGalleryImage(galleryItems, ["room", "accommodation", "hostel", "building"], 0) ?? hostelImages.gate
+
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
           <p className="text-sm font-medium text-blue-700">Rooms and pricing</p>
           <h1 className="mt-3 max-w-4xl text-4xl font-semibold text-slate-950 text-balance sm:text-5xl">
             Clear room plans for students and working professionals.
@@ -37,16 +45,65 @@ export function RoomsPageContent({
             Choose a practical monthly stay at {hostelConfig.name}. Student and employee plans are
             kept simple, transparent, and easy to understand.
           </p>
+          </div>
+          <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border bg-slate-100 shadow-lifted">
+            {heroImageUrl.startsWith("/") ? (
+              <Image
+                src={heroImageUrl}
+                alt="Sadhana Boys Hostel room plan preview"
+                fill
+                priority
+                className="object-cover"
+                sizes="(min-width: 1024px) 48vw, 100vw"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={heroImageUrl}
+                alt="Sadhana Boys Hostel room plan preview"
+                className="size-full object-cover"
+                fetchPriority="high"
+              />
+            )}
+            <div className="absolute inset-0 bg-linear-to-t from-slate-950/55 to-transparent" />
+            <div className="absolute bottom-0 p-5 text-white">
+              <p className="text-sm font-medium text-cyan-100">Actual hostel entrance</p>
+              <p className="mt-1 text-2xl font-semibold">Simple monthly stays</p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="px-4 py-14 sm:px-6 sm:py-16">
         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-2">
-          {roomTypes.map((room) => {
+          {roomTypes.map((room, index) => {
             const Icon = iconMap[room.icon] ?? GraduationCap
+            const roomImageUrl =
+              pickRoomGalleryImage(galleryItems, room, index) ??
+              (index % 2 === 0 ? hostelImages.building : hostelImages.exterior)
 
             return (
-              <article key={room.title} className="rounded-2xl border bg-white p-6 shadow-sm">
+              <article key={room.title} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+                <div className="relative aspect-[16/8]">
+                  {roomImageUrl.startsWith("/") ? (
+                    <Image
+                      src={roomImageUrl}
+                      alt={`${room.title} hostel view`}
+                      fill
+                      className="object-cover"
+                      sizes="(min-width: 1024px) 50vw, 100vw"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={roomImageUrl}
+                      alt={`${room.title} hostel view`}
+                      className="size-full object-cover"
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+                <div className="p-6">
                 <div className="flex items-start justify-between gap-4">
                   <span className="flex size-12 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
                     <Icon className="size-6" aria-hidden="true" />
@@ -65,6 +122,7 @@ export function RoomsPageContent({
                     </li>
                   ))}
                 </ul>
+                </div>
               </article>
             )
           })}

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
+import { AlertTriangle, RefreshCcw } from "lucide-react"
 
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { Button } from "@/components/ui/button"
 
 export function APIErrorState({
@@ -21,20 +23,30 @@ export function APIErrorState({
   const resolvedRequestId = requestId ?? getRequestId(error)
 
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5">
-      <div className="space-y-2">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+    <MotionReveal>
+    <div
+      className="saas-surface rounded-xl border-destructive/25 bg-destructive/5 p-5"
+      role="alert"
+    >
+      <div className="flex gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive ring-1 ring-destructive/15">
+          <AlertTriangle className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 space-y-2">
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
         {resolvedMessage ? (
-          <p className="text-sm text-muted-foreground">{resolvedMessage}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{resolvedMessage}</p>
         ) : null}
         {resolvedRequestId ? (
           <p className="text-xs text-muted-foreground">Request ID: {resolvedRequestId}</p>
         ) : null}
+        </div>
       </div>
       {onRetry || action ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {onRetry ? (
             <Button size="sm" variant="outline" onClick={onRetry}>
+              <RefreshCcw className="size-4" aria-hidden="true" />
               Retry
             </Button>
           ) : null}
@@ -42,6 +54,7 @@ export function APIErrorState({
         </div>
       ) : null}
     </div>
+    </MotionReveal>
   )
 }
 

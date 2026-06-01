@@ -46,7 +46,7 @@ const recoveryTopics = [
     title: "Session expired",
     description: "Sign in again. If the account is suspended or locked, contact hostel administration.",
     icon: AlertCircle,
-    actionHref: "/login",
+    actionHref: "/resident/login",
     actionLabel: "Sign in",
   },
 ]
@@ -88,7 +88,7 @@ export function SupportCenterContent() {
               <Link href={"/resident/support" as Route}>Open resident support</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href={"/login" as Route}>Login first</Link>
+              <Link href={"/resident/login" as Route}>Resident login</Link>
             </Button>
           </CardContent>
         </Card>

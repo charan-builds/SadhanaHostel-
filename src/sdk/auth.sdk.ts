@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api-client"
 import type {
+  ChangePasswordInput,
   LoginInput,
   RequestResidentPhoneOtpInput,
   ResetPasswordInput,
@@ -46,6 +47,14 @@ export const authSdk = {
   resetPassword(input: ResetPasswordInput) {
     return apiClient.post<{ success: boolean }, ResetPasswordInput>(
       "/api/auth/reset-password",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  changePassword(input: ChangePasswordInput) {
+    return apiClient.post<SessionOverview, ChangePasswordInput>(
+      "/api/auth/change-password",
       input,
       { retry: 0 }
     )

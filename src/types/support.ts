@@ -1,4 +1,5 @@
 import type { Tables } from "@/types/database"
+import type { ResidentPasswordResetResult } from "@/types/residents"
 
 export type RecoveryGuidance = {
   title: string
@@ -12,6 +13,15 @@ export type SupportRequestResult = {
   request: Tables<"support_requests">
   reused: boolean
   guidance: RecoveryGuidance
+}
+
+export type ResidentPasswordResetRequestResult = {
+  accepted: true
+}
+
+export type SupportPasswordResetApprovalResult = {
+  request: Tables<"support_requests">
+  reset: ResidentPasswordResetResult
 }
 
 export type OperationalAlert = {

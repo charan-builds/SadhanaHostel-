@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DashboardUserActions } from "@/components/layout/dashboard-user-actions"
 import { Separator } from "@/components/ui/separator"
+import { RouteTransition } from "@/components/shared/route-transition"
 import {
   Sheet,
   SheetClose,
@@ -130,7 +131,7 @@ export function DashboardShell({
         </header>
 
         <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 pb-24 sm:px-6 lg:py-8 lg:pb-8">
-          {children}
+          <RouteTransition className="grid gap-6">{children}</RouteTransition>
         </main>
 
         {area === "resident" ? (
@@ -146,7 +147,7 @@ export function DashboardShell({
                   <Button
                     key={item.href}
                     asChild
-                  variant="ghost"
+                    variant="ghost"
                     className="h-14 min-w-16 flex-col gap-1 px-1 text-[11px]"
                   >
                     <Link href={item.href}>

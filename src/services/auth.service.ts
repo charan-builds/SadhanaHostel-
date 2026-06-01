@@ -27,7 +27,7 @@ import {
   phoneLastTen,
   tryNormalizePhoneNumber,
 } from "@/lib/identity"
-import { logger } from "@/lib/logger"
+import { logAuditEvent, logger } from "@/lib/logger"
 import {
   buildResidentInternalAuthEmail,
   getResidentMetadataAuthLoginEmail,
@@ -49,6 +49,7 @@ import { maskEmail, maskPhone } from "@/lib/security"
 import { getResidentOnboardingRequirements } from "@/services/onboarding/resident-onboarding.policy"
 import {
   adminOnboardingSchema,
+  changePasswordSchema,
   loginSchema,
   residentOnboardingSchema,
   requestResidentPhoneOtpSchema,
@@ -88,6 +89,11 @@ export type SessionOverview = {
   hostelIds: string[]
   onboardingRequired: boolean
   redirectTo: string
+  security: {
+    forcePasswordReset: boolean
+    temporaryPasswordActive: boolean
+    temporaryPasswordExpiresAt: string | null
+  }
 }
 
 type ResidentLoginDiagnosticRow = {
@@ -199,7 +205,7 @@ export class AuthService {
       hostelIds = activeHostels.map((hostel) => hostel.id)
     }
 
-    return {
+    const context = {
       authUser,
       profile,
       roleAssignments,
@@ -208,6 +214,10 @@ export class AuthService {
       organizationId,
       hostelIds,
     }
+
+    await this.assertTemporaryPasswordIsUsable(context)
+
+    return context
   }
 
   async requireRole(allowedRoles: readonly AppRole[]) {
@@ -701,6 +711,54 @@ export class AuthService {
     return { email: values.email }
   }
 
+  async changePassword(input: unknown): Promise<SessionOverview> {
+    const values = changePasswordSchema.parse(input)
+    const context = await this.getCurrentContext()
+    const changedAt = new Date().toISOString()
+    const profileMetadata = markPasswordResetComplete(
+      recordFromUnknown(context.profile.metadata),
+      changedAt
+    )
+    const authMetadata = markPasswordResetComplete(
+      recordFromUnknown(context.authUser.user_metadata),
+      changedAt
+    )
+
+    const { error } = await this.db.auth.updateUser({
+      password: values.password,
+      data: authMetadata,
+    })
+
+    if (error) {
+      throw forbidden(error.message)
+    }
+
+    const profile = await this.usersRepository.updateProfile(context.authUser.id, {
+      metadata: profileMetadata,
+      updated_by: context.authUser.id,
+    })
+
+    logAuditEvent({
+      action: "auth.password_changed",
+      actorUserId: context.authUser.id,
+      organizationId: context.organizationId,
+      targetTable: "users",
+      targetId: context.authUser.id,
+      outcome: "success",
+      details: {
+        forcePasswordResetCleared:
+          recordFromUnknown(context.profile.metadata).force_password_reset === true,
+        temporaryPasswordCleared:
+          recordFromUnknown(context.profile.metadata).temporary_password_active === true,
+      },
+    })
+
+    return this.toSessionOverview({
+      ...context,
+      profile,
+    })
+  }
+
   async getSessionOverview(): Promise<SessionOverview> {
     const {
       data: { user },
@@ -716,7 +774,12 @@ export class AuthService {
         organizationId: null,
         hostelIds: [],
         onboardingRequired: false,
-        redirectTo: AUTH_REDIRECTS.login,
+        redirectTo: AUTH_REDIRECTS.adminLogin,
+        security: {
+          forcePasswordReset: false,
+          temporaryPasswordActive: false,
+          temporaryPasswordExpiresAt: null,
+        },
       }
     }
 
@@ -970,6 +1033,7 @@ export class AuthService {
     const redirectTo = !context.organizationId
       ? AUTH_REDIRECTS.onboarding
       : residentSession.redirectTo ?? this.resolveRedirectPath(context.roles)
+    const passwordSecurity = getPasswordSecurityState(context.profile.metadata)
 
     return {
       authenticated: true,
@@ -992,6 +1056,7 @@ export class AuthService {
       hostelIds: context.hostelIds,
       onboardingRequired,
       redirectTo,
+      security: passwordSecurity,
     }
   }
 
@@ -1251,16 +1316,18 @@ export class AuthService {
       return AUTH_REDIRECTS.residentHome
     }
 
-    return AUTH_REDIRECTS.login
+    return AUTH_REDIRECTS.adminLogin
   }
 
   private requireAllowedPasswordResetRedirect(redirectTo: string) {
     const appUrl = new URL(getServerEnv().NEXT_PUBLIC_APP_URL)
     const redirectUrl = new URL(redirectTo)
     const allowedPaths = new Set([
-      AUTH_REDIRECTS.login,
+      AUTH_REDIRECTS.adminLogin,
+      AUTH_REDIRECTS.residentLogin,
       AUTH_REDIRECTS.unauthorized,
       "/forgot-password",
+      "/reset-password",
     ])
 
     if (
@@ -1289,6 +1356,32 @@ function getAccountStatus(metadata: unknown) {
   const status = recordFromUnknown(metadata).account_status
 
   return typeof status === "string" ? status : "active"
+}
+
+function getPasswordSecurityState(metadata: unknown): SessionOverview["security"] {
+  const record = recordFromUnknown(metadata)
+  const expiresAt = record.temporary_password_expires_at
+
+  return {
+    forcePasswordReset: record.force_password_reset === true,
+    temporaryPasswordActive: record.temporary_password_active === true,
+    temporaryPasswordExpiresAt:
+      typeof expiresAt === "string" && expiresAt.trim() ? expiresAt : null,
+  }
+}
+
+function markPasswordResetComplete(
+  metadata: Record<string, unknown>,
+  changedAt: string
+) {
+  return {
+    ...metadata,
+    force_password_reset: false,
+    temporary_password_active: false,
+    temporary_password_expires_at: null,
+    password_updated_at: changedAt,
+    password_reset_completed_at: changedAt,
+  }
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {

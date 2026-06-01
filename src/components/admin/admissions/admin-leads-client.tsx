@@ -1,12 +1,28 @@
 "use client"
 
 import { useState, type FormEvent, type ReactNode } from "react"
-import { Loader2, Plus, Search } from "lucide-react"
+import {
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  Mail,
+  MoreHorizontal,
+  Phone,
+  Plus,
+  Search,
+  Sparkles,
+  UserRoundPlus,
+  type LucideIcon,
+} from "lucide-react"
+import { motion, type Variants } from "framer-motion"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -23,6 +39,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -32,19 +56,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { useCreateLead, useLeads, useUpdateLead } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatDate, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
+import { cn } from "@/lib/utils"
 import type { LeadRow, LeadStatus } from "@/types/admissions"
 
 const PAGE_SIZE = 12
@@ -59,6 +76,21 @@ const leadStatuses: Array<LeadStatus | "all"> = [
   "cancelled",
   "joined",
 ]
+
+const stagger: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+}
+
+const itemReveal: Variants = {
+  hidden: { opacity: 0, y: 14, filter: "blur(8px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+  },
+}
 
 export function AdminLeadsClient() {
   const { organizationId, session } = useAuth()
@@ -78,6 +110,8 @@ export function AdminLeadsClient() {
   })
   const rows = leads.data?.data ?? []
   const meta = leads.data?.meta
+  const pipeline = buildLeadPipeline(rows)
+  const timeline = buildLeadTimeline(rows)
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
   if (!organizationId) {
@@ -85,12 +119,15 @@ export function AdminLeadsClient() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-6">
+      <motion.div variants={itemReveal} className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-medium text-blue-700">Admissions</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-            Leads
+          <Badge variant="secondary" className="mb-3">
+            <Sparkles className="size-3" aria-hidden="true" />
+            Admissions CRM
+          </Badge>
+          <h1 className="text-gradient text-3xl font-semibold tracking-tight md:text-4xl">
+            Leads Pipeline
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             Track website, WhatsApp, phone, and walk-in inquiries through follow-up and booking.
@@ -106,16 +143,36 @@ export function AdminLeadsClient() {
           <Plus className="size-4" aria-hidden="true" />
           Add lead
         </Button>
-      </div>
+      </motion.div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Inquiry Pipeline</CardTitle>
-          <CardDescription>Admin-owned leads remain tenant-scoped and auditable.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <div className="flex flex-col gap-3 md:flex-row">
-            <div className="relative min-w-0 flex-1">
+      <motion.section variants={stagger} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {pipeline.map((stage) => (
+          <PipelineCard key={stage.status} {...stage} active={status === stage.status} />
+        ))}
+      </motion.section>
+
+      <motion.section variants={itemReveal}>
+        <Card className="overflow-visible">
+          <CardHeader>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <CardTitle>Inquiry Workspace</CardTitle>
+                <CardDescription>
+                  Admin-owned leads remain tenant-scoped and auditable.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="size-2 rounded-full bg-success shadow-[0_0_12px_var(--success)]" />
+                Showing {rows.length} of {meta?.total ?? 0} leads
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <motion.div
+              layout
+              className="grid gap-3 rounded-xl border bg-white/55 p-3 shadow-sm backdrop-blur md:grid-cols-[1fr_auto]"
+            >
+              <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
@@ -127,30 +184,69 @@ export function AdminLeadsClient() {
                 placeholder="Search name, phone, WhatsApp, email"
               />
             </div>
-            <Select
-              value={status}
-              onValueChange={(value) => {
-                setStatus(value as LeadStatus | "all")
-                setPage(1)
-              }}
-            >
-              <SelectTrigger className="w-full md:w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {leadStatuses.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item === "all" ? "All statuses" : humanizeEnum(item)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <Select
+                value={status}
+                onValueChange={(value) => {
+                  setStatus(value as LeadStatus | "all")
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="w-full md:w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {leadStatuses.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item === "all" ? "All statuses" : humanizeEnum(item)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </motion.div>
+
+            <motion.div layout className="flex gap-2 overflow-x-auto pb-1">
+              {leadStatuses.map((item) => {
+                const selected = status === item
+
+                return (
+                  <motion.button
+                    key={item}
+                    type="button"
+                    layout
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setStatus(item)
+                      setPage(1)
+                    }}
+                    className={cn(
+                      "relative shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                      selected
+                        ? "border-primary bg-primary text-primary-foreground shadow-[0_12px_28px_-18px_var(--primary)]"
+                        : "border-border bg-white/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {selected ? (
+                      <motion.span
+                        layoutId="lead-filter-active"
+                        className="absolute inset-0 rounded-full ring-1 ring-primary/45"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <span className="relative">
+                      {item === "all" ? "All statuses" : humanizeEnum(item)}
+                    </span>
+                  </motion.button>
+                )
+              })}
+            </motion.div>
 
           {leads.isLoading ? (
-            <div className="grid gap-3">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="h-14 rounded-lg border bg-muted/50" />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((item) => (
+                <div key={item} className="h-56 overflow-hidden rounded-xl border bg-muted/45">
+                  <div className="h-full animate-pulse bg-linear-to-r from-transparent via-white/50 to-transparent" />
+                </div>
               ))}
             </div>
           ) : leads.isError ? (
@@ -162,54 +258,25 @@ export function AdminLeadsClient() {
           ) : rows.length === 0 ? (
             <EmptyState
               title="No leads found"
-              message="New public website inquiries and manual inquiries will appear here."
+              message={
+                search || status !== "all"
+                  ? "Try clearing filters or widening the search."
+                  : "New public website inquiries and manual inquiries will appear here."
+              }
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Lead</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Joining</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((lead) => (
-                    <TableRow key={lead.id}>
-                      <TableCell>
-                        <div className="font-medium">{lead.full_name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {lead.phone}
-                          {lead.whatsapp_number ? ` · WA ${lead.whatsapp_number}` : ""}
-                        </div>
-                      </TableCell>
-                      <TableCell>{humanizeEnum(lead.resident_type)}</TableCell>
-                      <TableCell>{formatDate(lead.desired_joining_date)}</TableCell>
-                      <TableCell>{humanizeEnum(lead.source)}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={lead.status} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingLead(lead)
-                            setDialogOpen(true)
-                          }}
-                        >
-                          Update
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {rows.map((lead) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onUpdate={() => {
+                    setEditingLead(lead)
+                    setDialogOpen(true)
+                  }}
+                />
+              ))}
+            </motion.div>
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -222,6 +289,7 @@ export function AdminLeadsClient() {
                 disabled={!meta || page <= 1 || leads.isFetching}
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
               >
+                <ChevronLeft className="size-4" aria-hidden="true" />
                 Previous
               </Button>
               <Button
@@ -230,11 +298,17 @@ export function AdminLeadsClient() {
                 onClick={() => setPage((current) => current + 1)}
               >
                 Next
+                <ChevronRight className="size-4" aria-hidden="true" />
               </Button>
             </div>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      </motion.section>
+
+      <motion.section variants={itemReveal}>
+        <LeadTimeline timeline={timeline} />
+      </motion.section>
 
       <LeadDialog
         open={dialogOpen}
@@ -243,8 +317,255 @@ export function AdminLeadsClient() {
         organizationId={organizationId}
         hostelId={hostelId}
       />
+    </motion.div>
+  )
+}
+
+function PipelineCard({
+  label,
+  status,
+  count,
+  icon: Icon,
+  active,
+}: {
+  label: string
+  status: LeadStatus | "all"
+  count: number
+  icon: LucideIcon
+  active: boolean
+}) {
+  return (
+    <motion.article variants={itemReveal}>
+      <div
+        className={cn(
+          "group rounded-xl border bg-card/90 p-4 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted",
+          active && "border-primary/40 shadow-[0_22px_54px_-34px_var(--primary)]"
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <span
+            className={cn(
+              "flex size-10 items-center justify-center rounded-xl ring-1",
+              active
+                ? "bg-primary text-primary-foreground ring-primary/30"
+                : "bg-info-surface text-info-foreground ring-info/20"
+            )}
+          >
+            <Icon className="size-5 transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-110" />
+          </span>
+          <StatusBadge status={status === "all" ? "active" : status} />
+        </div>
+        <p className="mt-4 text-3xl font-semibold tracking-tight">{count}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{label}</p>
+      </div>
+    </motion.article>
+  )
+}
+
+function LeadCard({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
+  return (
+    <motion.article variants={itemReveal} layout>
+      <Card className="group h-full overflow-visible">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/15">
+                  {lead.full_name.slice(0, 1).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-base">{lead.full_name}</CardTitle>
+                  <CardDescription className="truncate">
+                    {humanizeEnum(lead.resident_type)} inquiry
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+            <LeadQuickMenu lead={lead} onUpdate={onUpdate} />
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={lead.status} />
+            <Badge variant="secondary">{humanizeEnum(lead.source)}</Badge>
+          </div>
+
+          <div className="grid gap-2 text-sm">
+            <ContactLine icon={Phone} value={lead.phone} />
+            {lead.whatsapp_number ? <ContactLine icon={Phone} value={`WA ${lead.whatsapp_number}`} /> : null}
+            {lead.email ? <ContactLine icon={Mail} value={lead.email} /> : null}
+            <ContactLine
+              icon={CalendarClock}
+              value={`Joining ${formatDate(lead.desired_joining_date)}`}
+            />
+          </div>
+
+          <div className="rounded-xl border bg-white/55 p-3 opacity-95 transition-all duration-300 group-hover:bg-white/75">
+            <div className="flex items-center gap-2">
+              <Clock3 className="size-4 text-primary" aria-hidden="true" />
+              <p className="text-xs font-medium text-foreground">Lead timeline</p>
+            </div>
+            <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+              <TimelinePoint label="Created" value={formatDate(lead.created_at)} />
+              <TimelinePoint
+                label="Last contacted"
+                value={lead.last_contacted_at ? formatDate(lead.last_contacted_at) : "Not contacted"}
+              />
+              <TimelinePoint
+                label="Next follow-up"
+                value={lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "Not scheduled"}
+              />
+            </div>
+          </div>
+
+          {lead.notes ? (
+            <p className="line-clamp-2 rounded-lg bg-muted/55 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {lead.notes}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+    </motion.article>
+  )
+}
+
+function LeadQuickMenu({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={`Open actions for ${lead.full_name}`}>
+          <MoreHorizontal className="size-4" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuLabel>Quick actions</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onUpdate}>Update lead</DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={`tel:${lead.phone}`}>Call lead</a>
+        </DropdownMenuItem>
+        {lead.whatsapp_number ? (
+          <DropdownMenuItem asChild>
+            <a href={`https://wa.me/${lead.whatsapp_number}`} target="_blank" rel="noreferrer">
+              Open WhatsApp
+            </a>
+          </DropdownMenuItem>
+        ) : null}
+        {lead.email ? (
+          <DropdownMenuItem asChild>
+            <a href={`mailto:${lead.email}`}>Email lead</a>
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function ContactLine({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <span className="truncate">{value}</span>
     </div>
   )
+}
+
+function TimelinePoint({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <span className="truncate font-medium text-foreground">{value}</span>
+    </div>
+  )
+}
+
+function LeadTimeline({
+  timeline,
+}: {
+  timeline: Array<{ id: string; title: string; description: string; date: string; status: LeadStatus }>
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Lead Timeline</CardTitle>
+        <CardDescription>Recent visible lead movement and follow-up state.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {timeline.length === 0 ? (
+          <EmptyState title="No timeline yet" message="Lead activity will appear after inquiries are created." />
+        ) : (
+          <div className="relative grid gap-4 before:absolute before:bottom-2 before:left-4 before:top-2 before:w-px before:bg-border">
+            {timeline.map((event, index) => (
+              <motion.div
+                key={event.id}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05 }}
+                className="relative grid grid-cols-[2rem_1fr] gap-3"
+              >
+                <span className="relative z-10 flex size-8 items-center justify-center rounded-full border bg-background text-primary shadow-sm">
+                  <UserRoundPlus className="size-4" aria-hidden="true" />
+                </span>
+                <div className="rounded-xl border bg-white/55 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{event.title}</p>
+                    <StatusBadge status={event.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{formatDate(event.date)}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function buildLeadPipeline(rows: LeadRow[]) {
+  const count = (statuses: LeadStatus[]) =>
+    rows.filter((lead) => statuses.includes(lead.status)).length
+
+  return [
+    {
+      label: "All visible leads",
+      status: "all" as const,
+      count: rows.length,
+      icon: UserRoundPlus,
+    },
+    {
+      label: "Fresh inquiries",
+      status: "new_inquiry" as const,
+      count: count(["new_inquiry", "called"]),
+      icon: Search,
+    },
+    {
+      label: "High intent",
+      status: "interested" as const,
+      count: count(["interested", "reserved", "confirmed"]),
+      icon: Sparkles,
+    },
+    {
+      label: "Converted",
+      status: "joined" as const,
+      count: count(["joined"]),
+      icon: UserRoundPlus,
+    },
+  ]
+}
+
+function buildLeadTimeline(rows: LeadRow[]) {
+  return rows
+    .map((lead) => ({
+      id: lead.id,
+      title: lead.full_name,
+      description: `${humanizeEnum(lead.source)} inquiry for ${lead.desired_joining_date ? formatDate(lead.desired_joining_date) : "unscheduled joining"}`,
+      date: lead.last_contacted_at ?? lead.next_follow_up_at ?? lead.updated_at ?? lead.created_at,
+      status: lead.status,
+    }))
+    .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+    .slice(0, 6)
 }
 
 function LeadDialog({

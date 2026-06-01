@@ -12,8 +12,8 @@ type ErrorStateProps = {
 
 export function ErrorState({ title, description, retryAction, className }: ErrorStateProps) {
   return (
-    <div className={cn("rounded-xl border bg-background p-8 text-center", className)} role="alert">
-      <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+    <div className={cn("saas-surface rounded-xl p-8 text-center", className)} role="alert">
+      <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive ring-1 ring-destructive/20">
         <CircleAlert className="size-6" aria-hidden="true" />
       </span>
       <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>

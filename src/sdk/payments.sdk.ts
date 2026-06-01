@@ -14,6 +14,7 @@ import type {
   PaymentSettingsHistoryInput,
   PaymentSettingsQueryInput,
   PaymentSettingsTestInput,
+  RecordInPersonPaymentInput,
   RejectPaymentInput,
   ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
@@ -47,6 +48,14 @@ export const paymentsSdk = {
   createUpi(input: CreatePaymentInput) {
     return apiClient.post<Tables<"payments">, CreatePaymentInput>(
       "/api/payments/create",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  recordInPerson(input: RecordInPersonPaymentInput) {
+    return apiClient.post<Tables<"payments">, RecordInPersonPaymentInput>(
+      "/api/payments/record-in-person",
       input,
       { retry: 0 }
     )

@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 export default async function RoomsPage() {
   const cms = await getPublicCmsContent()
 
-  return <RoomsPageContent roomTypes={cms.roomTypes} />
+  return <RoomsPageContent roomTypes={cms.roomTypes} galleryItems={cms.galleryItems} />
 }

@@ -13,7 +13,7 @@ export type WebsiteSettingRow = Tables<"website_settings">
 export type FacilityRow = Tables<"facilities">
 export type GalleryRow = Tables<"gallery">
 export type GalleryWithDocumentRow = GalleryRow & {
-  document?: Pick<Tables<"documents">, "bucket_name" | "storage_path"> | null
+  document?: Pick<Tables<"documents">, "id" | "bucket_name" | "storage_path"> | null
 }
 export type WebsiteCmsStatus = Database["public"]["Enums"]["cms_status_enum"]
 
@@ -21,6 +21,10 @@ type WebsiteScopedFilters = PaginationParams & {
   organizationId: string
   hostelId?: string
   status?: WebsiteCmsStatus
+}
+
+type LoadGalleryDocumentsOptions = {
+  publicGalleryOnly?: boolean
 }
 
 export type ListWebsiteSettingsFilters = WebsiteScopedFilters & {
@@ -168,7 +172,7 @@ export class WebsiteRepository {
 
     let query = this.db
       .from("gallery")
-      .select("*, document:documents(bucket_name, storage_path)", { count: "exact" })
+      .select("*", { count: "exact" })
       .eq("organization_id", filters.organizationId)
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
@@ -192,10 +196,59 @@ export class WebsiteRepository {
       throwRepositoryError(error, "Unable to list gallery items.")
     }
 
+    const galleryRows = data ?? []
+    const documentIds = Array.from(
+      new Set(galleryRows.map((item) => item.document_id).filter(Boolean))
+    )
+    const documentsById = await this.loadGalleryDocuments(documentIds)
+
     return {
-      data: (data ?? []) as GalleryWithDocumentRow[],
+      data: galleryRows.map((item) => ({
+        ...item,
+        document: documentsById.get(item.document_id) ?? null,
+      })),
       meta: createPaginationMeta(count, page, pageSize),
     }
+  }
+
+  async loadGalleryDocuments(
+    documentIds: string[],
+    options: LoadGalleryDocumentsOptions = {}
+  ) {
+    const documentsById = new Map<
+      string,
+      Pick<Tables<"documents">, "id" | "bucket_name" | "storage_path">
+    >()
+
+    if (documentIds.length === 0) {
+      return documentsById
+    }
+
+    let query = this.db
+      .from("documents")
+      .select("id,bucket_name,storage_path")
+      .in("id", documentIds)
+
+    if (options.publicGalleryOnly) {
+      query = query
+        .eq("bucket_name", "gallery-images")
+        .eq("document_type", "gallery_image")
+        .eq("is_public", true)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load gallery documents.")
+    }
+
+    for (const document of data ?? []) {
+      documentsById.set(document.id, document)
+    }
+
+    return documentsById
   }
 
   async createGalleryItem(values: TablesInsert<"gallery">) {

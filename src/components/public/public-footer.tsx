@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
@@ -12,7 +13,7 @@ const quickLinks = publicNavItems.filter((item) =>
 
 const importantLinks = publicNavItems.filter((item) => ["/contact", "/terms"].includes(item.href))
 
-export function PublicFooter() {
+export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
   const year = new Date().getFullYear()
 
   return (
@@ -24,9 +25,7 @@ export function PublicFooter() {
             className="inline-flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             aria-label={`${hostelConfig.name} home`}
           >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              SB
-            </span>
+            <BrandMark logoUrl={logoUrl} />
             <span className="font-semibold text-foreground">{hostelConfig.name}</span>
           </Link>
 

@@ -1,3 +1,6 @@
+import { RefreshCcw } from "lucide-react"
+
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { Button } from "@/components/ui/button"
 
 export function RetryState({
@@ -10,12 +13,18 @@ export function RetryState({
   onRetry: () => void
 }) {
   return (
-    <div className="rounded-lg border p-6 text-center">
-      <h2 className="text-base font-semibold text-foreground">{title}</h2>
-      <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-      <Button className="mt-4" size="sm" onClick={onRetry}>
-        Retry
-      </Button>
-    </div>
+    <MotionReveal>
+      <div className="saas-surface rounded-xl p-6 text-center">
+        <span className="mx-auto flex size-11 items-center justify-center rounded-lg bg-warning-surface text-warning-foreground ring-1 ring-warning/20">
+          <RefreshCcw className="size-5" aria-hidden="true" />
+        </span>
+        <h2 className="mt-4 text-base font-semibold text-foreground">{title}</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">{message}</p>
+        <Button className="mt-5" size="sm" onClick={onRetry}>
+          <RefreshCcw className="size-4" aria-hidden="true" />
+          Retry
+        </Button>
+      </div>
+    </MotionReveal>
   )
 }

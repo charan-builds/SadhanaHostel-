@@ -6,7 +6,7 @@ import { getPublicCmsContent } from "@/lib/cms/public-cms"
 
 export const metadata: Metadata = {
   title: `About ${hostelConfig.name}`,
-  description: `${hostelConfig.name} offers safe, clean accommodation for students and employees in Pulivendula near Loyola Polytechnic College.`,
+  description: `${hostelConfig.name} offers safe, clean accommodation for students and employees in Pulivendula on ${hostelConfig.location.note}.`,
 }
 
 export default async function AboutPage() {

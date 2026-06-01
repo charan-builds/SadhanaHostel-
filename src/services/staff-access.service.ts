@@ -415,21 +415,38 @@ export class StaffAccessService {
   private async createInviteAuthUser(values: {
     email: string
     fullName: string
+    phone?: string
     organizationId: string
     role: StaffRole
   }) {
     const env = getServerEnv()
+    const existing = await this.findAuthUserByEmail(values.email)
+    const userMetadata = {
+      ...(existing ? recordFromJson(existing.user_metadata) : {}),
+      full_name: values.fullName,
+      organization_id: values.organizationId,
+      default_role: values.role,
+      invited_as_staff: true,
+    }
+
+    if (existing) {
+      const { data: updated, error: updateError } =
+        await this.adminDb.auth.admin.updateUserById(existing.id, {
+          ...(values.phone ? { phone: values.phone, phone_confirm: true } : {}),
+          user_metadata: userMetadata,
+        })
+
+      if (updateError || !updated.user) {
+        throw forbidden(updateError?.message ?? "Unable to update staff auth account.")
+      }
+    }
+
     const { data, error } = await this.adminDb.auth.admin.generateLink({
-      type: "invite",
+      type: existing ? "magiclink" : "invite",
       email: values.email,
       options: {
-        redirectTo: `${env.NEXT_PUBLIC_APP_URL}/login`,
-        data: {
-          full_name: values.fullName,
-          organization_id: values.organizationId,
-          default_role: values.role,
-          invited_as_staff: true,
-        },
+        redirectTo: `${env.NEXT_PUBLIC_APP_URL}/admin/login`,
+        data: userMetadata,
       },
     })
 
@@ -439,7 +456,7 @@ export class StaffAccessService {
 
     return {
       user: data.user,
-      inviteLink: data.properties?.action_link ?? `${env.NEXT_PUBLIC_APP_URL}/login`,
+      inviteLink: data.properties?.action_link ?? `${env.NEXT_PUBLIC_APP_URL}/admin/login`,
       temporaryPassword: null,
     }
   }

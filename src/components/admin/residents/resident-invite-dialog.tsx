@@ -5,7 +5,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
-import { APIErrorState, EmptyState } from "@/components/system"
+import { APIErrorState } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -31,11 +31,13 @@ import {
   useCreateResidentInvite,
   useResidentInvites,
   useResendResidentInvite,
+  useResetResidentPassword,
   useRevokeResidentInvite,
 } from "@/hooks"
+import type { ResidentPasswordResetResult } from "@/types/residents"
 import type { Tables } from "@/types/database"
 
-type DeliveryChannel = "copy_link" | "email" | "whatsapp" | "sms_ready"
+type DeliveryChannel = "copy_link" | "email" | "whatsapp" | "sms_ready" | "temp_password"
 
 export function ResidentInviteDialog({
   resident,
@@ -51,6 +53,7 @@ export function ResidentInviteDialog({
   const [deliveryChannel, setDeliveryChannel] = useState<DeliveryChannel>("copy_link")
   const [activationLink, setActivationLink] = useState<string | null>(null)
   const [whatsappShareUrl, setWhatsappShareUrl] = useState<string | null>(null)
+  const [temporaryAccess, setTemporaryAccess] = useState<ResidentPasswordResetResult | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const invites = useResidentInvites({
     organizationId,
@@ -59,8 +62,13 @@ export function ResidentInviteDialog({
   const createInvite = useCreateResidentInvite()
   const resendInvite = useResendResidentInvite()
   const revokeInvite = useRevokeResidentInvite()
+  const resetPassword = useResetResidentPassword()
   const latestPending = invites.data?.find((invite) => invite.status === "pending")
-  const pending = createInvite.isPending || resendInvite.isPending || revokeInvite.isPending
+  const pending =
+    createInvite.isPending ||
+    resendInvite.isPending ||
+    revokeInvite.isPending ||
+    resetPassword.isPending
 
   async function create() {
     if (!resident) {
@@ -78,6 +86,17 @@ export function ResidentInviteDialog({
 
       setActivationLink(result.activationLink)
       setWhatsappShareUrl(result.whatsappShareUrl)
+      setTemporaryAccess(
+        result.delivery.temporaryPassword
+          ? {
+              residentId: result.invite.resident_id,
+              targetUserId: resident.user_id ?? "",
+              temporaryPassword: result.delivery.temporaryPassword,
+              expiresAt: result.invite.expires_at,
+              loginLink: result.loginLink,
+            }
+          : null
+      )
       toast.success("Resident invite created.")
     } catch (error) {
       setActionError(error)
@@ -94,6 +113,7 @@ export function ResidentInviteDialog({
 
       setActivationLink(result.activationLink)
       setWhatsappShareUrl(result.whatsappShareUrl)
+      setTemporaryAccess(null)
       toast.success("New invite link generated.")
     } catch (error) {
       setActionError(error)
@@ -106,9 +126,44 @@ export function ResidentInviteDialog({
       await revokeInvite.mutateAsync({ organizationId, inviteId })
       setActivationLink(null)
       setWhatsappShareUrl(null)
+      setTemporaryAccess(null)
       toast.success("Invite revoked.")
     } catch (error) {
       setActionError(error)
+    }
+  }
+
+  async function resetResidentPassword() {
+    if (!resident) {
+      return
+    }
+
+    try {
+      setActionError(null)
+      const result = await resetPassword.mutateAsync({
+        organizationId,
+        residentId: resident.id,
+      })
+
+      setTemporaryAccess(result)
+      setActivationLink(null)
+      setWhatsappShareUrl(null)
+      toast.success("Temporary password generated.")
+    } catch (error) {
+      setActionError(error)
+    }
+  }
+
+  async function copyTemporaryPassword() {
+    if (!temporaryAccess?.temporaryPassword) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(temporaryAccess.temporaryPassword)
+      toast.success("Temporary password copied.")
+    } catch {
+      toast.error("Copy failed. Select and copy the password manually.")
     }
   }
 
@@ -159,10 +214,34 @@ export function ResidentInviteDialog({
             </div>
 
             {resident.user_id ? (
-              <EmptyState
-                title="Resident account already active"
-                message="This resident is already linked to a portal login."
-              />
+              <div className="grid gap-4">
+                {actionError ? (
+                  <APIErrorState
+                    title="Password reset failed"
+                    error={actionError}
+                    onRetry={() => setActionError(null)}
+                  />
+                ) : null}
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <h3 className="font-semibold">Resident account already active</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Generate a 24-hour temporary password only after verifying the resident identity.
+                    The resident must sign in through the resident portal and set a new password.
+                  </p>
+                  <Button className="mt-4" onClick={() => void resetResidentPassword()} disabled={pending}>
+                    {resetPassword.isPending ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Reset temporary password
+                  </Button>
+                </div>
+                {temporaryAccess ? (
+                  <TemporaryAccessPanel
+                    access={temporaryAccess}
+                    onCopyPassword={copyTemporaryPassword}
+                  />
+                ) : null}
+              </div>
             ) : (
               <>
                 {actionError ? (
@@ -187,6 +266,7 @@ export function ResidentInviteDialog({
                         <SelectItem value="email">Queue email</SelectItem>
                         <SelectItem value="whatsapp">WhatsApp share</SelectItem>
                         <SelectItem value="sms_ready">SMS-ready</SelectItem>
+                        <SelectItem value="temp_password">Phone + temporary password</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -218,6 +298,13 @@ export function ResidentInviteDialog({
                       ) : null}
                     </div>
                   </div>
+                ) : null}
+
+                {temporaryAccess ? (
+                  <TemporaryAccessPanel
+                    access={temporaryAccess}
+                    onCopyPassword={copyTemporaryPassword}
+                  />
                 ) : null}
 
                 {invites.isLoading ? (
@@ -291,5 +378,45 @@ export function ResidentInviteDialog({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TemporaryAccessPanel({
+  access,
+  onCopyPassword,
+}: {
+  access: ResidentPasswordResetResult
+  onCopyPassword: () => Promise<void>
+}) {
+  return (
+    <div className="rounded-lg border bg-blue-50 p-4">
+      <p className="text-sm font-semibold text-blue-950">Temporary resident password</p>
+      <p className="mt-2 text-xs leading-5 text-blue-900">
+        Share this only after confirming the resident identity. It expires{" "}
+        {formatDateTime(access.expiresAt)}.
+      </p>
+      <div className="mt-3 grid gap-2 rounded-md bg-white/70 p-3 text-sm">
+        <p>
+          Login: <span className="break-all font-medium">{access.loginLink}</span>
+        </p>
+        <p>
+          Password:{" "}
+          <span className="break-all font-mono font-semibold">
+            {access.temporaryPassword}
+          </span>
+        </p>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => void onCopyPassword()}>
+          <Copy className="size-3.5" aria-hidden="true" />
+          Copy password
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <a href={access.loginLink} target="_blank" rel="noreferrer">
+            Open login
+          </a>
+        </Button>
+      </div>
+    </div>
   )
 }

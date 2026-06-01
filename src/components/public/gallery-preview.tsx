@@ -1,8 +1,13 @@
+"use client"
+
 import Link from "next/link"
+import Image from "next/image"
+import { motion } from "framer-motion"
 import { Building2, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { fallbackGalleryItems } from "@/constants/public-content"
+import { formatGalleryCategory, hydrateGalleryItems } from "@/lib/public-gallery"
 import type { GalleryItem } from "@/types/frontend"
 
 export function GalleryPreview({
@@ -10,15 +15,15 @@ export function GalleryPreview({
 }: {
   galleryItems?: GalleryItem[]
 }) {
-  const previewItems = galleryItems.slice(0, 4)
+  const previewItems = hydrateGalleryItems(galleryItems).slice(0, 6)
 
   return (
-    <section className="bg-white py-14 sm:py-16">
+    <section className="bg-background py-14 sm:py-20">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
-            <p className="text-sm font-medium text-blue-700">Gallery</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 text-balance sm:text-4xl">
+            <p className="text-sm font-medium text-primary">Gallery</p>
+            <h2 className="text-gradient mt-2 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
               A quick look at the hostel spaces.
             </h2>
           </div>
@@ -27,17 +32,38 @@ export function GalleryPreview({
           </Button>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {previewItems.map((item, index) => (
-            <article
+            <motion.article
               key={item.title}
-              className="group overflow-hidden rounded-2xl border bg-white shadow-sm"
+              variants={{
+                hidden: { opacity: 0, y: 18, filter: "blur(8px)" },
+                show: { opacity: 1, y: 0, filter: "blur(0px)" },
+              }}
+              className={index === 0 ? "group overflow-hidden rounded-2xl border bg-card shadow-soft sm:col-span-2" : "group overflow-hidden rounded-2xl border bg-card shadow-soft"}
             >
-              {item.imageUrl ? (
+              {item.imageUrl?.startsWith("/") ? (
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.alt}
+                    fill
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading={index === 0 ? "eager" : "lazy"}
+                    sizes={index === 0 ? "(min-width: 1024px) 66vw, 100vw" : "(min-width: 1024px) 33vw, 100vw"}
+                  />
+                </div>
+              ) : item.imageUrl ? (
                 <div
                   role="img"
                   aria-label={item.alt}
-                  className="aspect-[4/3] bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]"
+                  className="aspect-[4/3] bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
                   style={{ backgroundImage: `url("${item.imageUrl}")` }}
                 />
               ) : (
@@ -50,12 +76,14 @@ export function GalleryPreview({
                 </div>
               )}
               <div className="p-4">
-                <h3 className="font-semibold text-slate-950">{item.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{item.category}</p>
+                <h3 className="font-semibold text-foreground">{item.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatGalleryCategory(item.category)}
+                </p>
               </div>
-            </article>
+            </motion.article>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   )

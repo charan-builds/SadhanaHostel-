@@ -20,6 +20,7 @@ export function MotionReveal({ children, className, delay = 0 }: MotionRevealPro
       initial={reduceMotion ? false : { opacity: 0, y: 12, filter: "blur(6px)" }}
       animate={reduceMotion ? undefined : { opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
+      style={{ willChange: reduceMotion ? undefined : "opacity, transform, filter" }}
     >
       {children}
     </motion.div>

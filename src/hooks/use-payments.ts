@@ -12,6 +12,7 @@ import type {
   PaymentSettingsHistoryInput,
   PaymentSettingsQueryInput,
   PaymentSettingsTestInput,
+  RecordInPersonPaymentInput,
   RejectPaymentInput,
   ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
@@ -43,6 +44,37 @@ export function useCreateUpiPayment() {
     onSuccess: (payment) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.payments.all({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useRecordInPersonPayment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: RecordInPersonPaymentInput) =>
+      paymentsSdk.recordInPerson(input),
+    onSuccess: (payment) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.all({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.ledger(
+          {
+            organizationId: payment.organization_id,
+          },
+          payment.resident_id
+        ),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.analytics.dashboard({
           organizationId: payment.organization_id,
           hostelId: payment.hostel_id,
         }),

@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react"
 
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { cn } from "@/lib/utils"
 
 type LoadingStateProps = {
@@ -11,8 +12,9 @@ type LoadingStateProps = {
 function SkeletonBlock({ className }: { className?: string }) {
   return (
     <div
+      aria-hidden="true"
       className={cn(
-        "relative overflow-hidden rounded-md bg-muted before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.8s_infinite] before:bg-linear-to-r before:from-transparent before:via-white/55 before:to-transparent",
+        "relative overflow-hidden rounded-md bg-muted/80 before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.8s_infinite] before:bg-linear-to-r before:from-transparent before:via-white/60 before:to-transparent",
         className
       )}
     />
@@ -36,14 +38,14 @@ function CardSkeletons({ rows }: { rows: number }) {
 
 function TableSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="saas-surface rounded-xl">
-      <div className="grid grid-cols-4 gap-4 border-b p-4">
+    <div className="saas-surface overflow-hidden rounded-xl">
+      <div className="grid grid-cols-2 gap-4 border-b bg-white/45 p-4 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <SkeletonBlock key={index} className="h-4" />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="grid grid-cols-4 gap-4 border-b p-4 last:border-b-0">
+        <div key={index} className="grid grid-cols-2 gap-4 border-b p-4 last:border-b-0 md:grid-cols-4">
           {Array.from({ length: 4 }).map((__, cellIndex) => (
             <SkeletonBlock key={cellIndex} className="h-4" />
           ))}
@@ -57,7 +59,14 @@ function DashboardSkeleton() {
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <CardSkeletons rows={4} />
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="saas-surface rounded-xl p-5">
+            <SkeletonBlock className="h-4 w-2/3" />
+            <SkeletonBlock className="mt-4 h-9 w-1/2" />
+            <SkeletonBlock className="mt-5 h-3 w-full" />
+            <SkeletonBlock className="mt-2 h-3 w-4/5" />
+          </div>
+        ))}
       </div>
       <TableSkeleton rows={5} />
     </div>
@@ -65,36 +74,58 @@ function DashboardSkeleton() {
 }
 
 export function LoadingState({ variant = "spinner", rows = 3, className }: LoadingStateProps) {
+  const label =
+    variant === "dashboard"
+      ? "Loading dashboard"
+      : variant === "table"
+        ? "Loading table"
+        : variant === "cards"
+          ? "Loading cards"
+          : "Loading"
+
   if (variant === "cards") {
     return (
-      <div className={className}>
+      <MotionReveal className={className}>
+      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
         <CardSkeletons rows={rows} />
       </div>
+      </MotionReveal>
     )
   }
 
   if (variant === "table") {
     return (
-      <div className={className}>
+      <MotionReveal className={className}>
+      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
         <TableSkeleton rows={rows} />
       </div>
+      </MotionReveal>
     )
   }
 
   if (variant === "dashboard") {
     return (
-      <div className={className}>
+      <MotionReveal className={className}>
+      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
         <DashboardSkeleton />
       </div>
+      </MotionReveal>
     )
   }
 
   return (
-    <div className={cn("saas-surface flex min-h-40 items-center justify-center rounded-xl", className)}>
+    <MotionReveal className={className}>
+    <div
+      className="saas-surface flex min-h-40 items-center justify-center rounded-xl"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         <span>Loading</span>
       </div>
     </div>
+    </MotionReveal>
   )
 }

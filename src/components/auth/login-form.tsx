@@ -145,12 +145,21 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
           <Label htmlFor="password">
             {expectedArea === "resident" ? "Password or temporary password" : "Password"}
           </Label>
-          <Link
-            href={"/forgot-password" as Route}
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            Forgot password?
-          </Link>
+          {expectedArea === "resident" ? (
+            <Link
+              href={"/resident/reset-password" as Route}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          ) : (
+            <Link
+              href={"/forgot-password" as Route}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          )}
         </div>
         <div className="relative">
           <Input

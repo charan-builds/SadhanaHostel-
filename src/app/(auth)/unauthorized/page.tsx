@@ -24,7 +24,10 @@ export default function UnauthorizedPage() {
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <Button asChild>
-            <Link href={"/login" as Route}>Sign in again</Link>
+            <Link href={"/admin/login" as Route}>Admin login</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={"/resident/login" as Route}>Resident login</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/">Go to website</Link>

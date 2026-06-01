@@ -532,8 +532,8 @@ describe("ResidentInviteService activation bootstrap", () => {
       await expect(
         harness.service.activateInvite({
           token,
-          password: "__TEST__",
-confirmPassword: "__TEST__",
+          password: "StrongPassword123!",
+          confirmPassword: "StrongPassword123!",
         })
       ).rejects.toMatchObject({
         code: "CONFLICT",

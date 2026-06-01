@@ -7,7 +7,9 @@ import {
   invalidateCacheByTag,
 } from "@/lib/cache"
 import { logAuditEvent } from "@/lib/logger"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import { WebsiteRepository } from "@/repositories/website.repository"
@@ -28,10 +30,22 @@ const GALLERY_BUCKET = "gallery-images"
 const MAX_GALLERY_IMAGE_BYTES = 6 * 1024 * 1024
 const GALLERY_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
+function versionedPublicUrl(url: string, version: string | null | undefined) {
+  if (!version) {
+    return url
+  }
+
+  const separator = url.includes("?") ? "&" : "?"
+
+  return `${url}${separator}v=${encodeURIComponent(version)}`
+}
+
 export type WebsiteGalleryItemView =
   Awaited<ReturnType<WebsiteRepository["listGallery"]>>["data"][number] & {
     imageUrl: string | null
   }
+type GalleryRepositoryItem =
+  Awaited<ReturnType<WebsiteRepository["listGallery"]>>["data"][number]
 
 export class WebsiteService {
   private readonly authService: AuthService
@@ -52,21 +66,27 @@ export class WebsiteService {
 
   async listSettings(input: unknown) {
     const values = websiteSettingsListSchema.parse(input)
+    const tenant = await this.resolvePublicWebsiteTenant(
+      values.organizationId,
+      values.hostelId
+    )
 
     return getOrSetCache(
       buildTenantCacheKey({
-        organizationId: values.organizationId,
-        hostelId: values.hostelId,
+        organizationId: tenant.organizationId,
+        hostelId: tenant.hostelId,
         scope: "cms",
         identifier: `settings:${values.sectionKey ?? "all"}:${values.status ?? "published"}`,
       }),
       {
         ttlMs: 60_000,
-        tags: [`tenant:${values.organizationId}:cms`],
+        tags: [`tenant:${tenant.organizationId}:cms`],
       },
       () =>
         this.websiteRepository.listSettings({
           ...values,
+          organizationId: tenant.organizationId,
+          hostelId: tenant.hostelId,
           status: values.status ?? "published",
         })
     )
@@ -109,21 +129,27 @@ export class WebsiteService {
 
   async listFacilities(input: unknown) {
     const values = facilitiesListSchema.parse(input)
+    const tenant = await this.resolvePublicWebsiteTenant(
+      values.organizationId,
+      values.hostelId
+    )
 
     return getOrSetCache(
       buildTenantCacheKey({
-        organizationId: values.organizationId,
-        hostelId: values.hostelId,
+        organizationId: tenant.organizationId,
+        hostelId: tenant.hostelId,
         scope: "cms",
         identifier: `facilities:${values.highlightedOnly ? "highlighted" : "all"}:${values.status ?? "published"}`,
       }),
       {
         ttlMs: 60_000,
-        tags: [`tenant:${values.organizationId}:cms`],
+        tags: [`tenant:${tenant.organizationId}:cms`],
       },
       () =>
         this.websiteRepository.listFacilities({
           ...values,
+          organizationId: tenant.organizationId,
+          hostelId: tenant.hostelId,
           status: values.status ?? "published",
         })
     )
@@ -162,23 +188,38 @@ export class WebsiteService {
 
   async listGallery(input: unknown) {
     const values = galleryListSchema.parse(input)
+    const tenant = await this.resolvePublicWebsiteTenant(
+      values.organizationId,
+      values.hostelId
+    )
 
     const gallery = await this.websiteRepository.listGallery({
       ...values,
+      organizationId: tenant.organizationId,
+      hostelId: tenant.hostelId,
       status: values.status ?? "published",
     })
+    const publicDocuments = await this.loadMissingPublicGalleryDocuments(gallery.data)
 
     return {
       ...gallery,
-      data: gallery.data.map((item) => ({
-        ...item,
-        imageUrl: item.document
-          ? this.uploadsRepository.getPublicUrl(
-              item.document.bucket_name,
-              item.document.storage_path
-            )
-          : null,
-      })),
+      data: gallery.data.map((item) => {
+        const document = item.document ?? publicDocuments.get(item.document_id) ?? null
+
+        return {
+          ...item,
+          document,
+          imageUrl: document
+            ? versionedPublicUrl(
+                this.uploadsRepository.getPublicUrl(
+                  document.bucket_name,
+                  document.storage_path
+                ),
+                item.updated_at ?? item.created_at
+              )
+            : null,
+        }
+      }),
     }
   }
 
@@ -289,7 +330,10 @@ export class WebsiteService {
       return {
         gallery: {
           ...gallery,
-          imageUrl: this.uploadsRepository.getPublicUrl(GALLERY_BUCKET, storagePath),
+          imageUrl: versionedPublicUrl(
+            this.uploadsRepository.getPublicUrl(GALLERY_BUCKET, storagePath),
+            gallery.updated_at ?? gallery.created_at
+          ),
         },
         document,
       }
@@ -310,6 +354,54 @@ export class WebsiteService {
 
     if (!GALLERY_IMAGE_MIME_TYPES.has(file.type)) {
       throw badRequest("Gallery image must be a JPG, PNG, or WebP file.")
+    }
+  }
+
+  private async loadMissingPublicGalleryDocuments(items: GalleryRepositoryItem[]) {
+    const documentIds = Array.from(
+      new Set(
+        items
+          .filter((item) => !item.document && item.status === "published")
+          .map((item) => item.document_id)
+      )
+    )
+
+    if (documentIds.length === 0) {
+      return new Map()
+    }
+
+    try {
+      const adminRepository = new WebsiteRepository(createSupabaseAdminClient())
+
+      return adminRepository.loadGalleryDocuments(documentIds, {
+        publicGalleryOnly: true,
+      })
+    } catch {
+      return new Map()
+    }
+  }
+
+  private async resolvePublicWebsiteTenant(organizationId?: string, hostelId?: string) {
+    const resolvedOrganizationId =
+      organizationId || process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
+    const resolvedHostelId = hostelId || process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID
+
+    if (resolvedOrganizationId) {
+      return {
+        organizationId: resolvedOrganizationId,
+        hostelId: resolvedHostelId || undefined,
+      }
+    }
+
+    const defaultTenant = await new AdmissionsRepository(this.db).getDefaultTenant()
+
+    if (!defaultTenant?.organizationId) {
+      throw badRequest("Website tenant setup is required before public content can be loaded.")
+    }
+
+    return {
+      organizationId: defaultTenant.organizationId,
+      hostelId: defaultTenant.hostelId || undefined,
     }
   }
 

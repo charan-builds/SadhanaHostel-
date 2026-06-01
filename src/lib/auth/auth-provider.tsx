@@ -61,6 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return session
   }, [queryClient])
 
+  const refreshSessionSafely = useCallback(() => {
+    void refreshSession().catch(() => {
+      queryClient.setQueryData(queryKeys.auth.session, anonymousSessionOverview())
+    })
+  }, [queryClient, refreshSession])
+
   const clearTenantQueries = useCallback(() => {
     queryClient.removeQueries({
       predicate: (query) => query.queryKey[0] === "tenant",
@@ -75,9 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearTenantQueries()
         }
 
-        void refreshSession()
+        refreshSessionSafely()
       }),
-    [clearTenantQueries, queryClient, refreshSession]
+    [clearTenantQueries, queryClient, refreshSessionSafely]
   )
 
   useEffect(
@@ -85,9 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscribeToApiAuthFailures(() => {
         queryClient.setQueryData(queryKeys.auth.session, anonymousSessionOverview())
         clearTenantQueries()
-        void refreshSession()
+        refreshSessionSafely()
       }),
-    [clearTenantQueries, queryClient, refreshSession]
+    [clearTenantQueries, queryClient, refreshSessionSafely]
   )
 
   const value = useMemo<AuthContextValue>(

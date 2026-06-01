@@ -5,7 +5,7 @@ import { hostelConfig } from "@/constants/hostel"
 
 export const metadata: Metadata = {
   title: `Contact ${hostelConfig.name}`,
-  description: `Contact ${hostelConfig.name} in Pulivendula by phone or WhatsApp and get directions near Loyola Polytechnic College.`,
+  description: `Contact ${hostelConfig.name} in Pulivendula by phone or WhatsApp and get directions to ${hostelConfig.location.note}.`,
 }
 
 export default function ContactPage() {

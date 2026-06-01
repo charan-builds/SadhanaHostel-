@@ -46,6 +46,37 @@ describe("payment API routes", () => {
     })
   })
 
+  it("records in-person payments through PaymentsService", async () => {
+    const payment = paymentFixture({ method: "cash", status: "verified" })
+    const recordInPersonPayment = vi.fn().mockResolvedValue(payment)
+
+    vi.doMock("@/services/payments.service", () => ({
+      PaymentsService: {
+        create: vi.fn().mockResolvedValue({ recordInPersonPayment }),
+      },
+    }))
+
+    const { POST } = await import("@/app/api/payments/record-in-person/route")
+    const response = await POST(
+      createJsonRequest("/api/payments/record-in-person", {
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        amount: 3500,
+        method: "cash",
+      })
+    )
+    const body = await readApiResponse<typeof payment>(response)
+
+    expect(response.status).toBe(201)
+    expect(body.success).toBe(true)
+    expect(recordInPersonPayment).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      amount: 3500,
+      method: "cash",
+    })
+  })
+
   it("routes payment verification through PaymentsService", async () => {
     const payment = paymentFixture({ status: "verified" })
     const verifyPayment = vi.fn().mockResolvedValue(payment)

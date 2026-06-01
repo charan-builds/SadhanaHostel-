@@ -4,10 +4,12 @@ import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
 import { areCronJobsEnabled, areOperationalRepairsEnabled } from "@/config/launch"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logError } from "@/lib/logger"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
 import { AdmissionsService } from "@/services/admissions.service"
 import { NotificationService } from "@/services/notifications"
+import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
 import { PaymentsRepository } from "@/repositories/payments.repository"
@@ -21,10 +23,14 @@ import type { Json } from "@/types/database"
 import type {
   OperationalAlert,
   RecoveryGuidance,
+  ResidentPasswordResetRequestResult,
+  SupportPasswordResetApprovalResult,
   SupportRequestResult,
 } from "@/types/support"
 import {
   operationalAlertsQuerySchema,
+  residentPasswordResetRequestSchema,
+  supportPasswordResetApprovalSchema,
   supportRequestCreateSchema,
   supportRequestListSchema,
   supportRequestUpdateSchema,
@@ -32,6 +38,7 @@ import {
 } from "@/validations/support.validation"
 
 import { assertFound, AuthService, type AuthContext } from "./auth.service"
+import { ResidentsService } from "./residents.service"
 import { scanConsistency } from "./operations/consistency.service"
 
 export class SupportService {
@@ -59,6 +66,10 @@ export class SupportService {
     return new SupportService(db)
   }
 
+  static createPublic() {
+    return new SupportService(createSupabaseAdminClient())
+  }
+
   async listRequests(input: unknown) {
     const values = supportRequestListSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -75,6 +86,7 @@ export class SupportService {
       status: values.status,
       category: values.category,
       priority: values.priority,
+      workflow: values.workflow,
       search: values.search,
       page: values.page,
       pageSize: values.pageSize,
@@ -127,12 +139,127 @@ export class SupportService {
     })
 
     await this.audit("support.request.created", context, request, null, request)
-    await this.notifyOperators(request, context)
+    await this.notifyOperators(request, context.authUser.id)
 
     return {
       request,
       reused: false,
       guidance: buildRecoveryGuidance(values.category),
+    }
+  }
+
+  async createResidentPasswordResetRequest(
+    input: unknown
+  ): Promise<ResidentPasswordResetRequestResult> {
+    const values = residentPasswordResetRequestSchema.parse(input)
+    const tenant = await this.resolvePublicSupportTenant(values.organizationId, values.hostelId)
+    const resident = await this.residentsRepository.findPasswordResetCandidate({
+      organizationId: tenant.organizationId,
+      hostelId: tenant.hostelId,
+      phone: values.phone,
+      admissionNumber: values.admissionNumber || null,
+      email: values.email || null,
+    })
+
+    if (!resident) {
+      return { accepted: true }
+    }
+
+    const hasPortalAccount = Boolean(resident.user_id)
+    const idempotencyKey = `resident-password-reset:${resident.id}`
+    const existing = await this.supportRepository.findOpenByIdempotencyKey({
+      organizationId: resident.organization_id,
+      residentId: resident.id,
+      idempotencyKey,
+    })
+
+    if (existing) {
+      return { accepted: true }
+    }
+
+    const request = await this.supportRepository.create({
+      organization_id: resident.organization_id,
+      hostel_id: resident.hostel_id,
+      resident_id: resident.id,
+      created_by_user_id: null,
+      category: "account",
+      priority: "high",
+      subject: "Resident password reset request",
+      description: [
+        `${resident.full_name} requested a resident portal password reset from the login page.`,
+        hasPortalAccount
+          ? "Verify the resident identity before issuing a temporary password."
+          : "Resident record matched, but no active portal account is linked yet. Create or resend the resident invite before issuing portal access.",
+        values.message ? `Resident note: ${values.message}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      status: "open",
+      metadata: {
+        workflow: "resident_password_reset",
+        idempotencyKey,
+        requestedFrom: "resident_login",
+        portalAccountActive: hasPortalAccount,
+        submittedPhoneLast4: maskLast4(values.phone),
+        submittedAdmissionNumber: values.admissionNumber || null,
+        submittedEmail: values.email || null,
+      } satisfies Json,
+      created_by: null,
+      updated_by: null,
+    })
+
+    await this.auditWithActor("support.password_reset.requested", null, request, null, request)
+    await this.notifyOperators(request, null)
+
+    return { accepted: true }
+  }
+
+  async approveResidentPasswordResetRequest(
+    input: unknown
+  ): Promise<SupportPasswordResetApprovalResult> {
+    const values = supportPasswordResetApprovalSchema.parse(input)
+    const context = await this.authService.requirePermission("residents.manage")
+    const previous = assertFound(
+      await this.supportRepository.getById(values.requestId, values.organizationId),
+      "Password reset request not found."
+    )
+
+    this.authService.requireHostelAccess(context, previous.organization_id, previous.hostel_id)
+
+    if (!previous.resident_id || !isResidentPasswordResetRequest(previous)) {
+      throw badRequest("This support request is not a resident password reset request.")
+    }
+
+    const reset = await new ResidentsService(this.db).resetResidentTemporaryPassword({
+      organizationId: previous.organization_id,
+      residentId: previous.resident_id,
+    })
+    const approvedAt = new Date().toISOString()
+    const request = await this.supportRepository.update(
+      previous.id,
+      previous.organization_id,
+      {
+        status: "waiting_on_resident",
+        resolution_notes:
+          `Temporary password generated. Share it only after identity verification. ` +
+          `It expires ${reset.expiresAt}.`,
+        metadata: {
+          ...recordFromUnknown(previous.metadata),
+          passwordReset: {
+            approvedAt,
+            approvedBy: context.authUser.id,
+            expiresAt: reset.expiresAt,
+          },
+        } satisfies Json,
+        updated_by: context.authUser.id,
+      }
+    )
+
+    await this.audit("support.password_reset.approved", context, request, previous, request)
+
+    return {
+      request,
+      reset,
     }
   }
 
@@ -195,6 +322,7 @@ export class SupportService {
 
     const alerts: OperationalAlert[] = []
     const [
+      passwordResetCount,
       urgentSupportCount,
       pendingSupportCount,
       onboardingPending,
@@ -206,6 +334,11 @@ export class SupportService {
       consistency,
       failedJobCount,
     ] = await Promise.all([
+      this.supportRepository.countPasswordResetRequests({
+        organizationId,
+        hostelId,
+        status: ["open", "in_progress"],
+      }),
       this.supportRepository.count({
         organizationId,
         hostelId,
@@ -240,6 +373,19 @@ export class SupportService {
         },
       }),
     ])
+
+    if (passwordResetCount > 0) {
+      alerts.push({
+        id: "support.password_reset",
+        severity: "high",
+        title: "Resident password reset requests",
+        description:
+          "Existing residents are waiting for identity verification and a temporary password.",
+        count: passwordResetCount,
+        href: "/admin/password-resets",
+        ctaLabel: "Issue passwords",
+      })
+    }
 
     if (urgentSupportCount > 0) {
       alerts.push({
@@ -452,6 +598,30 @@ export class SupportService {
     }
   }
 
+  private async resolvePublicSupportTenant(organizationId?: string, hostelId?: string) {
+    const resolvedOrganizationId =
+      organizationId || process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
+    const resolvedHostelId = hostelId || process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID
+
+    if (resolvedOrganizationId && resolvedHostelId) {
+      return {
+        organizationId: resolvedOrganizationId,
+        hostelId: resolvedHostelId,
+      }
+    }
+
+    const defaultTenant = await new AdmissionsRepository(this.db).getDefaultTenant()
+
+    if (!defaultTenant?.organizationId || !defaultTenant.hostelId) {
+      throw badRequest("Hostel setup is required before password reset requests can be created.")
+    }
+
+    return {
+      organizationId: defaultTenant.organizationId,
+      hostelId: defaultTenant.hostelId,
+    }
+  }
+
   private async countOnboardingQueue(
     organizationId: string,
     hostelId: string | undefined,
@@ -518,11 +688,21 @@ export class SupportService {
     oldValues: SupportRequestRow | null,
     newValues: SupportRequestRow | null
   ) {
+    return this.auditWithActor(action, context.authUser.id, request, oldValues, newValues)
+  }
+
+  private async auditWithActor(
+    action: string,
+    actorUserId: string | null,
+    request: SupportRequestRow,
+    oldValues: SupportRequestRow | null,
+    newValues: SupportRequestRow | null
+  ) {
     try {
       await this.supportRepository.createAuditLog({
         organization_id: request.organization_id,
         hostel_id: request.hostel_id,
-        actor_user_id: context.authUser.id,
+        actor_user_id: actorUserId,
         table_name: "support_requests",
         record_id: request.id,
         action,
@@ -535,8 +715,8 @@ export class SupportService {
           status: request.status,
           recovery: true,
         },
-        created_by: context.authUser.id,
-        updated_by: context.authUser.id,
+        created_by: actorUserId,
+        updated_by: actorUserId,
       })
     } catch (error) {
       logError(error, {
@@ -547,14 +727,14 @@ export class SupportService {
     }
   }
 
-  private async notifyOperators(request: SupportRequestRow, context: AuthContext) {
+  private async notifyOperators(request: SupportRequestRow, actorUserId: string | null) {
     try {
       await this.notificationService.queue({
         organizationId: request.organization_id,
         hostelId: request.hostel_id,
         channel: "in_app",
         recipient: {},
-        actorUserId: context.authUser.id,
+        actorUserId,
         message: {
           title: "New resident support request",
           body: `${request.subject} (${request.priority})`,
@@ -690,4 +870,22 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
         ],
       }
   }
+}
+
+function isResidentPasswordResetRequest(request: SupportRequestRow) {
+  return recordFromUnknown(request.metadata).workflow === "resident_password_reset"
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
+}
+
+function maskLast4(value: string) {
+  const digits = value.replace(/\D/g, "")
+
+  return digits.slice(-4) || null
 }

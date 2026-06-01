@@ -96,14 +96,15 @@ export class ConsistencyService {
       })
       const repairableCount = report.findings.filter(
         (finding) =>
-          finding.repairAction !== "review_manually" &&
-          (values.action === "run_consistency_scan" || finding.repairAction === values.action)
+          values.action === "run_consistency_scan" ||
+          finding.repairAction === values.action ||
+          finding.details?.some((detail) => detail.recommendedRepairAction === values.action)
       ).length
 
       return {
         repaired: 0,
         dryRun: true,
-        message: `Dry run completed. ${repairableCount} matching repairable finding(s) would be reviewed. No records were changed.`,
+        message: `Dry run completed. ${repairableCount} matching finding(s) would be reviewed by the safe repair. No records were changed.`,
         report,
       }
     }

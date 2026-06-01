@@ -135,7 +135,9 @@ export function rolesForPermission(permission: PermissionKey) {
 }
 
 export const AUTH_REDIRECTS = {
-  login: "/login",
+  login: "/admin/login",
+  adminLogin: "/admin/login",
+  residentLogin: "/resident/login",
   onboarding: "/onboarding",
   unauthorized: "/unauthorized",
   adminSetup: "/admin/setup",
@@ -157,13 +159,13 @@ export const PROTECTED_ROUTE_POLICIES = {
   admin: {
     area: "admin",
     allowedRoles: ADMIN_PORTAL_ROLES,
-    loginPath: AUTH_REDIRECTS.login,
+    loginPath: AUTH_REDIRECTS.adminLogin,
     unauthorizedPath: AUTH_REDIRECTS.unauthorized,
   },
   resident: {
     area: "resident",
     allowedRoles: RESIDENT_ROLES,
-    loginPath: AUTH_REDIRECTS.login,
+    loginPath: AUTH_REDIRECTS.residentLogin,
     unauthorizedPath: AUTH_REDIRECTS.unauthorized,
   },
 } as const satisfies Record<ProtectedRouteArea, ProtectedRoutePolicy>

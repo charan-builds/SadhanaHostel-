@@ -9,12 +9,13 @@ export const HOSTEL_CONTACT = {
 } as const
 
 export const HOSTEL_LOCATION = {
-  address:
-    "Palem Street, Royals Road, Near New Gangireddy Hospital, Pulivendula, Andhra Pradesh, India",
-  note: "Near Loyola Polytechnic College, Pulivendula",
+  address: "C67M+7W2, Royals Rd, Bakarapuram, Pulivendula, Andhra Pradesh 516390, India",
+  note: "Royals Road, Bakarapuram, Pulivendula",
   city: "Pulivendula",
   state: "Andhra Pradesh",
   country: "India",
+  mapQuery: "Sadhana Boys hostel, C67M+7W2, Royals Rd, Bakarapuram, Andhra Pradesh 516390, India",
+  googleMapsCid: "5249046540388198698",
 } as const
 
 export const HOSTEL_FEES = {
@@ -35,9 +36,9 @@ export const whatsappHref = `https://wa.me/91${HOSTEL_CONTACT.whatsapp}?text=${e
   HOSTEL_CONTACT.defaultWhatsAppMessage,
 )}`
 
-export const mapSearchHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-  `${HOSTEL_NAME}, ${HOSTEL_LOCATION.address}`,
-)}`
+export const mapSearchHref = `https://www.google.com/maps?cid=${HOSTEL_LOCATION.googleMapsCid}`
+
+export const mapEmbedHref = `https://www.google.com/maps?cid=${HOSTEL_LOCATION.googleMapsCid}&output=embed`
 
 export const hostelConfig = {
   name: HOSTEL_NAME,
@@ -50,5 +51,6 @@ export const hostelConfig = {
     callHref,
     whatsappHref,
     mapSearchHref,
+    mapEmbedHref,
   },
 } as const

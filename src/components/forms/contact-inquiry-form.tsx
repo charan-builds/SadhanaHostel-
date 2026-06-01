@@ -64,10 +64,10 @@ export function ContactInquiryForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border bg-white p-6 shadow-sm">
+    <form onSubmit={handleSubmit} className="rounded-2xl border bg-card/95 p-6 shadow-lifted backdrop-blur-xl">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-950">Send an inquiry</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <h2 className="text-2xl font-semibold text-foreground">Send an inquiry</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Submit your details so the hostel can check vacancy, follow up, and reserve a room if
           suitable.
         </p>
@@ -174,7 +174,7 @@ export function ContactInquiryForm() {
       </div>
 
       {submitted ? (
-        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        <div className="mt-4 rounded-lg border border-success/20 bg-success-surface px-3 py-2 text-sm text-success-foreground">
           Inquiry saved. For urgent booking checks, you can also WhatsApp the hostel directly.
         </div>
       ) : null}
@@ -185,12 +185,12 @@ export function ContactInquiryForm() {
         ) : (
           <Send className="size-4" aria-hidden="true" />
         )}
-        Submit Inquiry
+        Submit inquiry
       </Button>
 
       <Button asChild variant="outline" className="mt-3 w-full">
         <a href={hostelConfig.links.whatsappHref} target="_blank" rel="noreferrer">
-          WhatsApp instead
+        WhatsApp instead
         </a>
       </Button>
     </form>
@@ -206,7 +206,7 @@ function VacancyNotice({
 }) {
   if (isLoading) {
     return (
-      <p className="mt-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+      <p className="mt-4 rounded-lg border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
         Checking live vacancy...
       </p>
     )
@@ -214,14 +214,14 @@ function VacancyNotice({
 
   if (typeof availableVacancies !== "number") {
     return (
-      <p className="mt-4 rounded-lg border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+      <p className="mt-4 rounded-lg border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
         Vacancy will be confirmed after the hostel team reviews your inquiry.
       </p>
     )
   }
 
   return (
-    <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+    <p className="mt-4 rounded-lg border border-success/20 bg-success-surface px-3 py-2 text-sm font-medium text-success-foreground">
       {availableVacancies > 0
         ? `Student Vacancy: ${availableVacancies}`
         : "Currently full. Join the waitlist."}

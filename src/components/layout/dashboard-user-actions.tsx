@@ -21,7 +21,7 @@ export function DashboardUserActions() {
     try {
       await authSdk.logout()
       await refreshSession()
-      router.replace("/login" as Route)
+      router.replace("/resident/login" as Route)
     } catch {
       toast.error("Logout failed. Please try again.")
     } finally {

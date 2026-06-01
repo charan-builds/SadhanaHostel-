@@ -1,11 +1,15 @@
 import { apiClient } from "@/lib/api-client"
 import type {
   OperationalAlert,
+  ResidentPasswordResetRequestResult,
+  SupportPasswordResetApprovalResult,
   SupportRequestResult,
 } from "@/types/support"
 import type { Tables } from "@/types/database"
 import type {
   OperationalAlertsQueryInput,
+  ResidentPasswordResetRequestInput,
+  SupportPasswordResetApprovalInput,
   SupportRequestCreateInput,
   SupportRequestListInput,
   SupportRequestUpdateInput,
@@ -29,6 +33,13 @@ export const supportSdk = {
     )
   },
 
+  createResidentPasswordResetRequest(input: ResidentPasswordResetRequestInput) {
+    return apiClient.post<
+      ResidentPasswordResetRequestResult,
+      ResidentPasswordResetRequestInput
+    >("/api/support/resident-password-reset", input, { retry: 0 })
+  },
+
   updateRequest(input: SupportRequestUpdateInput) {
     const { requestId, ...body } = input
 
@@ -37,6 +48,15 @@ export const supportSdk = {
       body,
       { retry: 0 }
     )
+  },
+
+  approveResidentPasswordResetRequest(input: SupportPasswordResetApprovalInput) {
+    const { requestId, ...body } = input
+
+    return apiClient.post<
+      SupportPasswordResetApprovalResult,
+      Omit<SupportPasswordResetApprovalInput, "requestId">
+    >(`/api/support/requests/${requestId}/resident-password-reset`, body, { retry: 0 })
   },
 
   operationalAlerts(params: OperationalAlertsQueryInput) {

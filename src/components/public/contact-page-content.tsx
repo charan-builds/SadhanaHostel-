@@ -2,7 +2,7 @@ import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { Button } from "@/components/ui/button"
-import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
+import { callHref, hostelConfig, mapEmbedHref, mapSearchHref, whatsappHref } from "@/constants/hostel"
 
 export function ContactPageContent() {
   return (
@@ -71,17 +71,28 @@ export function ContactPageContent() {
               </div>
             </article>
 
-            <article className="min-h-72 rounded-2xl border bg-white p-4 shadow-sm">
-              <div className="flex h-full min-h-64 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#dbeafe_0%,#f8fafc_55%,#e2e8f0_100%)] text-center">
-                <div className="max-w-sm px-6">
-                  <MapPin className="mx-auto size-10 text-blue-700" aria-hidden="true" />
-                  <h2 className="mt-4 text-lg font-semibold text-slate-950">
-                    Open location map
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Use the Navigate button to open the hostel location.
-                  </p>
+            <article className="overflow-hidden rounded-2xl border bg-white p-3 shadow-sm">
+              <div className="relative min-h-80 overflow-hidden rounded-xl bg-slate-100">
+                <iframe
+                  title={`${hostelConfig.name} exact location map`}
+                  src={mapEmbedHref}
+                  className="absolute inset-0 h-full w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+              </div>
+              <div className="mt-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Exact Google Maps listing</p>
+                  <p className="mt-1 text-sm text-slate-600">{hostelConfig.location.note}</p>
                 </div>
+                <Button asChild variant="outline" size="sm">
+                  <a href={mapSearchHref} target="_blank" rel="noreferrer">
+                    <Navigation className="size-4" aria-hidden="true" />
+                    Navigate
+                  </a>
+                </Button>
               </div>
             </article>
           </div>

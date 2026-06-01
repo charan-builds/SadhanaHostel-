@@ -1,13 +1,30 @@
 "use client"
 
 import { useState, type FormEvent, type ReactNode } from "react"
-import { CalendarCheck, Loader2, MessageCircle, Plus, Search } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarCheck,
+  CheckCircle2,
+  Clock3,
+  CreditCard,
+  Loader2,
+  MessageCircle,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Sparkles,
+  UserRoundCheck,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react"
+import { motion, type Variants } from "framer-motion"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { LoadingState } from "@/components/shared/loading-state"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,6 +41,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -33,14 +58,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import {
   useCancelReservation,
@@ -56,6 +73,7 @@ import {
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
+import { cn } from "@/lib/utils"
 import type { LeadRow, ReservationRow, ReservationStatus } from "@/types/admissions"
 import type { Tables } from "@/types/database"
 
@@ -69,6 +87,28 @@ const reservationStatuses: Array<ReservationStatus | "all"> = [
   "cancelled",
   "converted_to_resident",
 ]
+
+const kanbanStatuses: ReservationStatus[] = [
+  "pending",
+  "reserved",
+  "confirmed",
+  "converted_to_resident",
+]
+
+const reveal: Variants = {
+  hidden: { opacity: 0, y: 14, filter: "blur(8px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+  },
+}
+
+const stagger: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+}
 
 export function AdminReservationsClient() {
   const { organizationId, session, isLoading } = useAuth()
@@ -104,6 +144,8 @@ export function AdminReservationsClient() {
   const rows = reservations.data?.data ?? []
   const meta = reservations.data?.meta
   const leadsById = new Map((leads.data?.data ?? []).map((lead) => [lead.id, lead]))
+  const workflow = buildReservationWorkflow(rows)
+  const timeline = buildReservationTimeline(rows, leadsById)
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
   if (isLoading) {
@@ -120,11 +162,14 @@ export function AdminReservationsClient() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-6">
+      <motion.div variants={reveal} className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-medium text-blue-700">Admissions</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+          <Badge variant="secondary" className="mb-3">
+            <Sparkles className="size-3" aria-hidden="true" />
+            Admission workflow
+          </Badge>
+          <h1 className="text-gradient text-3xl font-semibold tracking-tight md:text-4xl">
             Reservations
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -136,18 +181,33 @@ export function AdminReservationsClient() {
           <Plus className="size-4" aria-hidden="true" />
           Create reservation
         </Button>
-      </div>
+      </motion.div>
 
+      <motion.section variants={stagger} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {workflow.map((item) => (
+          <WorkflowCard key={item.label} {...item} />
+        ))}
+      </motion.section>
+
+      <motion.section variants={reveal}>
       <Card>
         <CardHeader>
-          <CardTitle>Reservation Queue</CardTitle>
-          <CardDescription>
-            Capacity is held atomically so concurrent bookings cannot over-reserve rooms.
-          </CardDescription>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle>Reservation Kanban</CardTitle>
+              <CardDescription>
+                Capacity is held atomically so concurrent bookings cannot over-reserve rooms.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="size-2 rounded-full bg-success shadow-[0_0_12px_var(--success)]" />
+              Showing {rows.length} of {meta?.total ?? 0} reservations
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="relative min-w-0 flex-1">
+          <motion.div layout className="grid gap-3 rounded-xl border bg-white/55 p-3 md:grid-cols-[1fr_auto]">
+            <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
@@ -178,6 +238,43 @@ export function AdminReservationsClient() {
                 ))}
               </SelectContent>
             </Select>
+          </motion.div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {reservationStatuses.map((item) => {
+              const selected = status === item
+
+              return (
+                <motion.button
+                  key={item}
+                  type="button"
+                  layout
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setStatus(item)
+                    setPage(1)
+                  }}
+                  className={cn(
+                    "relative shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-white/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {selected ? (
+                    <motion.span
+                      layoutId="reservation-filter-active"
+                      className="absolute inset-0 rounded-full ring-1 ring-primary/45"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span className="relative">
+                    {item === "all" ? "All reservations" : humanizeEnum(item)}
+                  </span>
+                </motion.button>
+              )
+            })}
           </div>
 
           {reservations.isLoading ? (
@@ -192,38 +289,20 @@ export function AdminReservationsClient() {
             <EmptyState
               title="No reservations found"
               message="Create a reservation once a lead is interested and vacancy is available."
+              action={<Button onClick={() => setIsCreateOpen(true)}>Create reservation</Button>}
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Reservation</TableHead>
-                    <TableHead>Students</TableHead>
-                    <TableHead>Reserved Until</TableHead>
-                    <TableHead>Advance</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((reservation) => (
-                    <ReservationTableRow
-                      key={reservation.id}
-                      reservation={reservation}
-                      lead={leadsById.get(reservation.lead_id)}
-                      onManage={() => setActionReservation(reservation)}
-                      onAdvance={() => setPaymentReservation(reservation)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <KanbanBoard
+              reservations={rows}
+              leadsById={leadsById}
+              onManage={setActionReservation}
+              onAdvance={setPaymentReservation}
+            />
           )}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Showing {rows.length} of {meta?.total ?? 0} reservations
+              Page {meta?.page ?? page} of {meta?.totalPages ?? 1}
             </p>
             <div className="flex gap-2">
               <Button
@@ -244,6 +323,12 @@ export function AdminReservationsClient() {
           </div>
         </CardContent>
       </Card>
+      </motion.section>
+
+      <motion.section variants={reveal} className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+        <InquiryAdmissionVisualization rows={rows} />
+        <ReservationTimeline timeline={timeline} />
+      </motion.section>
 
       <CreateReservationDialog
         open={isCreateOpen}
@@ -271,7 +356,307 @@ export function AdminReservationsClient() {
         }}
         organizationId={organizationId}
       />
+    </motion.div>
+  )
+}
+
+function WorkflowCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: number | string
+  detail: string
+  icon: LucideIcon
+  tone: "success" | "warning" | "info" | "danger"
+}) {
+  const toneClassName = {
+    success: "bg-success-surface text-success-foreground ring-success/20",
+    warning: "bg-warning-surface text-warning-foreground ring-warning/25",
+    info: "bg-info-surface text-info-foreground ring-info/20",
+    danger: "bg-destructive/10 text-destructive ring-destructive/20",
+  }[tone]
+
+  return (
+    <motion.article variants={reveal}>
+      <Card className="h-full">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardDescription>{label}</CardDescription>
+              <CardTitle className="mt-2 text-2xl">{value}</CardTitle>
+            </div>
+            <span className={`flex size-10 items-center justify-center rounded-xl ring-1 ${toneClassName}`}>
+              <Icon className="size-5" aria-hidden="true" />
+            </span>
+          </div>
+          <p className="text-sm leading-5 text-muted-foreground">{detail}</p>
+        </CardHeader>
+      </Card>
+    </motion.article>
+  )
+}
+
+function KanbanBoard({
+  reservations,
+  leadsById,
+  onManage,
+  onAdvance,
+}: {
+  reservations: ReservationRow[]
+  leadsById: Map<string, LeadRow>
+  onManage: (reservation: ReservationRow) => void
+  onAdvance: (reservation: ReservationRow) => void
+}) {
+  const inactive = reservations.filter((reservation) =>
+    ["expired", "cancelled"].includes(reservation.status)
+  )
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-4">
+      {kanbanStatuses.map((status) => {
+        const items = reservations.filter((reservation) => reservation.status === status)
+
+        return (
+          <KanbanColumn
+            key={status}
+            title={humanizeEnum(status)}
+            status={status}
+            reservations={items}
+            leadsById={leadsById}
+            onManage={onManage}
+            onAdvance={onAdvance}
+          />
+        )
+      })}
+      {inactive.length > 0 ? (
+        <div className="xl:col-span-4">
+          <KanbanColumn
+            title="Closed / expired"
+            status="cancelled"
+            reservations={inactive}
+            leadsById={leadsById}
+            onManage={onManage}
+            onAdvance={onAdvance}
+            compact
+          />
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+function KanbanColumn({
+  title,
+  status,
+  reservations,
+  leadsById,
+  onManage,
+  onAdvance,
+  compact = false,
+}: {
+  title: string
+  status: ReservationStatus
+  reservations: ReservationRow[]
+  leadsById: Map<string, LeadRow>
+  onManage: (reservation: ReservationRow) => void
+  onAdvance: (reservation: ReservationRow) => void
+  compact?: boolean
+}) {
+  return (
+    <section className="rounded-xl border bg-muted/35 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className={cn("size-2 rounded-full", statusDotClassName(status))} />
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        </div>
+        <Badge variant="secondary">{reservations.length}</Badge>
+      </div>
+      {reservations.length === 0 ? (
+        <div className="rounded-xl border border-dashed bg-white/45 p-4 text-center text-sm text-muted-foreground">
+          No reservations
+        </div>
+      ) : (
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          className={cn("grid gap-3", compact && "md:grid-cols-2 xl:grid-cols-3")}
+        >
+          {reservations.map((reservation) => (
+            <ReservationCard
+              key={reservation.id}
+              reservation={reservation}
+              lead={leadsById.get(reservation.lead_id)}
+              onManage={() => onManage(reservation)}
+              onAdvance={() => onAdvance(reservation)}
+            />
+          ))}
+        </motion.div>
+      )}
+    </section>
+  )
+}
+
+function ReservationCard({
+  reservation,
+  lead,
+  onManage,
+  onAdvance,
+}: {
+  reservation: ReservationRow
+  lead?: LeadRow
+  onManage: () => void
+  onAdvance: () => void
+}) {
+  const canRecordAdvance = reservation.status !== "cancelled"
+
+  return (
+    <motion.article variants={reveal} layout>
+      <div className="group rounded-xl border bg-card/90 p-4 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {lead?.full_name ?? reservation.id.slice(0, 8).toUpperCase()}
+            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {lead
+                ? `${lead.phone} · ${humanizeEnum(lead.source)}`
+                : `Lead ${reservation.lead_id.slice(0, 8).toUpperCase()}`}
+            </p>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Reservation actions">
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Workflow actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={!canConfirm(reservation)} onClick={onManage}>
+                Manage approval
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canRecordAdvance} onClick={onAdvance}>
+                Record advance
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <StatusBadge status={reservation.status} />
+          <Badge variant="secondary">{reservation.reserved_bed_count} spot(s)</Badge>
+        </div>
+
+        <div className="mt-4 grid gap-2 rounded-xl border bg-white/55 p-3 text-xs text-muted-foreground">
+          <ReservationFact label="Reserved until" value={formatDateTime(reservation.reserved_until)} />
+          <ReservationFact label="Advance" value={formatCurrency(reservation.advance_amount)} />
+          <ReservationFact label="Room" value={reservation.reserved_room_id ? reservation.reserved_room_id.slice(0, 8) : "Any room"} />
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <Button size="sm" variant="outline" disabled={!canConfirm(reservation)} onClick={onManage}>
+            Manage
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!canRecordAdvance} onClick={onAdvance}>
+            Advance
+          </Button>
+        </div>
+      </div>
+    </motion.article>
+  )
+}
+
+function ReservationFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <span className="truncate font-medium text-foreground">{value}</span>
+    </div>
+  )
+}
+
+function InquiryAdmissionVisualization({ rows }: { rows: ReservationRow[] }) {
+  const steps = [
+    { label: "Inquiry", value: rows.length, icon: Search },
+    { label: "Capacity held", value: rows.filter((row) => ["pending", "reserved"].includes(row.status)).length, icon: CalendarCheck },
+    { label: "Confirmed", value: rows.filter((row) => row.status === "confirmed").length, icon: CheckCircle2 },
+    { label: "Admitted", value: rows.filter((row) => row.status === "converted_to_resident").length, icon: UserRoundCheck },
+  ]
+
+  return (
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle>Inquiry-to-Admission Flow</CardTitle>
+        <CardDescription>Current page reservations mapped across the admission lifecycle.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-4">
+          {steps.map((step, index) => {
+            const Icon = step.icon
+
+            return (
+              <div key={step.label} className="relative rounded-xl border bg-white/55 p-4">
+                {index < steps.length - 1 ? (
+                  <ArrowRight className="absolute -right-4 top-1/2 z-10 hidden size-5 -translate-y-1/2 text-muted-foreground sm:block" />
+                ) : null}
+                <Icon className="size-5 text-primary" aria-hidden="true" />
+                <p className="mt-4 text-2xl font-semibold">{step.value}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{step.label}</p>
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ReservationTimeline({
+  timeline,
+}: {
+  timeline: Array<{ id: string; title: string; description: string; at: string; status: ReservationStatus }>
+}) {
+  return (
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle>Reservation Timeline</CardTitle>
+        <CardDescription>Recent holds, confirmations, and admission conversions.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {timeline.length === 0 ? (
+          <EmptyState title="No timeline yet" message="Reservation movement will appear here." />
+        ) : (
+          <div className="relative grid gap-4 before:absolute before:bottom-2 before:left-4 before:top-2 before:w-px before:bg-border">
+            {timeline.map((event, index) => (
+              <motion.div
+                key={event.id}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05 }}
+                className="relative grid grid-cols-[2rem_1fr] gap-3"
+              >
+                <span className="relative z-10 flex size-8 items-center justify-center rounded-full border bg-background text-primary shadow-sm">
+                  <Clock3 className="size-4" aria-hidden="true" />
+                </span>
+                <div className="rounded-xl border bg-white/55 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{event.title}</p>
+                    <StatusBadge status={event.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{formatDateTime(event.at)}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -384,57 +769,6 @@ function CreateReservationDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function ReservationTableRow({
-  reservation,
-  lead,
-  onManage,
-  onAdvance,
-}: {
-  reservation: ReservationRow
-  lead?: LeadRow
-  onManage: () => void
-  onAdvance: () => void
-}) {
-  return (
-    <TableRow>
-      <TableCell>
-        <div className="font-medium">
-          {lead?.full_name ?? reservation.id.slice(0, 8).toUpperCase()}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {lead ? `${lead.phone} · ${humanizeEnum(lead.source)}` : `Lead ${reservation.lead_id.slice(0, 8).toUpperCase()}`}
-        </div>
-      </TableCell>
-      <TableCell>{reservation.reserved_bed_count}</TableCell>
-      <TableCell>{formatDateTime(reservation.reserved_until)}</TableCell>
-      <TableCell>{formatCurrency(reservation.advance_amount)}</TableCell>
-      <TableCell>
-        <StatusBadge status={reservation.status} />
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canConfirm(reservation)}
-            onClick={onManage}
-          >
-            Manage
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={reservation.status === "cancelled"}
-            onClick={onAdvance}
-          >
-            Advance
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
   )
 }
 
@@ -705,6 +1039,78 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </div>
   )
+}
+
+function buildReservationWorkflow(rows: ReservationRow[]) {
+  const advanceTotal = rows.reduce((total, row) => total + row.advance_amount, 0)
+
+  return [
+    {
+      label: "Open approvals",
+      value: rows.filter((row) => ["pending", "reserved"].includes(row.status)).length,
+      detail: "Need confirmation or cancellation",
+      icon: CalendarCheck,
+      tone: "warning" as const,
+    },
+    {
+      label: "Confirmed holds",
+      value: rows.filter((row) => row.status === "confirmed").length,
+      detail: "Ready for admission conversion",
+      icon: CheckCircle2,
+      tone: "success" as const,
+    },
+    {
+      label: "Advance collected",
+      value: formatCurrency(advanceTotal),
+      detail: "Booking advance on current page",
+      icon: CreditCard,
+      tone: "info" as const,
+    },
+    {
+      label: "Closed reservations",
+      value: rows.filter((row) => ["expired", "cancelled"].includes(row.status)).length,
+      detail: "Expired or cancelled holds",
+      icon: XCircle,
+      tone: "danger" as const,
+    },
+  ]
+}
+
+function buildReservationTimeline(rows: ReservationRow[], leadsById: Map<string, LeadRow>) {
+  return rows
+    .map((reservation) => {
+      const lead = leadsById.get(reservation.lead_id)
+
+      return {
+        id: reservation.id,
+        title: lead?.full_name ?? reservation.id.slice(0, 8).toUpperCase(),
+        description: `${reservation.reserved_bed_count} spot(s), ${formatCurrency(reservation.advance_amount)} advance`,
+        at: reservation.converted_at ??
+          reservation.confirmed_at ??
+          reservation.cancelled_at ??
+          reservation.expired_at ??
+          reservation.created_at,
+        status: reservation.status,
+      }
+    })
+    .sort((first, second) => new Date(second.at).getTime() - new Date(first.at).getTime())
+    .slice(0, 6)
+}
+
+function statusDotClassName(status: ReservationStatus) {
+  if (status === "converted_to_resident" || status === "confirmed") {
+    return "bg-success shadow-[0_0_12px_var(--success)]"
+  }
+
+  if (status === "pending" || status === "reserved") {
+    return "bg-warning shadow-[0_0_12px_var(--warning)]"
+  }
+
+  if (status === "expired" || status === "cancelled") {
+    return "bg-destructive shadow-[0_0_12px_var(--destructive)]"
+  }
+
+  return "bg-info shadow-[0_0_12px_var(--info)]"
 }
 
 function canConfirm(reservation: ReservationRow) {

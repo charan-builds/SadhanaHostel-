@@ -37,7 +37,7 @@ export function ForgotPasswordForm() {
     try {
       await authSdk.resetPassword({
         email: values.email,
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/reset-password`,
       })
     } catch (error) {
       setError("root", {
@@ -57,7 +57,7 @@ export function ForgotPasswordForm() {
           If the address matches an account, password reset instructions have been sent.
         </p>
         <Button asChild className="mt-5" variant="outline">
-          <Link href={"/login" as Route}>Back to login</Link>
+          <Link href={"/admin/login" as Route}>Back to admin login</Link>
         </Button>
       </div>
     )
@@ -90,6 +90,16 @@ export function ForgotPasswordForm() {
         )}
         Send reset instructions
       </Button>
+
+      <p className="text-center text-sm text-muted-foreground">
+        Resident account?{" "}
+        <Link
+          href={"/resident/reset-password" as Route}
+          className="font-medium text-primary hover:underline"
+        >
+          Request admin reset
+        </Link>
+      </p>
     </form>
   )
 }

@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { AlertTriangle, CheckCircle2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { AlertTriangle, CheckCircle2, Copy, KeyRound, Loader2 } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
 
 import { DataTableShell } from "@/components/shared/data-table-shell"
@@ -11,6 +13,13 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -23,14 +32,25 @@ import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import {
   useOperationalAlerts,
+  useApproveResidentPasswordResetRequest,
   useSupportRequests,
   useUpdateSupportRequest,
 } from "@/hooks"
 import type { OperationalAlert } from "@/types/support"
+import type { SupportPasswordResetApprovalResult } from "@/types/support"
 
-export function AdminOperationalAlertsClient() {
+export function AdminOperationalAlertsClient({
+  passwordResetOnly = false,
+}: {
+  passwordResetOnly?: boolean
+}) {
   const { organizationId, session } = useAuth()
+  const searchParams = useSearchParams()
   const hostelId = session?.hostelIds[0]
+  const passwordResetQueue =
+    passwordResetOnly || searchParams.get("queue") === "password-resets"
+  const [passwordResetResult, setPasswordResetResult] =
+    useState<SupportPasswordResetApprovalResult | null>(null)
   const alerts = useOperationalAlerts({
     organizationId: organizationId ?? undefined,
     hostelId,
@@ -38,10 +58,13 @@ export function AdminOperationalAlertsClient() {
   const requests = useSupportRequests({
     organizationId: organizationId ?? "",
     hostelId,
+    category: passwordResetQueue ? "account" : undefined,
+    workflow: passwordResetQueue ? "resident_password_reset" : undefined,
     page: 1,
     pageSize: 50,
   })
   const updateRequest = useUpdateSupportRequest()
+  const approvePasswordReset = useApproveResidentPasswordResetRequest()
 
   async function setStatus(requestId: string, status: "in_progress" | "waiting_on_resident" | "resolved" | "closed") {
     if (!organizationId) {
@@ -66,6 +89,25 @@ export function AdminOperationalAlertsClient() {
     }
   }
 
+  async function approveResidentPasswordReset(requestId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      const result = await approvePasswordReset.mutateAsync({
+        organizationId,
+        requestId,
+      })
+      setPasswordResetResult(result)
+      await requests.refetch()
+      await alerts.refetch()
+      toast.success("Temporary password generated.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to generate temporary password.")
+    }
+  }
+
   if (!organizationId) {
     return (
       <EmptyState
@@ -78,8 +120,12 @@ export function AdminOperationalAlertsClient() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Operational Alerts"
-        description="Recovery queue for blocked residents, payment reviews, onboarding issues, capacity risk, and missing configuration."
+        title={passwordResetQueue ? "Password Reset Requests" : "Operational Alerts"}
+        description={
+          passwordResetQueue
+            ? "Verify resident identity, generate a temporary password, and share it securely."
+            : "Recovery queue for blocked residents, payment reviews, onboarding issues, capacity risk, and missing configuration."
+        }
       />
 
       {alerts.isError ? (
@@ -95,24 +141,36 @@ export function AdminOperationalAlertsClient() {
           <div className="rounded-xl border bg-background p-5 text-sm text-muted-foreground">
             Loading alerts...
           </div>
-        ) : alerts.data?.length ? (
-          alerts.data.map((alert) => <AlertCard key={alert.id} alert={alert} />)
+        ) : visibleAlerts(alerts.data, passwordResetQueue).length ? (
+          visibleAlerts(alerts.data, passwordResetQueue).map((alert) => (
+            <AlertCard key={alert.id} alert={alert} />
+          ))
         ) : (
           <div className="rounded-xl border bg-emerald-50 p-5 text-sm text-emerald-800 md:col-span-2 xl:col-span-4">
             <CheckCircle2 className="mb-2 size-5" aria-hidden="true" />
-            No operational blockers are currently detected.
+            {passwordResetQueue
+              ? "No resident password reset requests are currently waiting."
+              : "No operational blockers are currently detected."}
           </div>
         )}
       </section>
 
       <DataTableShell
-        title="Support recovery queue"
-        description="Track and resolve resident support requests without opening Supabase."
+        title={passwordResetQueue ? "Resident password reset queue" : "Support recovery queue"}
+        description={
+          passwordResetQueue
+            ? "Only resident password reset requests are shown here."
+            : "Track and resolve resident support requests without opening Supabase."
+        }
         empty={
           requests.data?.data.length === 0 ? (
             <EmptyState
-              title="No recovery requests"
-              message="When residents get blocked by onboarding, uploads, payments, or account access, their requests will appear here."
+              title={passwordResetQueue ? "No password reset requests" : "No recovery requests"}
+              message={
+                passwordResetQueue
+                  ? "When an existing resident asks admin to reset their password, the request will appear here."
+                  : "When residents get blocked by onboarding, uploads, payments, or account access, their requests will appear here."
+              }
             />
           ) : undefined
         }
@@ -130,6 +188,10 @@ export function AdminOperationalAlertsClient() {
                     <Badge variant={request.priority === "urgent" ? "destructive" : "secondary"}>
                       {humanizeEnum(request.priority)}
                     </Badge>
+                    {isResidentPasswordResetRequest(request) &&
+                    !hasActiveResidentPortalAccount(request) ? (
+                      <Badge variant="outline">Invite required</Badge>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {humanizeEnum(request.category)} · {formatDateTime(request.created_at)}
@@ -142,6 +204,42 @@ export function AdminOperationalAlertsClient() {
                   ) : null}
                 </div>
                 <div className="grid content-start gap-3">
+                  {isResidentPasswordResetRequest(request) &&
+                  hasActiveResidentPortalAccount(request) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        approvePasswordReset.isPending ||
+                        request.status === "resolved" ||
+                        request.status === "closed"
+                      }
+                      onClick={() => void approveResidentPasswordReset(request.id)}
+                    >
+                      {approvePasswordReset.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <KeyRound className="size-3.5" aria-hidden="true" />
+                      )}
+                      Generate temporary password
+                    </Button>
+                  ) : null}
+                  {isResidentPasswordResetRequest(request) &&
+                  !hasActiveResidentPortalAccount(request) ? (
+                    <>
+                      {request.resident_id ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/residents/${request.resident_id}` as Route}>
+                            Open resident profile
+                          </Link>
+                        </Button>
+                      ) : null}
+                      <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                        This resident record exists, but the portal account is not active yet.
+                        Create or resend the invite before sharing login access.
+                      </p>
+                    </>
+                  ) : null}
                   <Select
                     value={request.status}
                     onValueChange={(value) =>
@@ -174,7 +272,76 @@ export function AdminOperationalAlertsClient() {
           </div>
         )}
       </DataTableShell>
+
+      <PasswordResetResultDialog
+        result={passwordResetResult}
+        onClose={() => setPasswordResetResult(null)}
+      />
     </div>
+  )
+}
+
+function PasswordResetResultDialog({
+  result,
+  onClose,
+}: {
+  result: SupportPasswordResetApprovalResult | null
+  onClose: () => void
+}) {
+  async function copyPassword() {
+    if (!result?.reset.temporaryPassword) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(result.reset.temporaryPassword)
+      toast.success("Temporary password copied.")
+    } catch {
+      toast.error("Copy failed. Select and copy the password manually.")
+    }
+  }
+
+  return (
+    <Dialog open={Boolean(result)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Temporary resident password</DialogTitle>
+          <DialogDescription>
+            Share this only after identity verification. The resident must set a permanent password
+            after login.
+          </DialogDescription>
+        </DialogHeader>
+        {result ? (
+          <div className="grid gap-4">
+            <div className="rounded-lg border bg-blue-50 p-4 text-blue-950">
+              <p className="text-sm font-semibold">Expires {formatDateTime(result.reset.expiresAt)}</p>
+              <div className="mt-3 grid gap-2 rounded-md bg-white/70 p-3 text-sm">
+                <p>
+                  Login: <span className="break-all font-medium">{result.reset.loginLink}</span>
+                </p>
+                <p>
+                  Password:{" "}
+                  <span className="break-all font-mono font-semibold">
+                    {result.reset.temporaryPassword}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void copyPassword()}>
+                <Copy className="size-3.5" aria-hidden="true" />
+                Copy password
+              </Button>
+              <Button asChild variant="outline">
+                <a href={result.reset.loginLink} target="_blank" rel="noreferrer">
+                  Open login
+                </a>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -199,4 +366,28 @@ function AlertCard({ alert }: { alert: OperationalAlert }) {
       </Button>
     </article>
   )
+}
+
+function isResidentPasswordResetRequest(request: { metadata: unknown }) {
+  return recordFromUnknown(request.metadata).workflow === "resident_password_reset"
+}
+
+function hasActiveResidentPortalAccount(request: { metadata: unknown }) {
+  return recordFromUnknown(request.metadata).portalAccountActive !== false
+}
+
+function visibleAlerts(alerts: OperationalAlert[] | undefined, passwordResetQueue: boolean) {
+  const source = alerts ?? []
+
+  return passwordResetQueue
+    ? source.filter((alert) => alert.id === "support.password_reset")
+    : source
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }

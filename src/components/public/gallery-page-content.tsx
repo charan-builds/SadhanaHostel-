@@ -1,10 +1,12 @@
 "use client"
 
+import Image from "next/image"
 import { useMemo, useState } from "react"
 import { Building2, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { fallbackGalleryItems } from "@/constants/public-content"
+import { formatGalleryCategory, hydrateGalleryItems } from "@/lib/public-gallery"
 import { cn } from "@/lib/utils"
 import type { GalleryItem } from "@/types/frontend"
 
@@ -13,19 +15,23 @@ export function GalleryPageContent({
 }: {
   galleryItems?: GalleryItem[]
 }) {
-  const categories = useMemo(
-    () => ["All", ...Array.from(new Set(galleryItems.map((item) => item.category)))],
+  const hydratedItems = useMemo(
+    () => hydrateGalleryItems(galleryItems),
     [galleryItems]
+  )
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(hydratedItems.map((item) => item.category)))],
+    [hydratedItems]
   )
   const [activeCategory, setActiveCategory] = useState("All")
 
   const visibleItems = useMemo(() => {
     if (activeCategory === "All") {
-      return galleryItems
+      return hydratedItems
     }
 
-    return galleryItems.filter((item) => item.category === activeCategory)
-  }, [activeCategory, galleryItems])
+    return hydratedItems.filter((item) => item.category === activeCategory)
+  }, [activeCategory, hydratedItems])
 
   return (
     <main className="flex flex-1 flex-col bg-white">
@@ -54,19 +60,29 @@ export function GalleryPageContent({
                 className={cn("shrink-0", activeCategory !== category && "bg-white")}
                 onClick={() => setActiveCategory(category)}
               >
-                {category}
+                {category === "All" ? category : formatGalleryCategory(category)}
               </Button>
             ))}
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleItems.map((item, index) => (
-              <article key={item.title} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-                {item.imageUrl ? (
+              <article key={item.title} className="group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lifted">
+                {item.imageUrl?.startsWith("/") ? (
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.alt}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    />
+                  </div>
+                ) : item.imageUrl ? (
                   <div
                     role="img"
                     aria-label={item.alt}
-                    className="aspect-[4/3] bg-cover bg-center"
+                    className="aspect-[4/3] bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
                     style={{ backgroundImage: `url("${item.imageUrl}")` }}
                   />
                 ) : (
@@ -80,7 +96,9 @@ export function GalleryPageContent({
                 )}
                 <div className="p-4">
                   <h2 className="font-semibold text-slate-950">{item.title}</h2>
-                  <p className="mt-1 text-sm text-slate-600">{item.category}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {formatGalleryCategory(item.category)}
+                  </p>
                   <p className="mt-3 text-xs text-slate-500">{item.alt}</p>
                 </div>
               </article>

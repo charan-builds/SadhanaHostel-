@@ -25,6 +25,11 @@ export type SessionOverview = {
   hostelIds: string[]
   onboardingRequired: boolean
   redirectTo: string
+  security: {
+    forcePasswordReset: boolean
+    temporaryPasswordActive: boolean
+    temporaryPasswordExpiresAt: string | null
+  }
 }
 
 export type UploadProgress = {

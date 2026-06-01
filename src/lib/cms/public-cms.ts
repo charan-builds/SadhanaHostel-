@@ -1,7 +1,5 @@
 import "server-only"
 
-import { cache } from "react"
-
 import {
   fallbackFacilities,
   fallbackGalleryItems,
@@ -24,50 +22,49 @@ export type PublicCmsContent = {
   source: "cms" | "fallback"
 }
 
-export const getPublicCmsContent = cache(async (): Promise<PublicCmsContent> => {
+export async function getPublicCmsContent(): Promise<PublicCmsContent> {
   const organizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
   const hostelId = process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID
-
-  if (!organizationId) {
-    return fallbackCmsContent()
-  }
 
   try {
     const service = await WebsiteService.create()
     const [settingsResult, facilitiesResult, galleryResult] = await Promise.all([
       service.listSettings({
-        organizationId,
+        organizationId: organizationId || undefined,
         hostelId: hostelId || undefined,
         page: 1,
         pageSize: 20,
         status: "published",
       }),
       service.listFacilities({
-        organizationId,
+        organizationId: organizationId || undefined,
         hostelId: hostelId || undefined,
         page: 1,
         pageSize: 50,
         status: "published",
       }),
       service.listGallery({
-        organizationId,
+        organizationId: organizationId || undefined,
         hostelId: hostelId || undefined,
         page: 1,
         pageSize: 50,
         status: "published",
       }),
     ])
+    const settingsRows = settingsResult.data
+    const facilityRows = facilitiesResult.data
+    const galleryRows = galleryResult.data
 
     const settings = Object.fromEntries(
-      settingsResult.data.map((setting) => [setting.section_key, setting])
+      settingsRows.map((setting) => [setting.section_key, setting])
     )
     const homepage = asObject(settings.homepage?.content)
     const about = asObject(settings.about?.content)
     const contact = asObject(settings.contact?.content)
     const pricing = asObject(settings.pricing?.content)
-    const roomTypes = mapPricingToRoomTypes(pricing)
-    const facilities = facilitiesResult.data.map(mapFacility)
-    const galleryItems = galleryResult.data.map(mapGalleryItem)
+    const roomTypes = withRequiredRoomAudiences(mapPricingToRoomTypes(pricing))
+    const facilities = facilityRows.map(mapFacility)
+    const galleryItems = galleryRows.map(mapGalleryItem)
 
     return {
       heroTitle: stringOrNull(homepage.hero_title),
@@ -80,9 +77,71 @@ export const getPublicCmsContent = cache(async (): Promise<PublicCmsContent> => 
       source: "cms",
     }
   } catch {
+    return loadPartialCmsContent()
+  }
+}
+
+async function loadPartialCmsContent(): Promise<PublicCmsContent> {
+  const organizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
+  const hostelId = process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID
+
+  const service = await WebsiteService.create()
+  const [settingsResult, facilitiesResult, galleryResult] = await Promise.allSettled([
+    service.listSettings({
+      organizationId: organizationId || undefined,
+      hostelId: hostelId || undefined,
+      page: 1,
+      pageSize: 20,
+      status: "published",
+    }),
+    service.listFacilities({
+      organizationId: organizationId || undefined,
+      hostelId: hostelId || undefined,
+      page: 1,
+      pageSize: 50,
+      status: "published",
+    }),
+    service.listGallery({
+      organizationId: organizationId || undefined,
+      hostelId: hostelId || undefined,
+      page: 1,
+      pageSize: 50,
+      status: "published",
+    }),
+  ])
+  const settingsRows =
+    settingsResult.status === "fulfilled" ? settingsResult.value.data : []
+  const facilityRows =
+    facilitiesResult.status === "fulfilled" ? facilitiesResult.value.data : []
+  const galleryRows =
+    galleryResult.status === "fulfilled" ? galleryResult.value.data : []
+
+  if (settingsRows.length === 0 && facilityRows.length === 0 && galleryRows.length === 0) {
     return fallbackCmsContent()
   }
-})
+
+  const settings = Object.fromEntries(
+    settingsRows.map((setting) => [setting.section_key, setting])
+  )
+  const homepage = asObject(settings.homepage?.content)
+  const about = asObject(settings.about?.content)
+  const contact = asObject(settings.contact?.content)
+  const pricing = asObject(settings.pricing?.content)
+  const roomTypes = withRequiredRoomAudiences(mapPricingToRoomTypes(pricing))
+  const facilities = facilityRows.map(mapFacility)
+  const galleryItems = galleryRows.map(mapGalleryItem)
+
+  return {
+    heroTitle: stringOrNull(homepage.hero_title),
+    heroSubtitle: stringOrNull(homepage.hero_subtitle),
+    aboutText: stringOrNull(about.about_text),
+    mapLink: stringOrNull(contact.map_link),
+    roomTypes: roomTypes.length > 0 ? roomTypes : fallbackRoomTypes,
+    facilities: facilities.length > 0 ? facilities : fallbackFacilities,
+    galleryItems: galleryItems.length > 0 ? galleryItems : fallbackGalleryItems,
+    source: "cms",
+  }
+}
 
 function fallbackCmsContent(): PublicCmsContent {
   return {
@@ -137,6 +196,33 @@ function mapPricingToRoomTypes(pricing: CmsObject): RoomTypeCard[] {
         icon: index === 0 ? "graduation-cap" : "briefcase-business",
       }
     })
+}
+
+function withRequiredRoomAudiences(roomTypes: RoomTypeCard[]) {
+  const hasStudent = roomTypes.some((room) => getRoomAudience(room) === "student")
+  const hasEmployee = roomTypes.some((room) => getRoomAudience(room) === "employee")
+  const requiredRoomTypes = [...roomTypes]
+
+  if (!hasStudent) {
+    requiredRoomTypes.push(fallbackRoomTypes[0])
+  }
+
+  if (!hasEmployee) {
+    requiredRoomTypes.push(fallbackRoomTypes[1])
+  }
+
+  return requiredRoomTypes.filter(Boolean)
+}
+
+function getRoomAudience(room: Pick<RoomTypeCard, "title" | "icon">) {
+  const value = `${room.title} ${room.icon}`.toLowerCase()
+
+  return value.includes("employee") ||
+    value.includes("working") ||
+    value.includes("professional") ||
+    value.includes("briefcase")
+    ? "employee"
+    : "student"
 }
 
 function mapFeatures(value: unknown): string[] {

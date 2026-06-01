@@ -20,6 +20,14 @@ const upiTransactionReferenceSchema = z
     "UPI reference can only contain letters, numbers, dots, dashes, slashes, and underscores."
   )
 
+const optionalUpiTransactionReferenceSchema = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined
+  }
+
+  return value
+}, upiTransactionReferenceSchema.optional())
+
 const upiIdSchema = z
   .string()
   .trim()
@@ -82,7 +90,7 @@ export const createPaymentSchema = z.object({
   invoiceId: uuidSchema.optional(),
   amount: moneySchema,
   method: z.literal("upi").default("upi"),
-  transactionId: upiTransactionReferenceSchema.optional(),
+  transactionId: optionalUpiTransactionReferenceSchema,
   idempotencyKey: z.string().trim().min(8).max(256).optional(),
   manualReference: z.string().trim().max(120).optional(),
   notes: z.string().trim().max(1000).optional(),
@@ -91,9 +99,41 @@ export const createPaymentSchema = z.object({
 })
 
 export const submitUpiPaymentSchema = createPaymentSchema.extend({
-  transactionId: upiTransactionReferenceSchema,
+  transactionId: optionalUpiTransactionReferenceSchema,
   idempotencyKey: z.string().trim().min(8).max(256),
 })
+
+export const recordInPersonPaymentSchema = z
+  .object({
+    organizationId: uuidSchema,
+    hostelId: uuidSchema,
+    residentId: uuidSchema,
+    monthlyFeeRecordId: uuidSchema.optional(),
+    amount: moneySchema,
+    method: z.enum(["cash", "bank_transfer"]).default("cash"),
+    idempotencyKey: z.string().trim().min(8).max(256).optional(),
+    manualReference: z.string().trim().max(120).optional().or(z.literal("")),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    isAdvance: multipartBooleanSchema.default(false),
+    isPartial: multipartBooleanSchema.default(false),
+  })
+  .superRefine((value, context) => {
+    if (!value.isAdvance && !value.monthlyFeeRecordId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["monthlyFeeRecordId"],
+        message: "Choose the monthly due this in-person payment should reduce.",
+      })
+    }
+
+    if (value.isAdvance && value.monthlyFeeRecordId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["monthlyFeeRecordId"],
+        message: "Advance payments should not be linked to a monthly due.",
+      })
+    }
+  })
 
 export const verifyPaymentSchema = z.object({
   paymentId: uuidSchema,
@@ -197,6 +237,7 @@ export const generateMonthlyFeeSchema = z.object({
 export type PaymentListInput = z.infer<typeof paymentListSchema>
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>
 export type SubmitUpiPaymentInput = z.infer<typeof submitUpiPaymentSchema>
+export type RecordInPersonPaymentInput = z.infer<typeof recordInPersonPaymentSchema>
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>
 export type RejectPaymentInput = z.infer<typeof rejectPaymentSchema>
 export type PaymentSettingsQueryInput = z.infer<typeof paymentSettingsQuerySchema>

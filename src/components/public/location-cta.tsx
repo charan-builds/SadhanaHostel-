@@ -2,8 +2,11 @@ import { MapPin, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref } from "@/constants/hostel"
+import { buildMapEmbedUrl, buildMapNavigationUrl } from "@/lib/public-gallery"
 
-export function LocationCta() {
+export function LocationCta({ mapLink }: { mapLink?: string | null }) {
+  const locationHref = buildMapNavigationUrl(mapLink) || mapSearchHref
+
   return (
     <section className="bg-slate-50 py-14 sm:py-16">
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-stretch">
@@ -21,7 +24,7 @@ export function LocationCta() {
           </div>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Button asChild>
-              <a href={mapSearchHref} target="_blank" rel="noreferrer">
+              <a href={locationHref} target="_blank" rel="noreferrer">
                 <Navigation className="size-4" aria-hidden="true" />
                 Navigate
               </a>
@@ -35,20 +38,15 @@ export function LocationCta() {
           </div>
         </div>
 
-        <div className="min-h-72 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex h-full min-h-64 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#dbeafe_0%,#f8fafc_55%,#e2e8f0_100%)]">
-            <div className="max-w-sm px-6 text-center">
-              <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-white text-blue-700 shadow-sm">
-                <MapPin className="size-6" aria-hidden="true" />
-              </span>
-              <h3 className="mt-4 text-lg font-semibold text-slate-950">
-                Open location map
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Use the navigation button to open the exact hostel location.
-              </p>
-            </div>
-          </div>
+        <div className="min-h-72 overflow-hidden rounded-2xl border bg-white p-3 shadow-sm">
+          <iframe
+            title={`${hostelConfig.name} location map`}
+            src={buildMapEmbedUrl(mapLink)}
+            className="h-full min-h-72 w-full rounded-xl border-0"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            allowFullScreen
+          />
         </div>
       </div>
     </section>

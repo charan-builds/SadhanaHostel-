@@ -231,12 +231,12 @@ describe("AuthService permission guards", () => {
     await expect(
       service.resetPassword({
         email: "admin.test@sadhanahostel.example",
-        redirectTo: "https://app.sadhanahostel.example/login",
+        redirectTo: "https://app.sadhanahostel.example/reset-password",
       })
     ).resolves.toEqual({ email: "admin.test@sadhanahostel.example" })
     expect(resetPasswordForEmail).toHaveBeenCalledWith(
       "admin.test@sadhanahostel.example",
-      { redirectTo: "https://app.sadhanahostel.example/login" }
+      { redirectTo: "https://app.sadhanahostel.example/reset-password" }
     )
     process.env.NEXT_PUBLIC_APP_URL = originalAppUrl
   })

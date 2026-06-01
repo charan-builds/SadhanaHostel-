@@ -21,6 +21,7 @@ export type ListSupportRequestsFilters = PaginationParams & {
   status?: SupportStatus
   category?: string
   priority?: SupportPriority
+  workflow?: string
   search?: string
 }
 
@@ -58,6 +59,10 @@ export class SupportRepository {
 
     if (filters.priority) {
       query = query.eq("priority", filters.priority)
+    }
+
+    if (filters.workflow) {
+      query = query.contains("metadata", { workflow: filters.workflow })
     }
 
     if (search) {
@@ -196,6 +201,38 @@ export class SupportRepository {
 
     if (error) {
       throwRepositoryError(error, "Unable to count support requests.")
+    }
+
+    return count ?? 0
+  }
+
+  async countPasswordResetRequests(filters: {
+    organizationId: string
+    hostelId?: string | null
+    status?: SupportStatus | SupportStatus[]
+  }) {
+    let query = this.db
+      .from("support_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", filters.organizationId)
+      .eq("category", "account")
+      .contains("metadata", { workflow: "resident_password_reset" })
+      .is("deleted_at", null)
+
+    if (filters.hostelId) {
+      query = query.eq("hostel_id", filters.hostelId)
+    }
+
+    if (Array.isArray(filters.status)) {
+      query = query.in("status", filters.status)
+    } else if (filters.status) {
+      query = query.eq("status", filters.status)
+    }
+
+    const { error, count } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to count resident password reset requests.")
     }
 
     return count ?? 0

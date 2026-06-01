@@ -2,14 +2,22 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { motion, type Variants } from "framer-motion"
 import {
   AlertCircle,
+  BedDouble,
+  CalendarDays,
+  Camera,
   CheckCircle2,
   FileUp,
   IdCard,
   Loader2,
+  MapPin,
   Save,
+  ShieldCheck,
+  UserRoundCheck,
   UserRound,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react"
 import { useForm, type UseFormRegisterReturn } from "react-hook-form"
@@ -48,6 +56,21 @@ const profileFormSchema = updateOwnResidentProfileSchema.omit({
 
 type ProfileFormInput = z.input<typeof profileFormSchema>
 type ProfileFormValues = z.output<typeof profileFormSchema>
+
+const stagger: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+}
+
+const reveal: Variants = {
+  hidden: { opacity: 0, y: 14, filter: "blur(6px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+  },
+}
 
 export function ResidentProfileClient() {
   const { organizationId } = useAuth()
@@ -227,34 +250,67 @@ export function ResidentProfileClient() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <ProfileMetric
-          label="Profile completion"
-          value={`${completion}%`}
-          detail="Required contact and document fields"
-        />
-        <ProfileMetric
-          label="Admission"
-          value={resident.admission_number}
-          detail={`Joined ${resident.joined_on ? formatDate(resident.joined_on) : "pending"}`}
-        />
-        <ProfileMetric
-          label="Status"
-          value={<StatusBadge status={resident.status} />}
-          detail={humanizeEnum(resident.resident_type)}
-        />
-      </div>
+    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-6">
+      <ProfileHero
+        fullName={resident.full_name}
+        preferredName={resident.preferred_name}
+        admissionNumber={resident.admission_number}
+        status={resident.status}
+        residentType={humanizeEnum(resident.resident_type)}
+        completion={completion}
+        latestPhotoUrl={latestPhotoUpload?.signedUrl}
+      />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Personal Profile</CardTitle>
-            <CardDescription>
-              Keep your contact, guardian, and emergency details current.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-3">
+        <InfoCard
+          icon={CalendarDays}
+          title="Admission information"
+          items={[
+            ["Admission no.", resident.admission_number],
+            ["Joined", resident.joined_on ? formatDate(resident.joined_on) : "Pending"],
+            ["Resident type", humanizeEnum(resident.resident_type)],
+            ["Status", <StatusBadge key="status" status={resident.status} />],
+          ]}
+        />
+        <InfoCard
+          icon={BedDouble}
+          title="Room information"
+          items={[
+            ["Room allocation", "Managed by hostel office"],
+            ["Monthly fee", `₹${Number(resident.monthly_fee_amount).toLocaleString("en-IN")}`],
+            ["Security deposit", `₹${Number(resident.security_deposit_amount).toLocaleString("en-IN")}`],
+            ["Hostel record", resident.hostel_id.slice(0, 8)],
+          ]}
+        />
+        <InfoCard
+          icon={ShieldCheck}
+          title="Emergency contacts"
+          items={[
+            ["Parent / guardian", resident.parent_name ?? "Not added"],
+            ["Parent phone", resident.parent_phone ?? "Not added"],
+            ["Emergency contact", resident.emergency_contact_name ?? "Not added"],
+            ["Emergency phone", resident.emergency_contact_phone ?? "Not added"],
+          ]}
+        />
+      </motion.section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <motion.div variants={reveal}>
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b bg-white/45">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Profile details</CardTitle>
+                  <CardDescription>
+                    Keep your contact, guardian, and emergency details current.
+                  </CardDescription>
+                </div>
+                <span className="hidden rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-primary/15 sm:inline-flex">
+                  Editable
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-5">
             {form.formState.errors.root?.message ? (
               <div className="mb-5">
                 <APIErrorState
@@ -263,8 +319,16 @@ export function ResidentProfileClient() {
                 />
               </div>
             ) : null}
-            <form className="grid gap-5" onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="grid gap-4 md:grid-cols-2">
+            <motion.form
+              layout
+              className="grid gap-6"
+              onSubmit={form.handleSubmit(onSubmit)}
+            >
+              <FormSection
+                icon={UserRoundCheck}
+                title="Student identity"
+                description="Your core resident identity is managed by hostel administration."
+              >
                 <ReadOnlyField label="Full name" value={resident.full_name} />
                 <ReadOnlyField label="Resident type" value={humanizeEnum(resident.resident_type)} />
                 <Field
@@ -291,9 +355,13 @@ export function ResidentProfileClient() {
                   label="Monthly fee"
                   value={`₹${Number(resident.monthly_fee_amount).toLocaleString("en-IN")}`}
                 />
-              </div>
+              </FormSection>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <FormSection
+                icon={UsersRound}
+                title="Guardian and emergency"
+                description="These details help the hostel team reach the right person quickly."
+              >
                 <Field
                   id="parentName"
                   label="Parent or guardian"
@@ -327,21 +395,28 @@ export function ResidentProfileClient() {
                   registration={form.register("emergencyContactPhone")}
                   error={form.formState.errors.emergencyContactPhone?.message}
                 />
-              </div>
+              </FormSection>
 
-              <div className="grid gap-2">
-                <Label htmlFor="permanentAddress">Permanent address</Label>
-                <Textarea
-                  id="permanentAddress"
-                  rows={4}
-                  {...form.register("permanentAddress")}
-                />
-                {form.formState.errors.permanentAddress?.message ? (
-                  <p className="text-sm text-destructive">
-                    {form.formState.errors.permanentAddress.message}
-                  </p>
-                ) : null}
-              </div>
+              <FormSection
+                icon={MapPin}
+                title="Permanent address"
+                description="Used for hostel records and emergency reference."
+                columns="single"
+              >
+                <div className="grid gap-2">
+                  <Label htmlFor="permanentAddress">Permanent address</Label>
+                  <Textarea
+                    id="permanentAddress"
+                    rows={4}
+                    {...form.register("permanentAddress")}
+                  />
+                  {form.formState.errors.permanentAddress?.message ? (
+                    <p className="text-sm text-destructive">
+                      {form.formState.errors.permanentAddress.message}
+                    </p>
+                  ) : null}
+                </div>
+              </FormSection>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button
@@ -357,11 +432,36 @@ export function ResidentProfileClient() {
                   Save profile
                 </Button>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+            </motion.form>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <div className="grid content-start gap-6">
+        <motion.aside variants={stagger} className="grid content-start gap-6">
+          <motion.div variants={reveal}>
+            <Card>
+              <CardHeader>
+                <CardTitle>Documents section</CardTitle>
+                <CardDescription>
+                  Uploads help complete onboarding and keep hostel records current.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="h-full rounded-full bg-linear-to-r from-primary via-cyan-500 to-emerald-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${completion}%` }}
+                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Profile completion</span>
+                  <span className="font-semibold">{completion}%</span>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
           <UploadPanel
             icon={IdCard}
             title="Aadhaar document"
@@ -384,29 +484,139 @@ export function ResidentProfileClient() {
             previewUrl={latestPhotoUpload?.signedUrl}
             onFileSelected={uploadProfilePhoto}
           />
-        </div>
+        </motion.aside>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
-function ProfileMetric({
-  label,
-  value,
-  detail,
+function ProfileHero({
+  fullName,
+  preferredName,
+  admissionNumber,
+  status,
+  residentType,
+  completion,
+  latestPhotoUrl,
 }: {
-  label: string
-  value: string | ReactNode
-  detail: string
+  fullName: string
+  preferredName?: string | null
+  admissionNumber: string
+  status: string
+  residentType: string
+  completion: number
+  latestPhotoUrl?: string
+}) {
+  const displayName = preferredName || fullName
+
+  return (
+    <motion.section variants={reveal} className="overflow-hidden rounded-2xl border bg-slate-950 text-white shadow-lifted">
+      <div className="relative p-5 sm:p-6">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.24),transparent_32rem),radial-gradient(circle_at_85%_15%,rgba(59,130,246,0.22),transparent_26rem)]" />
+        <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="relative size-24 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-white/10 shadow-2xl">
+              {latestPhotoUrl ? (
+                // Latest signed upload URL is generated by the upload endpoint.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={latestPhotoUrl} alt={`${displayName} profile`} className="h-full w-full object-cover" />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-3xl font-semibold">
+                  {getInitials(displayName)}
+                </div>
+              )}
+              <span className="absolute bottom-2 right-2 flex size-7 items-center justify-center rounded-lg bg-white text-slate-950 shadow-sm">
+                <Camera className="size-3.5" aria-hidden="true" />
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-cyan-100">Resident profile</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                {displayName}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/72">
+                <span>{admissionNumber}</span>
+                <span aria-hidden="true">·</span>
+                <span>{residentType}</span>
+                <StatusBadge status={status} />
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-xl sm:min-w-64">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-white/64">Completion</span>
+              <span className="text-2xl font-semibold">{completion}%</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
+              <motion.div
+                className="h-full rounded-full bg-cyan-200"
+                initial={{ width: 0 }}
+                animate={{ width: `${completion}%` }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  )
+}
+
+function InfoCard({
+  icon: Icon,
+  title,
+  items,
+}: {
+  icon: LucideIcon
+  title: string
+  items: [string, ReactNode][]
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-xl">{value}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">{detail}</CardContent>
-    </Card>
+    <motion.article variants={reveal} className="saas-surface motion-lift rounded-xl p-5">
+      <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+        <Icon className="size-5" aria-hidden="true" />
+      </span>
+      <h2 className="mt-4 text-base font-semibold">{title}</h2>
+      <div className="mt-4 grid gap-3">
+        {items.map(([label, value]) => (
+          <div key={label} className="flex items-start justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="max-w-[12rem] text-right font-medium text-foreground">{value}</span>
+          </div>
+        ))}
+      </div>
+    </motion.article>
+  )
+}
+
+function FormSection({
+  icon: Icon,
+  title,
+  description,
+  children,
+  columns = "double",
+}: {
+  icon: LucideIcon
+  title: string
+  description: string
+  children: ReactNode
+  columns?: "single" | "double"
+}) {
+  return (
+    <motion.section layout variants={reveal} className="rounded-xl border bg-white/50 p-4">
+      <div className="flex gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className={columns === "single" ? "mt-4 grid gap-4" : "mt-4 grid gap-4 md:grid-cols-2"}>
+        {children}
+      </div>
+    </motion.section>
   )
 }
 
@@ -424,11 +634,11 @@ function Field({
   error?: string
 }) {
   return (
-    <div className="grid gap-2">
+    <motion.div layout className="grid gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type={type} {...registration} />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </div>
+    </motion.div>
   )
 }
 
@@ -436,7 +646,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-2">
       <span className="text-sm font-medium">{label}</span>
-      <div className="min-h-8 rounded-lg border bg-muted/40 px-3 py-1.5 text-sm">
+      <div className="min-h-9 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
         {value}
       </div>
     </div>
@@ -465,6 +675,7 @@ function UploadPanel({
   onFileSelected: (file: File | null) => void
 }) {
   return (
+    <motion.div variants={reveal}>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -482,7 +693,7 @@ function UploadPanel({
           )}
           <span>{isUploaded ? "Uploaded" : "Required for full onboarding"}</span>
         </div>
-        <Label className="grid cursor-pointer gap-2 rounded-lg border border-dashed p-4 text-center hover:bg-muted/40">
+        <Label className="grid cursor-pointer gap-2 rounded-lg border border-dashed bg-white/50 p-4 text-center transition hover:-translate-y-0.5 hover:bg-white hover:shadow-soft">
           <FileUp className="mx-auto size-5" aria-hidden="true" />
           <span className="text-sm font-medium">
             {isPending ? `Uploading ${progress}%` : "Choose file"}
@@ -504,6 +715,7 @@ function UploadPanel({
         ) : null}
       </CardContent>
     </Card>
+    </motion.div>
   )
 }
 
@@ -533,4 +745,13 @@ function ProfileSkeleton() {
       </Card>
     </div>
   )
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("")
 }

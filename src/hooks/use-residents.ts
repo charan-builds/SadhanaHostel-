@@ -119,6 +119,23 @@ export function useRepairResidentLifecycle() {
   })
 }
 
+export function useResetResidentPassword() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { residentId: string; organizationId: string }) =>
+      residentsSdk.resetPassword(input),
+    onSuccess: (result, input) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.residents.all({ organizationId: input.organizationId }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.residents.detail({ organizationId: input.organizationId }, input.residentId),
+      })
+    },
+  })
+}
+
 function invalidateResidentOperationalState(
   queryClient: ReturnType<typeof useQueryClient>,
   organizationId: string,

@@ -110,14 +110,8 @@ export function PublicAuthActions({
 
     return (
       <div className={cn("grid gap-2", className)}>
-        <Button asChild className="justify-start">
-          <Link href={"/login" as Route} onClick={onNavigate}>
-            <LogIn className="size-4" aria-hidden="true" />
-            Login
-          </Link>
-        </Button>
         <div className="grid grid-cols-2 gap-2">
-          <Button asChild variant="outline" className="justify-start">
+          <Button asChild className="justify-start">
             <Link href={"/resident/login" as Route} onClick={onNavigate}>
               <UserRound className="size-4" aria-hidden="true" />
               Resident
@@ -193,13 +187,6 @@ export function PublicAuthActions({
           <Link href={"/admin/login" as Route}>
             <ShieldCheck className="size-4" aria-hidden="true" />
             Admin Portal
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href={"/login" as Route}>
-            <LogIn className="size-4" aria-hidden="true" />
-            General Login
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

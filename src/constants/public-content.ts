@@ -3,6 +3,7 @@ import {
   HOSTEL_LOCATION,
   HOSTEL_RULES,
 } from "@/constants/hostel"
+import { hostelGalleryImages } from "@/constants/hostel-images"
 import type {
   FacilityItem,
   GalleryItem,
@@ -92,6 +93,14 @@ export const fallbackRoomTypes: RoomTypeCard[] = [
     features: ["Affordable rooms", "Study-friendly stay", "Near college route"],
     icon: "graduation-cap",
   },
+  {
+    title: "Employees",
+    price: HOSTEL_FEES.employee,
+    priceLabel: `₹${HOSTEL_FEES.employee}/month`,
+    description: "Comfortable stay option for employees and working professionals.",
+    features: ["Comfort-focused rooms", "Parking support", "Attached bathroom options"],
+    icon: "briefcase-business",
+  },
 ]
 
 export const fallbackGalleryItems: GalleryItem[] = [
@@ -99,36 +108,49 @@ export const fallbackGalleryItems: GalleryItem[] = [
     title: "Exterior",
     category: "Hostel",
     alt: "Sadhana Boys Hostel exterior view",
+    imageUrl: hostelGalleryImages[0],
   },
   {
     title: "Courtyard",
     category: "Common area",
     alt: "Hostel courtyard area",
+    imageUrl: hostelGalleryImages[2],
   },
   {
     title: "Night view",
     category: "Hostel",
     alt: "Sadhana Boys Hostel night view",
+    imageUrl: hostelGalleryImages[1],
   },
   {
-    title: "Rooms",
-    category: "Accommodation",
-    alt: "Resident room setup",
+    title: "Student rooms",
+    category: "student-room",
+    alt: "Student room setup",
+    imageUrl: hostelGalleryImages[5],
+  },
+  {
+    title: "Employee rooms",
+    category: "employee-room",
+    alt: "Employee room setup",
+    imageUrl: hostelGalleryImages[1],
   },
   {
     title: "Bathrooms",
     category: "Facilities",
     alt: "Bathroom facilities",
+    imageUrl: hostelGalleryImages[4],
   },
   {
     title: "Dining area",
     category: "Food",
     alt: "Dining area for residents",
+    imageUrl: hostelGalleryImages[3],
   },
   {
     title: "Terrace",
     category: "Common area",
     alt: "Hostel terrace space",
+    imageUrl: hostelGalleryImages[1],
   },
 ]
 

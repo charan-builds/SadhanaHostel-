@@ -7,7 +7,7 @@ import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
-import { PaymentsRepository } from "@/repositories/payments.repository"
+import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
@@ -25,6 +25,7 @@ import {
   paymentSettingsQuerySchema,
   paymentSettingsSchema,
   paymentSettingsTestSchema,
+  recordInPersonPaymentSchema,
   rejectPaymentSchema,
   residentPaymentLedgerSchema,
   submitUpiPaymentSchema,
@@ -184,6 +185,148 @@ export class PaymentsService {
     return payment
   }
 
+  async recordInPersonPayment(input: unknown) {
+    const values = recordInPersonPaymentSchema.parse(input)
+    const context = await this.authService.requirePermission("finance.manage")
+    const idempotencyKey = values.idempotencyKey ?? crypto.randomUUID()
+
+    this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+
+    const resident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    if (resident.hostel_id !== values.hostelId) {
+      throw conflict("Payment hostel does not match resident hostel.")
+    }
+
+    let payment = await this.paymentsRepository.findByIdempotencyKey(
+      values.organizationId,
+      idempotencyKey
+    )
+
+    if (payment) {
+      if (
+        payment.resident_id !== values.residentId ||
+        payment.hostel_id !== values.hostelId ||
+        payment.organization_id !== values.organizationId
+      ) {
+        throw conflict("This in-person payment reference is already used for another resident.")
+      }
+
+      if (payment.status === "verified") {
+        return payment
+      }
+
+      if (payment.status !== "pending") {
+        throw conflict("This in-person payment is not ready for admin verification.")
+      }
+    } else {
+      await this.assertManualPaymentPolicy({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        amount: values.amount,
+        isPartial: values.isPartial,
+        isAdvance: values.isAdvance,
+      })
+      await this.assertResidentPaymentAmount({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.monthlyFeeRecordId,
+        amount: values.amount,
+        isPartial: values.isPartial,
+        isAdvance: values.isAdvance,
+      })
+
+      payment = await this.paymentsRepository.create({
+        organization_id: values.organizationId,
+        hostel_id: values.hostelId,
+        resident_id: values.residentId,
+        monthly_fee_record_id: values.isAdvance ? null : values.monthlyFeeRecordId,
+        amount: values.amount,
+        method: values.method,
+        status: "pending",
+        transaction_id:
+          values.method === "bank_transfer" && values.manualReference
+            ? values.manualReference
+            : null,
+        idempotency_key: idempotencyKey,
+        manual_reference: values.manualReference || null,
+        notes: values.notes || null,
+        is_advance: values.isAdvance,
+        is_partial: values.isPartial,
+        provider: "admin_manual_entry",
+        paid_at: new Date().toISOString(),
+        metadata: {
+          idempotency_key: idempotencyKey,
+          source: "admin_in_person",
+          manual_entry: true,
+          created_as_pending_for_atomic_verification: true,
+        },
+        received_by: context.authUser.id,
+        created_by: context.authUser.id,
+        updated_by: context.authUser.id,
+      })
+    }
+
+    await this.ensureManualPaymentProof(payment, context.authUser.id, {
+      manualReference: values.manualReference || null,
+      notes: values.notes || null,
+    })
+
+    let verifiedPayment = await this.paymentsRepository.verify(
+      payment.id,
+      values.organizationId,
+      context.authUser.id,
+      idempotencyKey
+    )
+
+    if (verifiedPayment.monthly_fee_record_id) {
+      try {
+        await this.invoicesService.generateMonthlyFeeInvoice({
+          organizationId: values.organizationId,
+          monthlyFeeRecordId: verifiedPayment.monthly_fee_record_id,
+        })
+        verifiedPayment =
+          (await this.paymentsRepository.getById(
+            verifiedPayment.id,
+            verifiedPayment.organization_id
+          )) ?? verifiedPayment
+      } catch (error) {
+        logError(error, {
+          event: "payment.invoice_generation_after_manual_entry_failed",
+          paymentId: verifiedPayment.id,
+          organizationId: verifiedPayment.organization_id,
+        })
+      }
+    }
+
+    logPaymentEvent({
+      action: "verified",
+      paymentId: verifiedPayment.id,
+      residentId: verifiedPayment.resident_id,
+      organizationId: verifiedPayment.organization_id,
+      actorUserId: context.authUser.id,
+      amount: verifiedPayment.amount,
+      status: verifiedPayment.status,
+      details: {
+        method: verifiedPayment.method,
+        manualReference: verifiedPayment.manual_reference,
+      },
+    })
+    incrementMetric("payments.in_person_recorded", 1, {
+      organizationId: verifiedPayment.organization_id,
+      method: verifiedPayment.method,
+      status: verifiedPayment.status,
+    })
+
+    await this.publishPaymentVerificationEvents(verifiedPayment, context.authUser.id)
+
+    return verifiedPayment
+  }
+
   async submitUpiPaymentWithProof(input: unknown, proofFile: File) {
     const values = submitUpiPaymentSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -212,7 +355,22 @@ export class PaymentsService {
       this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     }
 
-    await this.assertPaymentSettingPolicy(values)
+    await this.assertPaymentSettingPolicy({
+      ...values,
+      requireTransactionReference: false,
+    })
+    await this.assertResidentPaymentAmount({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      amount: values.amount,
+      isPartial: values.isPartial,
+      isAdvance: values.isAdvance,
+    })
+
+    const transactionId =
+      values.transactionId ?? createScreenshotPaymentReference(values.idempotencyKey)
 
     let payment = await this.paymentsRepository.createResidentUpiDraft({
       organizationId: values.organizationId,
@@ -220,7 +378,7 @@ export class PaymentsService {
       residentId: values.residentId,
       monthlyFeeRecordId: values.monthlyFeeRecordId,
       amount: values.amount,
-      transactionId: values.transactionId,
+      transactionId,
       idempotencyKey: values.idempotencyKey,
       notes: values.notes,
       isAdvance: values.isAdvance,
@@ -270,6 +428,7 @@ export class PaymentsService {
       details: {
         idempotencyKey: values.idempotencyKey,
         method: payment.method,
+        referenceProvidedByResident: Boolean(values.transactionId),
       },
     })
     incrementMetric("payments.submitted_with_proof", 1, {
@@ -316,6 +475,15 @@ export class PaymentsService {
     }
 
     await this.assertPaymentSettingPolicy(values)
+    await this.assertResidentPaymentAmount({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      amount: values.amount,
+      isPartial: values.isPartial,
+      isAdvance: values.isAdvance,
+    })
 
     if (values.idempotencyKey) {
       const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
@@ -1140,6 +1308,101 @@ export class PaymentsService {
     }
   }
 
+  private async assertManualPaymentPolicy(values: {
+    organizationId: string
+    hostelId: string
+    amount: number
+    isPartial?: boolean
+    isAdvance?: boolean
+  }) {
+    const setting = await this.paymentSettingsRepository.getActive(
+      values.organizationId,
+      values.hostelId
+    )
+
+    if (!setting) {
+      return
+    }
+
+    if (values.amount < setting.min_payment_amount) {
+      throw conflict(`Payment amount must be at least ${setting.min_payment_amount}.`)
+    }
+
+    if (values.isPartial && !setting.allow_partial_payment) {
+      throw conflict("Partial payments are disabled for this hostel.")
+    }
+
+    if (values.isAdvance && !setting.allow_advance_payment) {
+      throw conflict("Advance payments are disabled for this hostel.")
+    }
+  }
+
+  private async ensureManualPaymentProof(
+    payment: PaymentRow,
+    actorUserId: string,
+    details: {
+      manualReference?: string | null
+      notes?: string | null
+    }
+  ) {
+    const existingProof = await this.uploadsRepository.findLatestPaymentProof(
+      payment.organization_id,
+      payment.id
+    )
+
+    if (existingProof) {
+      return existingProof
+    }
+
+    const file = createManualPaymentReceiptMarker(payment.id)
+    const storagePath = [
+      payment.organization_id,
+      payment.resident_id,
+      "manual-payment-receipts",
+      `${payment.id}.png`,
+    ].join("/")
+    const now = new Date().toISOString()
+
+    await this.uploadsRepository.uploadObject(
+      "payment-screenshots",
+      storagePath,
+      file,
+      {
+        upsert: true,
+        cacheControl: "3600",
+      }
+    )
+
+    return this.uploadsRepository.createDocument({
+      organization_id: payment.organization_id,
+      hostel_id: payment.hostel_id,
+      resident_id: payment.resident_id,
+      payment_id: payment.id,
+      uploaded_by_user_id: actorUserId,
+      document_type: "payment_receipt",
+      status: "verified",
+      bucket_name: "payment-screenshots",
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: file.type,
+      file_size_bytes: file.size,
+      verified_by: actorUserId,
+      verified_at: now,
+      is_public: false,
+      metadata: {
+        source: "admin_in_person",
+        generated_receipt_marker: true,
+        method: payment.method,
+        amount: payment.amount,
+        manual_reference: details.manualReference ?? null,
+        notes: details.notes ?? null,
+        generated_at: now,
+      },
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    })
+  }
+
   private async assertPaymentSettingPolicy(values: {
     organizationId: string
     hostelId: string
@@ -1147,6 +1410,7 @@ export class PaymentsService {
     isPartial?: boolean
     isAdvance?: boolean
     transactionId?: string
+    requireTransactionReference?: boolean
   }) {
     const setting = await this.paymentSettingsRepository.getActive(
       values.organizationId,
@@ -1169,8 +1433,108 @@ export class PaymentsService {
       throw conflict("Advance payments are disabled for this hostel.")
     }
 
-    if (setting.require_utr && !values.transactionId) {
+    if (values.requireTransactionReference !== false && setting.require_utr && !values.transactionId) {
       throw conflict("UPI transaction reference is required.")
+    }
+  }
+
+  private async assertResidentPaymentAmount(values: {
+    organizationId: string
+    hostelId: string
+    residentId: string
+    monthlyFeeRecordId?: string | null
+    amount: number
+    isPartial?: boolean
+    isAdvance?: boolean
+  }) {
+    if (values.isAdvance) {
+      return
+    }
+
+    const payments = await this.paymentsRepository.listResidentPayments(
+      values.organizationId,
+      values.residentId,
+      { page: 1, pageSize: 100 }
+    )
+
+    if (values.monthlyFeeRecordId) {
+      const linkedRecord = assertFound(
+        await this.paymentsRepository.getFeeRecordById(
+          values.organizationId,
+          values.monthlyFeeRecordId
+        ),
+        "Monthly fee record not found."
+      )
+
+      if (
+        linkedRecord.hostel_id !== values.hostelId ||
+        linkedRecord.resident_id !== values.residentId
+      ) {
+        throw conflict("Payment due record does not match this resident.")
+      }
+
+      if (!["pending", "partial", "overdue"].includes(linkedRecord.status)) {
+        throw conflict("This due record is not payable anymore.")
+      }
+
+      const pendingForRecord = payments.data
+        .filter(
+          (payment) =>
+            payment.monthly_fee_record_id === values.monthlyFeeRecordId &&
+            (payment.status === "pending" || payment.status === "initiated")
+        )
+        .reduce((total, payment) => total + payment.amount, 0)
+      const payableForRecord = Math.max(linkedRecord.balance_amount - pendingForRecord, 0)
+
+      this.assertPayableAmount({
+        amount: values.amount,
+        payableDue: payableForRecord,
+        isPartial: values.isPartial,
+      })
+      return
+    }
+
+    const feeRecords = await this.paymentsRepository.listFeeRecords({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      page: 1,
+      pageSize: 100,
+    })
+    const currentDue = feeRecords.data
+      .filter((record) => ["pending", "partial", "overdue"].includes(record.status))
+      .reduce((total, record) => total + record.balance_amount, 0)
+    const pendingVerification = payments.data
+      .filter((payment) => payment.status === "pending" || payment.status === "initiated")
+      .reduce((total, payment) => total + payment.amount, 0)
+    const payableDue = Math.max(currentDue - pendingVerification, 0)
+
+    this.assertPayableAmount({
+      amount: values.amount,
+      payableDue,
+      isPartial: values.isPartial,
+    })
+  }
+
+  private assertPayableAmount(values: {
+    amount: number
+    payableDue: number
+    isPartial?: boolean
+  }) {
+    if (values.payableDue <= 0) {
+      throw conflict(
+        "No payable due is available right now. Mark the payment as advance if the hostel accepts advance payments."
+      )
+    }
+
+    if (values.amount > values.payableDue) {
+      throw conflict(
+        `Payment amount cannot exceed the payable due of ${values.payableDue}. Mark extra money as advance.`
+      )
+    }
+
+    if (values.amount < values.payableDue && !values.isPartial) {
+      throw conflict("Mark this as partial payment when paying less than the payable due.")
     }
   }
 
@@ -1206,3 +1570,24 @@ function appendQrPreviewCacheBust(
 
   return `${signedUrl}${signedUrl.includes("?") ? "&" : "?"}${cacheKey}`
 }
+
+function createManualPaymentReceiptMarker(paymentId: string) {
+  return new File(
+    [MANUAL_PAYMENT_RECEIPT_MARKER_PNG],
+    `manual-payment-receipt-${paymentId}.png`,
+    { type: "image/png" }
+  )
+}
+
+function createScreenshotPaymentReference(idempotencyKey: string) {
+  const compactKey = idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 32)
+
+  return `SCREENSHOT-${compactKey || crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+}
+
+const MANUAL_PAYMENT_RECEIPT_MARKER_PNG = Uint8Array.from([
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+  0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
+  120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 167, 246, 129, 37, 0, 0, 0, 0,
+  73, 69, 78, 68, 174, 66, 96, 130,
+])

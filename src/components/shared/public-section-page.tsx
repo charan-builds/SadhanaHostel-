@@ -20,22 +20,23 @@ export function PublicSectionPage({
   items,
 }: PublicSectionPageProps) {
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-12">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-12 sm:px-6 lg:py-16">
       <MotionReveal>
-      <section className="max-w-3xl">
-        <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {eyebrow}
-        </p>
-        <h1 className="text-gradient mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl">
-          {title}
-        </h1>
-        <p className="mt-4 text-lg leading-8 text-muted-foreground">{description}</p>
-      </section>
+        <section className="max-w-3xl">
+          <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+            {eyebrow}
+          </p>
+          <h1 className="text-gradient mt-3 text-4xl font-semibold tracking-tight text-balance md:text-5xl">
+            {title}
+          </h1>
+          <p className="mt-4 text-lg leading-8 text-muted-foreground">{description}</p>
+        </section>
       </MotionReveal>
 
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => (
-          <Card key={item.title}>
+        {items.map((item, index) => (
+          <MotionReveal key={item.title} delay={index * 0.04}>
+          <Card className="h-full">
             <CardHeader>
               <CardTitle>{item.title}</CardTitle>
               <CardDescription>{item.description}</CardDescription>
@@ -44,6 +45,7 @@ export function PublicSectionPage({
               <div className="h-1.5 rounded-full bg-primary/15" />
             </CardContent>
           </Card>
+          </MotionReveal>
         ))}
       </section>
     </main>

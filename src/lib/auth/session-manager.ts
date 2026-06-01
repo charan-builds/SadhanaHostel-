@@ -48,13 +48,18 @@ export function anonymousSessionOverview(): SessionOverview {
     organizationId: null,
     hostelIds: [],
     onboardingRequired: false,
-    redirectTo: "/login",
+    redirectTo: "/admin/login",
+    security: {
+      forcePasswordReset: false,
+      temporaryPasswordActive: false,
+      temporaryPasswordExpiresAt: null,
+    },
   }
 }
 
 export function resolveHomeRoute(session: SessionOverview | null) {
   if (!session?.authenticated) {
-    return "/login"
+    return "/admin/login"
   }
 
   if (session.onboardingRequired && session.redirectTo) {

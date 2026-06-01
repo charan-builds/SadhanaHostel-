@@ -10,7 +10,7 @@ import {
 } from "./common.validation"
 
 export const websiteSettingsListSchema = paginationSchema.extend({
-  organizationId: uuidSchema,
+  organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
   sectionKey: z.string().trim().max(80).optional(),
   status: z.enum(Constants.public.Enums.cms_status_enum).optional(),
@@ -27,7 +27,7 @@ export const updateWebsiteSettingSchema = z.object({
 })
 
 export const facilitiesListSchema = paginationSchema.extend({
-  organizationId: uuidSchema,
+  organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
   status: z.enum(Constants.public.Enums.cms_status_enum).optional(),
   highlightedOnly: booleanLikeSchema.optional(),
@@ -47,7 +47,7 @@ export const createFacilitySchema = z.object({
 })
 
 export const galleryListSchema = paginationSchema.extend({
-  organizationId: uuidSchema,
+  organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
   status: z.enum(Constants.public.Enums.cms_status_enum).optional(),
   category: z.string().trim().max(80).optional(),

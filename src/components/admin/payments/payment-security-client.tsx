@@ -2,14 +2,20 @@
 
 import {
   AlertTriangle,
+  BadgeCheck,
   CheckCircle2,
   Eye,
+  History,
   Loader2,
+  LockKeyhole,
   QrCode,
   RotateCcw,
   Save,
   ShieldCheck,
+  UploadCloud,
+  type LucideIcon,
 } from "lucide-react"
+import { motion, type Variants } from "framer-motion"
 import * as Sentry from "@sentry/nextjs"
 import type { ChangeEvent, ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
@@ -66,7 +72,7 @@ import type { PaymentSettingsInput } from "@/validations/payment.validation"
 
 const DEFAULT_UTR_REGEX = "^[A-Z0-9][A-Z0-9._/-]{5,63}$"
 const DEFAULT_INSTRUCTIONS =
-  "Scan the QR code using any UPI app, pay the exact due amount, then submit the UPI reference and screenshot for verification."
+  "Scan the QR code using any UPI app, pay the exact due amount, then upload the payment screenshot for verification. UPI reference is optional."
 
 type PaymentSecurityForm = {
   accountName: string
@@ -100,6 +106,21 @@ type QrUploadLifecycleStatus =
 type PaymentSecurityClientProps = {
   organizationId: string | null
   hostelId: string | null
+}
+
+const stagger: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+}
+
+const reveal: Variants = {
+  hidden: { opacity: 0, y: 14, filter: "blur(6px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+  },
 }
 
 export function PaymentSecurityClient({
@@ -313,7 +334,8 @@ export function PaymentSecurityClient({
   }
 
   return (
-    <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
+    <ResponsiveContainer size="wide" className="px-0 sm:px-0">
+    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-6">
       <PageHeader
         title="Payment Security"
         description="Manage the hostel's manual UPI receiving account, QR rotation, verification rules, and finance audit trail."
@@ -347,30 +369,38 @@ export function PaymentSecurityClient({
         />
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatusPanel
+          icon={BadgeCheck}
           label="Account"
           value={activeSetting?.account_name ?? "Not configured"}
           status={activeSetting?.is_active ? "Active" : "Ready to configure"}
+          tone={activeSetting?.is_active ? "success" : "warning"}
         />
         <StatusPanel
+          icon={QrCode}
           label="UPI ID"
           value={activeSetting?.upi_id ?? "QR only"}
           status={activeSetting?.require_utr ? "UTR required" : "UTR optional"}
+          tone="info"
         />
         <StatusPanel
+          icon={History}
           label="Version"
           value={`v${activeSetting?.version ?? 0} / QR ${activeSetting?.qr_version ?? 0}`}
           status={activeSetting?.updated_at ? formatDateTime(activeSetting.updated_at) : "Never saved"}
+          tone="primary"
         />
         <StatusPanel
+          icon={LockKeyhole}
           label="Duplicate Detection"
           value={form.duplicateDetectionStrictness}
           status={form.allowPartialPayment ? "Partial allowed" : "Exact payments"}
+          tone={form.duplicateDetectionStrictness === "strict" ? "success" : "warning"}
         />
-      </section>
+      </motion.section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <motion.section variants={reveal} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="grid gap-6">
           <Panel
             title="Active Payment Account"
@@ -407,8 +437,10 @@ export function PaymentSecurityClient({
             title="QR Management"
             description="Replacing the QR increments the QR version and invalidates payment-setting caches."
           >
-            <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-              <div className="flex min-h-52 items-center justify-center rounded-lg border bg-muted/20 p-4">
+            <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
+              <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/55 p-4 shadow-soft backdrop-blur-2xl">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_18rem),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.16),transparent_14rem)]" />
+                <div className="relative flex min-h-60 items-center justify-center rounded-xl border border-white/80 bg-white/72 p-4 shadow-inner">
                 {qrFilePreviewUrl ? (
                   // Local object URLs are used only before upload so admins can verify the selected QR.
                   // eslint-disable-next-line @next/next/no-img-element
@@ -416,7 +448,7 @@ export function PaymentSecurityClient({
                     key={qrFilePreviewUrl}
                     src={qrFilePreviewUrl}
                     alt="Selected payment QR preview"
-                    className="max-h-44 max-w-44 rounded-md object-contain"
+                    className="max-h-48 max-w-48 rounded-lg object-contain shadow-soft"
                   />
                 ) : activeSetting?.qrImageSignedUrl ? (
                   // Signed URLs are generated server-side and expire quickly.
@@ -425,7 +457,7 @@ export function PaymentSecurityClient({
                     key={activeSetting.qrImageSignedUrl}
                     src={activeSetting.qrImageSignedUrl}
                     alt="Current active payment QR"
-                    className="max-h-44 max-w-44 rounded-md object-contain"
+                    className="max-h-48 max-w-48 rounded-lg object-contain shadow-soft"
                     onError={() => setFailedQrPreviewUrl(activeSetting.qrImageSignedUrl)}
                   />
                 ) : activeSetting?.qr_image_path ? (
@@ -439,16 +471,40 @@ export function PaymentSecurityClient({
                     <span className="text-sm">No QR configured</span>
                   </div>
                 )}
+                </div>
+                <div className="relative mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span>Glass preview</span>
+                  <Badge variant={activeSetting?.is_active ? "secondary" : "outline"}>
+                    QR {activeSetting?.qr_version ?? 0}
+                  </Badge>
+                </div>
               </div>
               <div className="grid content-start gap-4">
-                <Field label="Replace QR image" htmlFor="qrFile">
+                <label
+                  htmlFor="qrFile"
+                  className="group grid cursor-pointer place-items-center gap-3 rounded-2xl border border-dashed border-primary/25 bg-primary/5 p-6 text-center transition hover:-translate-y-0.5 hover:border-primary/45 hover:bg-primary/10 hover:shadow-soft"
+                >
+                  <span className="flex size-12 items-center justify-center rounded-xl bg-white text-primary shadow-sm ring-1 ring-primary/15 transition-transform group-hover:scale-105">
+                    {uploadQr.isPending ? (
+                      <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <UploadCloud className="size-5" aria-hidden="true" />
+                    )}
+                  </span>
+                  <span className="text-sm font-semibold">
+                    {qrFile ? "QR selected for rotation" : "Upload replacement QR"}
+                  </span>
+                  <span className="max-w-md text-xs leading-5 text-muted-foreground">
+                    JPEG, PNG, or WebP up to 2 MB. The new QR becomes live only after Upload & Save.
+                  </span>
                   <Input
                     id="qrFile"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
                     onChange={handleQrFileChange}
                   />
-                </Field>
+                </label>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -553,7 +609,7 @@ export function PaymentSecurityClient({
           </Panel>
         </div>
 
-        <div className="grid content-start gap-6">
+        <motion.div variants={stagger} className="grid content-start gap-6">
           <Panel title="Configuration Test" description="Run before saving payment-account changes.">
             {validationResult ? (
               <div className="grid gap-3">
@@ -583,9 +639,17 @@ export function PaymentSecurityClient({
             {history.isLoading ? (
               <LoadingState />
             ) : history.data?.length ? (
-              <div className="grid gap-3">
+              <div className="relative grid gap-4">
+                <div className="absolute bottom-4 left-4 top-4 w-px bg-border" aria-hidden="true" />
                 {history.data.map((setting) => (
-                  <div key={setting.id} className="rounded-lg border p-3">
+                  <motion.div
+                    key={setting.id}
+                    variants={reveal}
+                    className="relative rounded-xl border bg-white/60 p-3 pl-12 shadow-sm transition hover:bg-white hover:shadow-soft"
+                  >
+                    <span className="absolute left-0 top-3 flex size-8 items-center justify-center rounded-full border bg-background text-primary">
+                      <History className="size-4" aria-hidden="true" />
+                    </span>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium">{setting.account_name}</p>
@@ -610,16 +674,17 @@ export function PaymentSecurityClient({
                         Reactivate
                       </Button>
                     ) : null}
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             ) : (
               <EmptyState title="No payment accounts" message="Save the first payment account to start rotation history." />
             )}
           </Panel>
-        </div>
-      </section>
+        </motion.div>
+      </motion.section>
 
+      <motion.div variants={reveal}>
       <Panel title="Audit Logs" description="Finance configuration changes are written to tenant-scoped append-only audit logs.">
         {auditLogs.isLoading ? (
           <LoadingState variant="table" />
@@ -648,6 +713,7 @@ export function PaymentSecurityClient({
           <EmptyState title="No audit logs yet" message="Payment configuration changes will appear here after the first save." />
         )}
       </Panel>
+      </motion.div>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="sm:max-w-md">
@@ -691,6 +757,7 @@ export function PaymentSecurityClient({
         confirmLabel="Reactivate"
         onConfirm={() => (reactivateTarget ? reactivate(reactivateTarget) : undefined)}
       />
+    </motion.div>
     </ResponsiveContainer>
   )
 
@@ -756,7 +823,7 @@ function Panel({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border bg-background p-4 shadow-sm">
+    <section className="saas-surface overflow-hidden rounded-xl p-4">
       <div className="mb-4">
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
@@ -797,7 +864,7 @@ function ToggleRow({
   return (
     <label
       htmlFor={id}
-      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border bg-white/55 px-3 py-2 text-sm transition hover:bg-white hover:shadow-sm"
     >
       <span>{label}</span>
       <input
@@ -812,20 +879,38 @@ function ToggleRow({
 }
 
 function StatusPanel({
+  icon: Icon,
   label,
   value,
   status,
+  tone = "primary",
 }: {
+  icon: LucideIcon
   label: string
   value: string
   status: string
+  tone?: "primary" | "success" | "warning" | "info"
 }) {
+  const toneClassName = {
+    primary: "bg-primary/10 text-primary ring-primary/15",
+    success: "bg-success-surface text-success-foreground ring-success/15",
+    warning: "bg-warning-surface text-warning-foreground ring-warning/15",
+    info: "bg-info-surface text-info-foreground ring-info/15",
+  }[tone]
+
   return (
-    <div className="rounded-lg border bg-background p-4 shadow-sm">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 truncate text-lg font-semibold">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{status}</p>
-    </div>
+    <motion.article variants={reveal} className="saas-surface motion-lift rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="mt-2 truncate text-lg font-semibold">{value}</p>
+        </div>
+        <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClassName}`}>
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">{status}</p>
+    </motion.article>
   )
 }
 

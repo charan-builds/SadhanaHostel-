@@ -93,7 +93,7 @@ export function ConnectivityRecoveryBanner() {
           </Button>
           {sessionExpired ? (
             <Button asChild size="sm">
-              <Link href={"/login" as Route}>Login</Link>
+              <Link href={"/admin/login" as Route}>Admin login</Link>
             </Button>
           ) : null}
         </div>

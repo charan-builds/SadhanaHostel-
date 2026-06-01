@@ -5,6 +5,7 @@ import type { Route } from "next"
 import { CalendarDays, CreditCard, FileText, User, type LucideIcon } from "lucide-react"
 
 import { LoadingState } from "@/components/shared/loading-state"
+import { MotionReveal } from "@/components/shared/motion-reveal"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
@@ -127,16 +128,20 @@ function ResidentMetric({
   detail: string
 }) {
   return (
-    <article className="rounded-xl border bg-background p-4 shadow-sm">
+    <MotionReveal>
+    <article className="saas-surface motion-lift group rounded-xl p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
-        <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15 transition-transform duration-300 group-hover:scale-105">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
       </div>
       <div className="mt-2">
         {typeof value === "string" ? <StatusBadge status={value} /> : <p className="text-2xl font-semibold">{value}</p>}
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
     </article>
+    </MotionReveal>
   )
 }
 

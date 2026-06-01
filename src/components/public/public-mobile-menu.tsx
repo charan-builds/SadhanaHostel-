@@ -5,6 +5,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import { BedDouble, Menu, MessageCircle, Navigation, Phone } from "lucide-react"
 
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -22,13 +23,14 @@ import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 type PublicMobileMenuProps = {
   currentPathname: string
+  logoUrl?: string | null
 }
 
 function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function PublicMobileMenu({ currentPathname }: PublicMobileMenuProps) {
+export function PublicMobileMenu({ currentPathname, logoUrl }: PublicMobileMenuProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -46,9 +48,7 @@ export function PublicMobileMenu({ currentPathname }: PublicMobileMenuProps) {
       <SheetContent className="w-[88vw] max-w-sm overflow-y-auto p-0" aria-label="Public navigation">
         <SheetHeader className="border-b px-5 py-5 text-left">
           <SheetTitle className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-              SB
-            </span>
+            <BrandMark logoUrl={logoUrl} />
             <span>{hostelConfig.shortName}</span>
           </SheetTitle>
           <SheetDescription>{hostelConfig.location.note}</SheetDescription>

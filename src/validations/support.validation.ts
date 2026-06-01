@@ -30,6 +30,7 @@ export const supportRequestListSchema = paginationSchema.extend({
   status: supportStatusSchema.optional(),
   category: supportCategorySchema.optional(),
   priority: supportPrioritySchema.optional(),
+  workflow: z.string().trim().max(80).optional(),
   search: z.string().trim().max(120).optional(),
 })
 
@@ -55,6 +56,24 @@ export const supportRequestUpdateSchema = z.object({
   resolutionNotes: z.string().trim().max(4000).optional(),
 })
 
+export const residentPasswordResetRequestSchema = z.object({
+  organizationId: uuidSchema.optional(),
+  hostelId: uuidSchema.optional(),
+  phone: z
+    .string()
+    .trim()
+    .min(8, "Enter the registered phone number.")
+    .max(24, "Phone number is too long."),
+  admissionNumber: z.string().trim().min(2).max(80).optional().or(z.literal("")),
+  email: z.string().trim().email("Enter a valid email address.").optional().or(z.literal("")),
+  message: z.string().trim().max(1000).optional().or(z.literal("")),
+})
+
+export const supportPasswordResetApprovalSchema = z.object({
+  organizationId: uuidSchema,
+  requestId: uuidSchema,
+})
+
 export const operationalAlertsQuerySchema = z.object({
   organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
@@ -64,4 +83,6 @@ export type SupportCategory = z.infer<typeof supportCategorySchema>
 export type SupportRequestListInput = z.infer<typeof supportRequestListSchema>
 export type SupportRequestCreateInput = z.infer<typeof supportRequestCreateSchema>
 export type SupportRequestUpdateInput = z.infer<typeof supportRequestUpdateSchema>
+export type ResidentPasswordResetRequestInput = z.infer<typeof residentPasswordResetRequestSchema>
+export type SupportPasswordResetApprovalInput = z.infer<typeof supportPasswordResetApprovalSchema>
 export type OperationalAlertsQueryInput = z.infer<typeof operationalAlertsQuerySchema>

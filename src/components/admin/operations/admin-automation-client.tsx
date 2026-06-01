@@ -460,7 +460,10 @@ export function AdminAutomationClient() {
         }
       >
         <div className="divide-y">
-          {consistency?.findings.map((finding) => (
+          {consistency?.findings.map((finding) => {
+            const safeRepairAction = safeRepairActionForFinding(finding)
+
+            return (
             <article key={finding.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -476,6 +479,9 @@ export function AdminAutomationClient() {
                 <p className="mt-2 text-sm font-medium text-foreground">
                   Automation to perform: {automationInstruction(finding.repairAction)}
                 </p>
+                {finding.repairAction === "review_manually" ? (
+                  <ManualResolutionGuide finding={finding} />
+                ) : null}
                 {finding.details?.length ? (
                   <div className="mt-3 space-y-2">
                     {finding.details.slice(0, 5).map((detail, index) => (
@@ -510,37 +516,41 @@ export function AdminAutomationClient() {
               </div>
               <div className="flex flex-col gap-2 md:items-end">
                 <Badge variant="outline">{humanizeEnum(finding.repairAction)}</Badge>
-                {finding.repairAction !== "review_manually" ? (
+                {safeRepairAction && finding.repairAction === "review_manually" ? (
+                  <Badge variant="secondary">Safe repair available</Badge>
+                ) : null}
+                {safeRepairAction ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     disabled={repairConsistency.isPending}
-                    onClick={() => void runConsistencyRepair(finding.repairAction, true)}
+                    onClick={() => void runConsistencyRepair(safeRepairAction, true)}
                   >
                     <RotateCcw className="size-3.5" aria-hidden="true" />
                     Dry run
                   </Button>
                 ) : null}
-                {finding.repairAction !== "review_manually" ? (
+                {safeRepairAction ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={repairConsistency.isPending}
-                    onClick={() => void runConsistencyRepair(finding.repairAction)}
+                    onClick={() => void runConsistencyRepair(safeRepairAction)}
                   >
                     {repairConsistency.isPending ? (
                       <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                     ) : (
                       <RotateCcw className="size-3.5" aria-hidden="true" />
                     )}
-                    Repair now
+                    {finding.repairAction === "review_manually" ? "Run safe repair" : "Repair now"}
                   </Button>
                 ) : null}
               </div>
             </article>
-          ))}
+            )
+          })}
         </div>
       </DataTableShell>
 
@@ -662,6 +672,40 @@ function IdentityFindingRow({ finding }: { finding: IdentityReconciliationFindin
   )
 }
 
+function ManualResolutionGuide({ finding }: { finding: ConsistencyFinding }) {
+  const steps = manualResolutionSteps(finding)
+  const prevention = recurrencePreventionSteps(finding)
+
+  if (steps.length === 0 && prevention.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-3 grid gap-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-950">
+      {steps.length > 0 ? (
+        <div>
+          <p className="font-semibold">Manual fix path</p>
+          <ol className="mt-2 grid list-decimal gap-1.5 pl-4">
+            {steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+      {prevention.length > 0 ? (
+        <div>
+          <p className="font-semibold">Prevent it from returning</p>
+          <ol className="mt-2 grid list-decimal gap-1.5 pl-4">
+            {prevention.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function RecommendedAutomationPanel({
   consistency,
   identityReport,
@@ -698,7 +742,10 @@ function RecommendedAutomationPanel({
         </Badge>
       </div>
       <div className="divide-y rounded-md border bg-background">
-        {consistencyFindings.slice(0, 5).map((finding) => (
+        {consistencyFindings.slice(0, 5).map((finding) => {
+          const safeRepairAction = safeRepairActionForFinding(finding)
+
+          return (
           <article key={finding.id} className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -710,15 +757,20 @@ function RecommendedAutomationPanel({
               <p className="mt-1 text-sm text-muted-foreground">
                 {automationInstruction(finding.repairAction)}
               </p>
+              {finding.repairAction === "review_manually" ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open the detailed finding below for record IDs, expected tenant values, and manual recovery steps.
+                </p>
+              ) : null}
             </div>
-            {finding.repairAction !== "review_manually" ? (
+            {safeRepairAction ? (
               <div className="flex flex-wrap gap-2 md:justify-end">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   disabled={isRepairingConsistency}
-                  onClick={() => onConsistencyRepair(finding.repairAction, true)}
+                  onClick={() => onConsistencyRepair(safeRepairAction, true)}
                 >
                   <RotateCcw className="size-3.5" aria-hidden="true" />
                   Dry run
@@ -727,21 +779,22 @@ function RecommendedAutomationPanel({
                   type="button"
                   size="sm"
                   disabled={isRepairingConsistency}
-                  onClick={() => onConsistencyRepair(finding.repairAction, false)}
+                  onClick={() => onConsistencyRepair(safeRepairAction, false)}
                 >
                   {isRepairingConsistency ? (
                     <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                   ) : (
                     <Play className="size-3.5" aria-hidden="true" />
                   )}
-                  Run repair
+                  {finding.repairAction === "review_manually" ? "Run safe repair" : "Run repair"}
                 </Button>
               </div>
             ) : (
               <Badge variant="outline">Manual review</Badge>
             )}
           </article>
-        ))}
+          )
+        })}
         {identityFindings.slice(0, 5).map((finding) => (
           <article key={finding.id} className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
             <div>
@@ -915,6 +968,74 @@ function currentPeriodMonth() {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`
 }
 
+function safeRepairActionForFinding(finding: ConsistencyFinding): ConsistencyRepairAction | null {
+  if (finding.repairAction !== "review_manually") {
+    return finding.repairAction
+  }
+
+  if (
+    finding.id === "security.business_tenant_scope" &&
+    finding.details?.some(isSafeTenantLinkageRepairDetail)
+  ) {
+    return "repair_tenant_linkage"
+  }
+
+  return null
+}
+
+function isSafeTenantLinkageRepairDetail(detail: NonNullable<ConsistencyFinding["details"]>[number]) {
+  return Boolean(
+    detail.recommendedRepairAction === "repair_tenant_linkage" &&
+      detail.actualOrganizationId &&
+      detail.expectedOrganizationId &&
+      detail.actualOrganizationId === detail.expectedOrganizationId &&
+      detail.actualHostelId &&
+      detail.expectedHostelId &&
+      detail.actualHostelId !== detail.expectedHostelId
+  )
+}
+
+function manualResolutionSteps(finding: ConsistencyFinding) {
+  if (finding.id === "security.business_tenant_scope") {
+    return [
+      "Open each listed table and record ID shown below.",
+      "Compare the actual organization/hostel values with the expected values from the linked resident, payment, invoice, reservation, or lead.",
+      "If the organization is the same and only the hostel differs, run the safe repair button. It updates the child record from the trusted parent and recalculates capacity.",
+      "If the linked parent is missing or belongs to another organization, do not auto-change it. Relink the record to the correct parent or archive the wrong child record after confirming with the resident/payment evidence.",
+      "After every manual change, run Consistency Scan again. The alert disappears only when no unsafe record-level anomaly remains.",
+    ]
+  }
+
+  if (finding.category === "security") {
+    return [
+      "Open the record IDs listed below and verify ownership before changing data.",
+      "Repair the metadata or archive the unsafe record only after the linked resident/payment/document is confirmed.",
+      "Run Consistency Scan again after the manual correction.",
+    ]
+  }
+
+  return []
+}
+
+function recurrencePreventionSteps(finding: ConsistencyFinding) {
+  if (finding.id === "security.business_tenant_scope") {
+    return [
+      "Create and edit residents, payments, invoices, reservations, and documents only through the ERP screens so tenant scope is written from the current session.",
+      "Avoid direct Supabase table edits unless organization_id and hostel_id are copied from the trusted parent record in the same change.",
+      "Keep Consistency Validation scheduled and run Tenant Linkage Repair after imports, demo resets, or bulk corrections.",
+    ]
+  }
+
+  if (finding.category === "security") {
+    return [
+      "Use ERP upload and payment flows instead of direct storage/table changes.",
+      "Run a consistency scan after bulk imports or manual support fixes.",
+    ]
+  }
+
+  return []
+}
+
 function automationInstruction(action: ConsistencyRepairAction) {
   const labels: Record<ConsistencyRepairAction, string> = {
     cleanup_uploads: "Run Stale Upload Cleanup to remove failed temporary uploads, then retry the document upload.",
@@ -929,7 +1050,7 @@ function automationInstruction(action: ConsistencyRepairAction) {
     repair_tenant_linkage: "Run Tenant Linkage Repair to rescope records to the correct organization or hostel.",
     resync_auth_linkage: "Run Auth Linkage Repair to synchronize resident login and onboarding state.",
     run_consistency_scan: "Run Consistency Scan to refresh the report before applying repairs.",
-    review_manually: "Manual review is required before an automation can safely change data.",
+    review_manually: "Manual review is required. The detailed finding now shows record IDs, safe-repair eligibility, exact manual steps, and prevention guidance.",
   }
 
   return labels[action]

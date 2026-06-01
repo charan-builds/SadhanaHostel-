@@ -1,41 +1,42 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import Link from "next/link"
-import type { Route } from "next"
+import { motion, type Variants } from "framer-motion"
 import {
   AlertTriangle,
+  ArrowUpRight,
+  CheckCircle2,
   Copy,
+  CreditCard,
   Download,
+  IndianRupee,
   Loader2,
   MessageCircle,
   QrCode,
+  ReceiptText,
   Smartphone,
+  Sparkles,
+  TrendingUp,
   UploadCloud,
+  type LucideIcon,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import Link from "next/link"
+import type { Route } from "next"
+import QRCode from "qrcode"
+import { useEffect, useMemo, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
-import { DataTableShell } from "@/components/shared/data-table-shell"
 import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
-import { hostelConfig } from "@/constants/hostel"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { hostelConfig } from "@/constants/hostel"
 import {
   useCurrentResident,
   useInvoiceDownloadUrl,
@@ -45,28 +46,39 @@ import {
   useSubmitUpiPaymentWithProof,
 } from "@/hooks"
 import { useMounted } from "@/hooks/use-mounted"
-import { useAuth } from "@/lib/auth"
 import { FrontendApiError, createRequestId } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import { buildPaymentSupportMessage, buildWhatsappUrl } from "@/lib/operations/whatsapp"
 import {
+  UPI_PAYMENT_APPS,
   buildHostelPaymentNote,
   buildHostelPaymentReference,
   buildUpiPaymentLink,
-  UPI_PAYMENT_APPS,
 } from "@/lib/payments/upi-links"
 import { useRealtimePayments } from "@/lib/realtime"
 import type { UploadProgress } from "@/sdk"
+import type { Tables } from "@/types/database"
 
 const paymentSchema = z.object({
   amount: z.coerce.number().positive("Enter an amount greater than zero."),
-  transactionId: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .min(6, "UPI reference is required.")
-    .max(64)
-    .regex(/^[A-Z0-9][A-Z0-9._/-]+$/, "Enter a valid UPI reference."),
+  transactionId: z.preprocess(
+    (value) => {
+      if (typeof value === "string" && value.trim() === "") {
+        return undefined
+      }
+
+      return value
+    },
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .min(6, "UPI reference must be at least 6 characters.")
+      .max(64)
+      .regex(/^[A-Z0-9][A-Z0-9._/-]+$/, "Enter a valid UPI reference.")
+      .optional()
+  ),
   notes: z.string().trim().max(1000).optional(),
   isPartial: z.boolean().default(false),
   isAdvance: z.boolean().default(false),
@@ -74,6 +86,22 @@ const paymentSchema = z.object({
 
 type PaymentInput = z.input<typeof paymentSchema>
 type PaymentValues = z.output<typeof paymentSchema>
+type PaymentRecord = Tables<"payments">
+
+const stagger: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+}
+
+const reveal: Variants = {
+  hidden: { opacity: 0, y: 14, filter: "blur(6px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.36, ease: [0.22, 1, 0.36, 1] },
+  },
+}
 
 export function ResidentPaymentsClient() {
   const mounted = useMounted()
@@ -100,13 +128,31 @@ export function ResidentPaymentsClient() {
     createRequestId()
   )
   const submitUpiPayment = useSubmitUpiPaymentWithProof({ onProgress: setUploadProgress })
+
   useRealtimePayments({
     enabled: Boolean(organizationId && resident.data?.id),
     residentId: resident.data?.id,
   })
+
+  const currentDueTotal = ledger.data?.totals.currentDue ?? 0
+  const pendingVerificationTotal = ledger.data?.totals.pendingVerification ?? 0
+  const primaryDueRecord = ledger.data?.primaryDueRecord
+  const primaryPendingVerification =
+    ledger.data?.payments
+      .filter(
+        (payment) =>
+          primaryDueRecord?.id &&
+          payment.monthly_fee_record_id === primaryDueRecord.id &&
+          (payment.status === "pending" || payment.status === "initiated")
+      )
+      .reduce((total, payment) => total + payment.amount, 0) ?? 0
+  const payableDue = Math.max(
+    (primaryDueRecord?.balance_amount ?? currentDueTotal) - primaryPendingVerification,
+    0
+  )
   const suggestedAmount =
-    ledger.data?.totals.currentDue && ledger.data.totals.currentDue > 0
-      ? ledger.data.totals.currentDue
+    payableDue > 0
+      ? payableDue
       : resident.data?.monthly_fee_amount ?? 0
   const rejectedPayments =
     payments.data?.data.filter((payment) => payment.status === "failed") ?? []
@@ -116,6 +162,7 @@ export function ResidentPaymentsClient() {
     handleSubmit,
     control,
     setError,
+    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<PaymentInput, unknown, PaymentValues>({
@@ -128,10 +175,11 @@ export function ResidentPaymentsClient() {
       isAdvance: false,
     },
   })
+
   const watchedAmount = useWatch({ control, name: "amount" })
   const watchedNotes = useWatch({ control, name: "notes" })
   const currentPaymentAmount = isPaymentAmountValue(watchedAmount)
-    ? watchedAmount
+    ? Number(watchedAmount)
     : suggestedAmount
   const paymentReference = useMemo(
     () =>
@@ -209,6 +257,15 @@ export function ResidentPaymentsClient() {
     )
   }
 
+  const paymentHistory = payments.data?.data ?? []
+  const currentDue = currentDueTotal
+  const pendingVerification = pendingVerificationTotal
+  const verifiedPaid = ledger.data?.totals.verifiedPaid ?? 0
+  const monthlyFee = resident.data.monthly_fee_amount
+  const dueProgress =
+    monthlyFee > 0 ? Math.max(0, Math.min(100, (currentDue / monthlyFee) * 100)) : 0
+  const latestPayment = paymentHistory[0]
+
   async function submitPayment(values: PaymentValues) {
     if (!organizationId || !resident.data) {
       return
@@ -228,6 +285,28 @@ export function ResidentPaymentsClient() {
       return
     }
 
+    if (!values.isAdvance && payableDue <= 0) {
+      setError("root", {
+        message:
+          "Your current due is already clear or covered by pending verification. Mark this as advance payment if you still need to pay.",
+      })
+      return
+    }
+
+    if (!values.isAdvance && values.amount > payableDue) {
+      setError("root", {
+        message: `You can pay up to ${formatCurrency(payableDue)} now. Reduce the amount or mark the extra amount as advance.`,
+      })
+      return
+    }
+
+    if (!values.isAdvance && values.amount < payableDue && !values.isPartial) {
+      setError("root", {
+        message: "Mark this as a partial payment when paying less than the payable due.",
+      })
+      return
+    }
+
     try {
       await submitUpiPayment.mutateAsync({
         input: {
@@ -237,7 +316,7 @@ export function ResidentPaymentsClient() {
           monthlyFeeRecordId: ledger.data?.primaryDueRecord?.id ?? undefined,
           amount: values.amount,
           method: "upi",
-          transactionId: values.transactionId,
+          transactionId: values.transactionId || undefined,
           notes: values.notes || undefined,
           isPartial: values.isPartial,
           isAdvance: values.isAdvance,
@@ -285,18 +364,150 @@ export function ResidentPaymentsClient() {
   }
 
   return (
-    <div className="grid gap-6">
+    <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-6">
       <PageHeader
         title="Payments"
-        description="Submit UPI payment references, upload proof, and track verification status."
+        description="Enter the exact amount, open UPI with that amount pre-filled, then upload proof. Dues reduce only after admin verification."
+        badge={payableDue > 0 ? `${formatCurrency(payableDue)} payable now` : "No payable due"}
       />
 
-      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <form onSubmit={handleSubmit(submitPayment)} className="rounded-xl border bg-background p-5 shadow-sm">
-          <h2 className="text-base font-semibold">Submit UPI Payment</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your submission remains pending until an admin verifies the reference and proof.
-          </p>
+      <motion.div
+        variants={reveal}
+        className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-950"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/80 text-blue-700">
+            <IndianRupee className="size-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="font-semibold">Exact-amount QR is enabled for resident payments.</p>
+            <p className="mt-1">
+              The QR and UPI app buttons use the amount entered here. Automatic bank-side paid
+              status still requires a payment gateway webhook; until that is connected, submitted
+              payments stay in pending verification and dues reduce after admin approval.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <FeeCard
+          label="Current due"
+          value={formatCurrency(currentDue)}
+          detail={
+            payableDue > 0
+              ? `${formatCurrency(payableDue)} payable after pending payments.`
+              : "You are clear or already waiting on verification."
+          }
+          icon={CreditCard}
+          tone="primary"
+        />
+        <FeeCard
+          label="Monthly fee"
+          value={formatCurrency(monthlyFee)}
+          detail="Base monthly hostel fee."
+          icon={ReceiptText}
+          tone="info"
+        />
+        <FeeCard
+          label="Pending verification"
+          value={formatCurrency(pendingVerification)}
+          detail="Submitted and awaiting admin review."
+          icon={Sparkles}
+          tone="warning"
+        />
+        <FeeCard
+          label="Verified paid"
+          value={formatCurrency(verifiedPaid)}
+          detail="Accepted payment total."
+          icon={CheckCircle2}
+          tone="success"
+        />
+      </motion.section>
+
+      {ledger.isError ? (
+        <APIErrorState
+          title="Payment ledger unavailable"
+          error={ledger.error}
+          onRetry={() => void ledger.refetch()}
+        />
+      ) : null}
+
+      <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="saas-surface overflow-hidden rounded-xl">
+          <div className="grid gap-6 p-5 lg:grid-cols-[1fr_240px]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                  <TrendingUp className="size-4" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold">Due amount visualization</h2>
+                  <p className="text-sm text-muted-foreground">Monthly fee coverage and payment status.</p>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Outstanding balance</p>
+                    <p className="mt-1 text-4xl font-semibold tracking-tight">{formatCurrency(currentDue)}</p>
+                  </div>
+                  <StatusBadge status={currentDue > 0 ? "pending" : "verified"} />
+                </div>
+                <div className="mt-5 h-3 overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="h-full rounded-full bg-linear-to-r from-primary via-cyan-500 to-emerald-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${dueProgress}%` }}
+                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{Math.round(dueProgress)}% of monthly fee currently due</span>
+                  <span>{formatCurrency(payableDue)} payable now</span>
+                </div>
+              </div>
+            </div>
+
+            <ReceiptPreview
+              reference={paymentReference}
+              amount={currentPaymentAmount}
+              residentName={resident.data.full_name}
+              admissionNumber={resident.data.admission_number}
+              latestStatus={latestPayment?.status}
+            />
+          </div>
+        </div>
+
+        <QrPaymentSection
+          isLoading={paymentSettings.isLoading}
+          isError={paymentSettings.isError}
+          error={paymentSettings.error}
+          accountName={paymentSettings.data?.account_name}
+          instructions={paymentSettings.data?.instructions}
+          qrImageSignedUrl={paymentSettings.data?.qrImageSignedUrl}
+          upiId={paymentSettings.data?.upi_id}
+          upiPaymentLink={upiPaymentLink}
+          paymentReference={paymentReference}
+          onRetry={() => void paymentSettings.refetch()}
+        />
+      </motion.section>
+
+      <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <form onSubmit={handleSubmit(submitPayment)} className="saas-surface rounded-xl p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">Submit UPI payment</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                The UPI app opens with this amount and reference. Your balance changes only after
+                finance verifies the payment proof.
+              </p>
+            </div>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary ring-1 ring-primary/15">
+              UPI only
+            </span>
+          </div>
 
           {errors.root?.message ? (
             <div className="mt-4">
@@ -312,107 +523,70 @@ export function ResidentPaymentsClient() {
           ) : null}
 
           <div className="mt-5 grid gap-4">
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <QrCode className="size-4" aria-hidden="true" />
-                Hostel payment account
-              </div>
-              {paymentSettings.isLoading ? (
-                <p className="mt-2 text-sm text-muted-foreground">Loading payment instructions...</p>
-              ) : paymentSettings.isError ? (
-                <APIErrorState
-                  title="Payment instructions unavailable"
-                  error={paymentSettings.error}
-                  onRetry={() => void paymentSettings.refetch()}
-                />
-              ) : paymentSettings.data ? (
-                <div className="mt-3 grid gap-3">
-                  {upiPaymentLink ? (
-                    <div className="grid gap-3 rounded-lg border bg-background p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Smartphone className="size-4" aria-hidden="true" />
-                        Pay directly with UPI app
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {UPI_PAYMENT_APPS.map((app) => (
-                          <Button key={app.id} asChild size="sm" variant="outline">
-                            <a
-                              href={upiPaymentLink}
-                              onClick={() => toast.info("Complete payment in your UPI app, then upload the screenshot and UTR here.")}
-                            >
-                              {app.label}
-                            </a>
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                        <span className="break-all">Payment note: {upiPaymentNote}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(paymentReference)
-                            toast.success("Payment reference copied.")
-                          }}
-                        >
-                          <Copy className="size-3.5" aria-hidden="true" />
-                          Copy reference
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {paymentSettings.data.qrImageSignedUrl ? (
-                    // Signed URLs are short-lived and generated server-side.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={paymentSettings.data.qrImageSignedUrl}
-                      alt="Hostel UPI QR code"
-                      className="h-44 w-44 rounded-lg border bg-background object-contain p-2"
-                    />
-                  ) : null}
-                  <div className="grid gap-1 text-sm">
-                    <p className="font-medium">{paymentSettings.data.account_name}</p>
-                    {paymentSettings.data.upi_id ? (
-                      <button
-                        type="button"
-                        className="flex w-fit items-center gap-2 rounded-md border bg-background px-2 py-1 text-left"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(
-                            paymentSettings.data?.upi_id ?? ""
-                          )
-                          toast.success("UPI ID copied.")
-                        }}
-                      >
-                        <span>{paymentSettings.data.upi_id}</span>
-                        <Copy className="size-3.5" aria-hidden="true" />
-                      </button>
-                    ) : null}
-                    {paymentSettings.data.instructions ? (
-                      <p className="text-muted-foreground">
-                        {paymentSettings.data.instructions}
-                      </p>
-                    ) : null}
-                  </div>
+            {upiPaymentLink ? (
+              <div className="rounded-lg border bg-muted/35 p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Smartphone className="size-4 text-primary" aria-hidden="true" />
+                  Payment note
                 </div>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Payment account is not configured yet. Contact hostel administration before paying.
+                <p className="mt-2 break-all text-xs leading-5 text-muted-foreground">{upiPaymentNote}</p>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Amount</Label>
+                <Input id="amount" type="number" {...register("amount")} />
+                <p className="text-xs text-muted-foreground">
+                  UPI apps will receive {formatCurrency(currentPaymentAmount)} as the payable amount.
                 </p>
-              )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={payableDue <= 0}
+                    onClick={() => {
+                      setValue("amount", payableDue, { shouldDirty: true, shouldValidate: true })
+                      setValue("isPartial", false, { shouldDirty: true, shouldValidate: true })
+                      setValue("isAdvance", false, { shouldDirty: true, shouldValidate: true })
+                    }}
+                  >
+                    Pay due
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setValue("amount", monthlyFee, { shouldDirty: true, shouldValidate: true })
+                      setValue("isAdvance", payableDue <= 0, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                      setValue("isPartial", payableDue > monthlyFee, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }}
+                  >
+                    Monthly fee
+                  </Button>
+                </div>
+                {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="transactionId">UPI reference / transaction ID</Label>
+                <Input id="transactionId" placeholder="Optional" {...register("transactionId")} />
+                <p className="text-xs text-muted-foreground">
+                  Optional. Screenshot upload is compulsory for verification.
+                </p>
+                {errors.transactionId ? <p className="text-xs text-destructive">{errors.transactionId.message}</p> : null}
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="amount">Amount</Label>
-              <Input id="amount" type="number" {...register("amount")} />
-              {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="transactionId">UPI reference / transaction ID</Label>
-              <Input id="transactionId" {...register("transactionId")} />
-              {errors.transactionId ? <p className="text-xs text-destructive">{errors.transactionId.message}</p> : null}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="proof">Payment screenshot</Label>
+
+            <div className="grid gap-2 rounded-xl border border-dashed bg-white/55 p-4">
+              <Label htmlFor="proof">Payment screenshot *</Label>
               <Input
                 id="proof"
                 type="file"
@@ -422,16 +596,18 @@ export function ResidentPaymentsClient() {
               />
               {proofFile ? <p className="text-xs text-muted-foreground">{proofFile.name}</p> : null}
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" className="min-h-20" {...register("notes")} />
             </div>
-            <div className="grid gap-2 text-sm text-muted-foreground">
-              <label className="flex items-center gap-2">
+
+            <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-lg border bg-white/55 p-3">
                 <input type="checkbox" className="size-4 accent-primary" {...register("isPartial")} />
                 Mark as partial payment
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2 rounded-lg border bg-white/55 p-3">
                 <input type="checkbox" className="size-4 accent-primary" {...register("isAdvance")} />
                 Mark as advance payment
               </label>
@@ -449,7 +625,7 @@ export function ResidentPaymentsClient() {
 
           <Button
             type="submit"
-            className="mt-5 w-full"
+            className="mt-5 h-10 w-full"
             disabled={isSubmitting || submitUpiPayment.isPending || !paymentSettings.data}
           >
             {isSubmitting || submitUpiPayment.isPending ? (
@@ -461,54 +637,326 @@ export function ResidentPaymentsClient() {
           </Button>
         </form>
 
-        <div className="grid gap-4">
-          {ledger.isError ? (
-            <APIErrorState
-              title="Payment ledger unavailable"
-              error={ledger.error}
-              onRetry={() => void ledger.refetch()}
-            />
-          ) : null}
-          <Summary label="Current due" value={formatCurrency(ledger.data?.totals.currentDue ?? 0)} />
-          <Summary label="Monthly fee" value={formatCurrency(resident.data.monthly_fee_amount)} />
-          <Summary
-            label="Pending verification"
-            value={formatCurrency(ledger.data?.totals.pendingVerification ?? 0)}
-          />
-          <Summary
-            label="Verified paid"
-            value={formatCurrency(ledger.data?.totals.verifiedPaid ?? 0)}
+        <PaymentTimeline
+          payments={paymentHistory}
+          isLoading={payments.isLoading}
+          isError={payments.isError}
+          error={payments.error}
+          onRetry={() => void payments.refetch()}
+        />
+      </motion.section>
+
+      <PaymentHistoryCards
+        payments={paymentHistory}
+        isLoading={payments.isLoading}
+        isError={payments.isError}
+        error={payments.error}
+        rejectedCount={rejectedPayments.length}
+        paymentSupportUrl={paymentSupportUrl}
+        isDownloading={downloadInvoice.isPending}
+        onRetry={() => void payments.refetch()}
+        onOpenInvoice={openInvoice}
+      />
+    </motion.div>
+  )
+}
+
+function QrPaymentSection({
+  isLoading,
+  isError,
+  error,
+  accountName,
+  instructions,
+  qrImageSignedUrl,
+  upiId,
+  upiPaymentLink,
+  paymentReference,
+  onRetry,
+}: {
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  accountName?: string
+  instructions?: string | null
+  qrImageSignedUrl?: string | null
+  upiId?: string | null
+  upiPaymentLink: string | null
+  paymentReference: string
+  onRetry: () => void
+}) {
+  const [exactAmountQrUrl, setExactAmountQrUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    if (!upiPaymentLink) {
+      return
+    }
+
+    QRCode.toDataURL(upiPaymentLink, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      scale: 8,
+      color: {
+        dark: "#020617",
+        light: "#ffffff",
+      },
+    })
+      .then((url) => {
+        if (active) {
+          setExactAmountQrUrl(url)
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setExactAmountQrUrl(null)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [upiPaymentLink])
+  const displayQrUrl = upiPaymentLink ? exactAmountQrUrl : null
+
+  return (
+    <div className="saas-surface rounded-xl p-5">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <QrCode className="size-4 text-primary" aria-hidden="true" />
+        QR payment section
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Open PhonePe, Google Pay, Paytm, or BHIM with the entered amount and reference already
+        filled in, then upload proof below.
+      </p>
+
+      {isLoading ? (
+        <div className="mt-4">
+          <LoadingState variant="cards" rows={1} />
+        </div>
+      ) : isError ? (
+        <div className="mt-4">
+          <APIErrorState
+            title="Payment instructions unavailable"
+            error={error}
+            onRetry={onRetry}
           />
         </div>
-      </section>
-
-      <DataTableShell
-        title="Payment History"
-        description="All payment records visible to your resident account."
-        empty={
-          payments.data?.data.length === 0 ? (
-            <EmptyState title="No payments yet" message="Submit your first payment using the form above." />
-          ) : undefined
-        }
-      >
-        {payments.isError ? (
-          <div className="border-b p-4">
-            <APIErrorState
-              title="Payment history unavailable"
-              error={payments.error}
-              onRetry={() => void payments.refetch()}
-            />
-          </div>
-        ) : null}
-        {rejectedPayments.length > 0 ? (
-          <div className="border-b bg-amber-50 p-4 text-sm text-amber-900">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <p>
-                  {rejectedPayments.length} payment submission needs correction. Check the UPI reference and upload a fresh screenshot.
-                </p>
+      ) : accountName ? (
+        <div className="mt-4 grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-[180px_1fr] xl:grid-cols-1 2xl:grid-cols-[180px_1fr]">
+            <div className="flex aspect-square items-center justify-center rounded-xl border border-white/70 bg-white/80 p-3 shadow-inner">
+              {displayQrUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={displayQrUrl}
+                  alt="Exact amount UPI QR code"
+                  className="h-full w-full rounded-lg object-contain"
+                />
+              ) : qrImageSignedUrl ? (
+                // Signed URLs are short-lived and generated server-side.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={qrImageSignedUrl}
+                  alt="Hostel UPI QR code"
+                  className="h-full w-full rounded-lg object-contain opacity-80"
+                />
+              ) : (
+                <div className="grid place-items-center text-center text-sm text-muted-foreground">
+                  <QrCode className="mx-auto mb-2 size-10 text-primary" aria-hidden="true" />
+                  QR not uploaded
+                </div>
+              )}
+            </div>
+            <div className="grid content-start gap-3">
+              {displayQrUrl ? (
+                <div className="rounded-lg border bg-success-surface p-3 text-xs leading-5 text-success-foreground">
+                  This QR is generated from the entered amount and reference. Scan it before submitting proof.
+                </div>
+              ) : null}
+              <div>
+                <p className="text-sm font-medium">{accountName}</p>
+                {upiId ? (
+                  <button
+                    type="button"
+                    className="mt-2 flex w-fit max-w-full items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-left text-sm transition hover:bg-white"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(upiId)
+                      toast.success("UPI ID copied.")
+                    }}
+                  >
+                    <span className="truncate">{upiId}</span>
+                    <Copy className="size-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                ) : null}
               </div>
+
+              {upiPaymentLink ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {UPI_PAYMENT_APPS.map((app) => (
+                    <Button key={app.id} asChild size="sm" variant="outline">
+                      <a
+                        href={upiPaymentLink}
+                        onClick={() => toast.info("Complete payment in your UPI app, then upload the screenshot and UTR here.")}
+                      >
+                        {app.label}
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/35 p-3 text-xs text-muted-foreground">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="break-all">Reference: {paymentReference}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void navigator.clipboard.writeText(paymentReference)
+                  toast.success("Payment reference copied.")
+                }}
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+                Copy
+              </Button>
+            </div>
+            {instructions ? <p className="mt-2 leading-5">{instructions}</p> : null}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <EmptyState
+            title="Payment account unavailable"
+            message="Contact hostel administration before making a payment."
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaymentTimeline({
+  payments,
+  isLoading,
+  isError,
+  error,
+  onRetry,
+}: {
+  payments: PaymentRecord[]
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  onRetry: () => void
+}) {
+  const timeline = payments.slice(0, 5)
+
+  return (
+    <div className="saas-surface rounded-xl p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Payment timeline</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Latest activity from submission to receipt.</p>
+        </div>
+        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+          <ArrowUpRight className="size-4" aria-hidden="true" />
+        </span>
+      </div>
+
+      <div className="mt-5">
+        {isError ? (
+          <APIErrorState title="Timeline unavailable" error={error} onRetry={onRetry} />
+        ) : isLoading ? (
+          <LoadingState variant="cards" rows={2} />
+        ) : timeline.length === 0 ? (
+          <EmptyState title="No timeline yet" message="Payment activity will appear after your first submission." />
+        ) : (
+          <div className="relative grid gap-4">
+            <div className="absolute bottom-4 left-4 top-4 w-px bg-border" aria-hidden="true" />
+            {timeline.map((payment, index) => (
+              <motion.div
+                key={payment.id}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.04, duration: 0.25 }}
+                className="relative grid gap-1 pl-10"
+              >
+                <span className="absolute left-0 top-1 flex size-8 items-center justify-center rounded-full border bg-background text-primary">
+                  <ReceiptText className="size-4" aria-hidden="true" />
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium">{formatCurrency(payment.amount)}</p>
+                  <StatusBadge status={payment.status} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {payment.transaction_id ?? payment.id.slice(0, 8)} · {formatDateTime(payment.created_at)}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PaymentHistoryCards({
+  payments,
+  isLoading,
+  isError,
+  error,
+  rejectedCount,
+  paymentSupportUrl,
+  isDownloading,
+  onRetry,
+  onOpenInvoice,
+}: {
+  payments: PaymentRecord[]
+  isLoading: boolean
+  isError: boolean
+  error: unknown
+  rejectedCount: number
+  paymentSupportUrl: string | null
+  isDownloading: boolean
+  onRetry: () => void
+  onOpenInvoice: (invoiceId: string) => Promise<void>
+}) {
+  return (
+    <motion.section variants={reveal} className="saas-surface overflow-hidden rounded-xl">
+      <div className="flex flex-col gap-3 border-b bg-white/45 p-5 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Payment history cards</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every submission visible to your resident account.
+          </p>
+        </div>
+        <StatusBadge status={`${payments.length} records`} />
+      </div>
+
+      {isError ? (
+        <div className="border-b p-4">
+          <APIErrorState
+            title="Payment history unavailable"
+            error={error}
+            onRetry={onRetry}
+          />
+        </div>
+      ) : null}
+
+      {rejectedCount > 0 ? (
+        <div className="border-b bg-warning-surface p-4 text-sm text-warning-foreground">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>
+                {rejectedCount} payment submission needs correction. Upload a fresh screenshot
+                and add the UPI reference only if you have it.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm" className="bg-background">
                 <Link href={"/resident/support?category=payment" as Route}>
                   Ask finance
@@ -524,60 +972,148 @@ export function ResidentPaymentsClient() {
               ) : null}
             </div>
           </div>
-        ) : null}
-        {payments.isLoading ? (
-          <LoadingState variant="table" />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Invoice</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.data?.data.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell>{payment.transaction_id ?? payment.id.slice(0, 8)}</TableCell>
-                  <TableCell>{formatCurrency(payment.amount)}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={payment.status} />
-                  </TableCell>
-                  <TableCell>{formatDateTime(payment.created_at)}</TableCell>
-                  <TableCell>
-                    {payment.invoice_id ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={downloadInvoice.isPending}
-                        onClick={() => void openInvoice(payment.invoice_id as string)}
-                      >
-                        <Download className="size-3.5" aria-hidden="true" />
-                        Download
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Pending</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </DataTableShell>
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <div className="p-4">
+          <LoadingState variant="cards" rows={3} />
+        </div>
+      ) : payments.length === 0 ? (
+        <div className="p-4">
+          <EmptyState title="No payments yet" message="Submit your first payment using the form above." />
+        </div>
+      ) : (
+        <motion.div variants={stagger} initial="hidden" animate="show" className="grid gap-3 p-4 lg:grid-cols-2">
+          {payments.map((payment) => (
+            <motion.article
+              key={payment.id}
+              variants={reveal}
+              className="rounded-xl border bg-white/60 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-soft"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {payment.transaction_id ?? payment.id.slice(0, 8)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Submitted {formatDateTime(payment.created_at)}
+                  </p>
+                </div>
+                <StatusBadge status={payment.status} />
+              </div>
+              <div className="mt-4 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="text-2xl font-semibold">{formatCurrency(payment.amount)}</p>
+                </div>
+                {payment.invoice_id ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isDownloading}
+                    onClick={() => void onOpenInvoice(payment.invoice_id as string)}
+                  >
+                    <Download className="size-3.5" aria-hidden="true" />
+                    Receipt
+                  </Button>
+                ) : (
+                  <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+                    Receipt pending
+                  </span>
+                )}
+              </div>
+            </motion.article>
+          ))}
+        </motion.div>
+      )}
+    </motion.section>
+  )
+}
+
+function ReceiptPreview({
+  reference,
+  amount,
+  residentName,
+  admissionNumber,
+  latestStatus,
+}: {
+  reference: string
+  amount: string | number
+  residentName: string
+  admissionNumber?: string | null
+  latestStatus?: string
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950 p-4 text-white shadow-lifted">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-white/55">Receipt preview</p>
+          <p className="mt-1 text-sm font-medium">{hostelConfig.shortName}</p>
+        </div>
+        <ReceiptText className="size-5 text-cyan-200" aria-hidden="true" />
+      </div>
+      <div className="mt-6">
+        <p className="text-xs text-white/55">Amount prepared</p>
+        <p className="mt-1 text-3xl font-semibold">{formatCurrency(Number(amount) || 0)}</p>
+      </div>
+      <div className="mt-6 grid gap-3 text-xs">
+        <ReceiptRow label="Resident" value={residentName} />
+        <ReceiptRow label="Admission" value={admissionNumber ?? "Not assigned"} />
+        <ReceiptRow label="Reference" value={reference} />
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+          <span className="text-white/55">Latest status</span>
+          <span className="rounded-full bg-white/10 px-2 py-1 text-white">
+            {latestStatus ?? "Ready"}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
 
-function Summary({ label, value }: { label: string; value: string | number }) {
+function ReceiptRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border bg-background p-5 shadow-sm">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-white/55">{label}</span>
+      <span className="max-w-[9rem] truncate text-right text-white">{value}</span>
     </div>
+  )
+}
+
+function FeeCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string
+  value: string
+  detail: string
+  icon: LucideIcon
+  tone: "primary" | "success" | "warning" | "info"
+}) {
+  const toneClassName = {
+    primary: "bg-primary/10 text-primary ring-primary/15",
+    success: "bg-success-surface text-success-foreground ring-success/15",
+    warning: "bg-warning-surface text-warning-foreground ring-warning/15",
+    info: "bg-info-surface text-info-foreground ring-info/15",
+  }[tone]
+
+  return (
+    <motion.article variants={reveal} className="saas-surface motion-lift group rounded-xl p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="mt-2 break-words text-2xl font-semibold tracking-tight">{value}</p>
+        </div>
+        <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ${toneClassName}`}>
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">{detail}</p>
+    </motion.article>
   )
 }
 

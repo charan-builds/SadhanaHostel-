@@ -8,17 +8,22 @@ import { LoginForm } from "@/components/auth/login-form"
 import { GlobalLoader } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { hostelConfig } from "@/constants/hostel"
+import { getPublicCmsContent } from "@/lib/cms/public-cms"
+import { pickBrandLogo } from "@/lib/public-gallery"
 
 export const metadata: Metadata = {
   title: "Resident Login",
   description: "Sign in to the Sadhana Boys Hostel resident portal.",
 }
 
-export default function ResidentLoginPage() {
+export default async function ResidentLoginPage() {
+  const cms = await getPublicCmsContent()
+
   return (
     <AuthShell
       title="Resident portal"
       description="Use your phone number, temporary password, OTP, or invite link to access onboarding and resident services."
+      logoUrl={pickBrandLogo(cms.galleryItems)}
     >
       <Suspense fallback={<GlobalLoader label="Loading resident login..." />}>
         <LoginForm expectedArea="resident" />

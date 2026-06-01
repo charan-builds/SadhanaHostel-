@@ -1,3 +1,4 @@
+import Image from "next/image"
 import type { LucideIcon } from "lucide-react"
 import {
   Bath,
@@ -20,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
+import { hostelImages } from "@/constants/hostel-images"
 import { fallbackFacilities } from "@/constants/public-content"
 import type { FacilityItem } from "@/types/frontend"
 
@@ -66,7 +68,8 @@ export function FacilitiesPageContent({
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
           <p className="text-sm font-medium text-blue-700">Facilities</p>
           <h1 className="mt-3 max-w-4xl text-4xl font-semibold text-slate-950 text-balance sm:text-5xl">
             Practical facilities for a clean and comfortable stay.
@@ -75,6 +78,22 @@ export function FacilitiesPageContent({
             {hostelConfig.name} supports daily routines with food, WiFi, CCTV, water facilities,
             parking options, and a neat environment.
           </p>
+          </div>
+          <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border bg-slate-100 shadow-lifted">
+            <Image
+              src={hostelImages.building}
+              alt="Sadhana Boys Hostel facilities view"
+              fill
+              priority
+              className="object-cover"
+              sizes="(min-width: 1024px) 48vw, 100vw"
+            />
+            <div className="absolute inset-0 bg-linear-to-t from-slate-950/60 to-transparent" />
+            <div className="absolute bottom-0 p-5 text-white">
+              <p className="text-sm font-medium text-cyan-100">Actual hostel building</p>
+              <p className="mt-1 text-2xl font-semibold">Built for daily routine</p>
+            </div>
+          </div>
         </div>
       </section>
 

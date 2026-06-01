@@ -1,5 +1,9 @@
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
-import { normalizeOptionalPhoneNumber } from "@/lib/identity"
+import {
+  normalizeOptionalPhoneNumber,
+  phoneLastTen,
+  phoneNumbersMatch,
+} from "@/lib/identity"
 
 import {
   createPaginationMeta,
@@ -124,6 +128,65 @@ export class ResidentsRepository {
     }
 
     return data
+  }
+
+  async findPasswordResetCandidate(input: {
+    organizationId: string
+    hostelId?: string | null
+    phone: string
+    admissionNumber?: string | null
+    email?: string | null
+  }) {
+    const phone = normalizeOptionalPhoneNumber(input.phone)
+    const lastTen = phoneLastTen(input.phone)
+
+    if (!phone || !lastTen) {
+      return null
+    }
+
+    const phoneVariants = Array.from(
+      new Set([phone, lastTen, `0${lastTen}`, `91${lastTen}`, `+91${lastTen}`])
+    )
+    let query = this.db
+      .from("residents")
+      .select("*")
+      .eq("organization_id", input.organizationId)
+      .or(
+        [
+          ...phoneVariants.map((variant) => `phone.eq.${variant}`),
+          `phone.ilike.%${lastTen}%`,
+        ].join(",")
+      )
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(10)
+
+    if (input.hostelId) {
+      query = query.eq("hostel_id", input.hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to verify resident password reset request.")
+    }
+
+    const admissionNumber = input.admissionNumber?.trim().toLowerCase()
+    const email = input.email?.trim().toLowerCase()
+
+    return (
+      (data ?? []).find((resident) => {
+        const phoneMatches = phoneNumbersMatch(resident.phone, input.phone)
+        const admissionMatches =
+          !admissionNumber ||
+          resident.admission_number.trim().toLowerCase() === admissionNumber
+        const emailMatches =
+          !email || resident.email?.trim().toLowerCase() === email
+
+        return phoneMatches && admissionMatches && emailMatches
+      }) ?? null
+    )
   }
 
   async findDuplicateIdentity(input: {

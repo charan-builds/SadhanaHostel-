@@ -1,6 +1,10 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
-import type { ResidentCreateResult, ResidentLifecycleRepairResult } from "@/types/residents"
+import type {
+  ResidentCreateResult,
+  ResidentLifecycleRepairResult,
+  ResidentPasswordResetResult,
+} from "@/types/residents"
 import type {
   CheckoutResidentInput,
   CreateResidentInput,
@@ -81,5 +85,14 @@ export const residentsSdk = {
       `/api/residents/${residentId}/repair`,
       body
     )
+  },
+
+  resetPassword(input: ResidentIdMutationInput) {
+    const { residentId, ...body } = input
+
+    return apiClient.post<
+      ResidentPasswordResetResult,
+      Omit<ResidentIdMutationInput, "residentId">
+    >(`/api/residents/${residentId}/reset-password`, body)
   },
 }

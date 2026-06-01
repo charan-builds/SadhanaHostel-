@@ -32,7 +32,9 @@ export async function proxy(request: NextRequest) {
 
   if (isProtectedPath(pathname) && !user) {
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = AUTH_REDIRECTS.login
+    loginUrl.pathname = pathname.startsWith(RESIDENT_ROUTE_PREFIX)
+      ? AUTH_REDIRECTS.residentLogin
+      : AUTH_REDIRECTS.adminLogin
     loginUrl.searchParams.set("next", pathWithSearch)
 
     const redirectResponse = NextResponse.redirect(loginUrl)
@@ -77,7 +79,11 @@ function maintenanceResponse(request: NextRequest) {
 }
 
 function isProtectedPath(pathname: string) {
-  if (pathname === "/admin/login" || pathname === "/resident/login") {
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/resident/login" ||
+    pathname === "/resident/reset-password"
+  ) {
     return false
   }
 

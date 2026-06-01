@@ -6,6 +6,14 @@ export type ResidentCreateResult = {
   invite: ResidentInviteCreated | null
 }
 
+export type ResidentPasswordResetResult = {
+  residentId: string
+  targetUserId: string
+  temporaryPassword: string
+  expiresAt: string
+  loginLink: string
+}
+
 export type ResidentLifecycleRepairTimelineEvent = {
   stage: string
   at?: string

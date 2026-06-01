@@ -91,6 +91,19 @@ describe("payment validation", () => {
     expect(result.transactionId).toBe("UPI123456789")
   })
 
+  it("allows screenshot-only UPI submissions without a resident-entered transaction reference", () => {
+    const result = submitUpiPaymentSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      amount: 6500,
+      transactionId: "",
+      idempotencyKey: "payment-idempotency-key",
+    })
+
+    expect(result.transactionId).toBeUndefined()
+  })
+
   it("rejects unsafe UPI references with spaces", () => {
     const result = submitUpiPaymentSchema.safeParse({
       organizationId: TEST_ORGANIZATION_ID,

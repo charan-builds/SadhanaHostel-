@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   AlertTriangle,
   BarChart3,
@@ -69,12 +69,6 @@ export function OwnerDashboardClient() {
   })
 
   useRealtimeOwnerAnalytics({ enabled: Boolean(organizationId) })
-
-  useEffect(() => {
-    if (defaultHostelId && hostelFilter === "all") {
-      setHostelFilter(defaultHostelId)
-    }
-  }, [defaultHostelId, hostelFilter])
 
   const selectedHostelLabel = useMemo(() => {
     if (hostelFilter === "all") {
