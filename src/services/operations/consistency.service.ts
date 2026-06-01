@@ -1672,7 +1672,11 @@ async function detectBusinessTenantLinkageAnomalies(
   residents.forEach((resident) => {
     const userId = stringValue(resident, "user_id")
 
-    if (!userId) {
+    if (
+      !userId ||
+      stringValue(resident, "deleted_at") ||
+      stringValue(resident, "status") === "archived"
+    ) {
       return
     }
 
@@ -1685,6 +1689,7 @@ async function detectBusinessTenantLinkageAnomalies(
       relation: "auth user profile",
       anomalyType: "resident_user_tenant_mismatch",
       recommendation: "Resident onboarding/auth ownership is inconsistent. Manually review activation history before relinking the account.",
+      compareHostel: false,
     })
   })
 
@@ -2247,11 +2252,13 @@ function pushLinkageDetail(
     relation: string
     anomalyType: string
     recommendation: string
+    compareHostel?: boolean
   }
 ) {
   const recordId = stringValue(values.record, "id")
   const actualOrganizationId = stringValue(values.record, "organization_id")
   const actualHostelId = stringValue(values.record, "hostel_id")
+  const compareHostel = values.compareHostel ?? true
   const expectedOrganizationId = values.parent
     ? stringValue(values.parent, "organization_id")
     : null
@@ -2262,7 +2269,7 @@ function pushLinkageDetail(
   if (
     values.parent &&
     actualOrganizationId === expectedOrganizationId &&
-    actualHostelId === expectedHostelId
+    (!compareHostel || actualHostelId === expectedHostelId)
   ) {
     return
   }
@@ -2284,7 +2291,7 @@ function pushLinkageDetail(
       : `linked ${values.relation} is missing or outside tenant scope`,
     expectedOrganizationId,
     actualOrganizationId,
-    expectedHostelId,
+    expectedHostelId: compareHostel ? expectedHostelId : actualHostelId,
     actualHostelId,
     recommendedRepairAction: "repair_tenant_linkage",
     recommendation: values.parent

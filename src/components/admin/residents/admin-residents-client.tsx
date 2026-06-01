@@ -98,6 +98,7 @@ import {
   useDeactivateResident,
   useRecordInPersonPayment,
   useResidentPaymentLedger,
+  useResidentPaymentLedgers,
   useRepairResidentLifecycle,
   useResidents,
   useRunAutomation,
@@ -107,6 +108,13 @@ import type { ResidentPaymentLedger } from "@/types/payment-operations"
 
 type ResidentStatusFilter = "all" | "draft" | "active" | "suspended" | "checked_out" | "archived"
 type ResidentTypeFilter = "all" | "student" | "employee" | "other"
+type ResidentLedgerQuery = {
+  data?: ResidentPaymentLedger
+  isLoading: boolean
+  isFetching: boolean
+  isError: boolean
+  refetch: () => Promise<unknown>
+}
 
 const stagger: Variants = {
   hidden: { opacity: 0 },
@@ -154,9 +162,18 @@ export function AdminResidentsClient() {
     status: status === "all" ? undefined : status,
     residentType: residentType === "all" ? undefined : residentType,
   })
+  const residentRows = useMemo(() => query.data?.data ?? [], [query.data?.data])
+  const residentIds = useMemo(
+    () => residentRows.map((resident) => resident.id),
+    [residentRows]
+  )
+  const residentLedgerQueries = useResidentPaymentLedgers({
+    organizationId: organizationId ?? undefined,
+    residentIds,
+  })
 
   const summary = useMemo(() => {
-    const rows = query.data?.data ?? []
+    const rows = residentRows
     const lifecycle = analytics.data?.residentLifecycle
 
     return {
@@ -178,7 +195,7 @@ export function AdminResidentsClient() {
         rows.filter((resident) => !resident.aadhaar_document_id).length,
       monthlyFees: rows.reduce((total, resident) => total + resident.monthly_fee_amount, 0),
     }
-  }, [analytics.data, query.data])
+  }, [analytics.data, query.data?.meta.total, residentRows])
 
   async function confirmDeactivate() {
     if (!organizationId || !deactivateTarget) {
@@ -248,6 +265,7 @@ export function AdminResidentsClient() {
       })
 
       await query.refetch()
+      await Promise.all(residentLedgerQueries.map((ledgerQuery) => ledgerQuery.refetch()))
       toast.success(result.result.message)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to generate monthly dues.")
@@ -331,7 +349,7 @@ export function AdminResidentsClient() {
         <SummaryCard label="Active Residents" value={summary.active} icon={ShieldCheck} tone="success" />
         <SummaryCard label="Draft / Onboarding" value={summary.onboarding} icon={KeyRound} tone="warning" />
         <SummaryCard label="Verified Residents" value={summary.verified} icon={IdCard} tone="success" />
-        <SummaryCard label="Pending Verification" value={summary.pendingVerification} icon={Wrench} tone="warning" />
+        <SummaryCard label="Onboarding Follow-up" value={summary.pendingVerification} icon={Wrench} tone="warning" />
         <SummaryCard label="Suspended Residents" value={summary.suspended} icon={UserX} tone="danger" />
         <SummaryCard label="Left Residents" value={summary.checkedOut} icon={LogOut} tone="neutral" />
         <SummaryCard label="Monthly Fees on This Page" value={formatCurrency(summary.monthlyFees)} icon={CreditCard} tone="info" />
@@ -345,11 +363,20 @@ export function AdminResidentsClient() {
         />
       ) : null}
 
+      {!query.error ? (
+        <ResidentPaymentOverview
+          residents={residentRows}
+          ledgerQueries={residentLedgerQueries}
+          isLoading={query.isLoading}
+          onOpenResident={(resident) => setProfileTarget(resident)}
+        />
+      ) : null}
+
       <DataTableShell
         title="Resident Records"
         description="Server-side search, filters, pagination, and production API actions."
         empty={
-          query.data?.data.length === 0 ? (
+          residentRows.length === 0 ? (
             <EmptyState
               title={search || status !== "all" || residentType !== "all" ? "No residents match these filters" : "No residents yet"}
               message={
@@ -430,7 +457,7 @@ export function AdminResidentsClient() {
               animate="show"
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
-              {query.data?.data.slice(0, 6).map((resident) => (
+              {residentRows.slice(0, 6).map((resident) => (
                 <ResidentProfileTile
                   key={resident.id}
                   resident={resident}
@@ -461,7 +488,7 @@ export function AdminResidentsClient() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {query.data?.data.map((resident) => (
+                  {residentRows.map((resident) => (
                     <TableRow key={resident.id}>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
@@ -607,6 +634,189 @@ export function AdminResidentsClient() {
         organizationId={organizationId}
       />
     </ResponsiveContainer>
+  )
+}
+
+function ResidentPaymentOverview({
+  residents,
+  ledgerQueries,
+  isLoading,
+  onOpenResident,
+}: {
+  residents: Tables<"residents">[]
+  ledgerQueries: ResidentLedgerQuery[]
+  isLoading: boolean
+  onOpenResident: (resident: Tables<"residents">) => void
+}) {
+  const overviewRows = residents.map((resident, index) => {
+    const ledgerQuery = ledgerQueries[index]
+    const snapshot = ledgerQuery?.data
+      ? getResidentFinanceSnapshot(resident, ledgerQuery.data)
+      : null
+
+    return {
+      resident,
+      ledgerQuery,
+      snapshot,
+    }
+  })
+  const loadedSnapshots = overviewRows
+    .map((row) => row.snapshot)
+    .filter((snapshot): snapshot is ResidentFinanceSnapshot => Boolean(snapshot))
+  const totals = loadedSnapshots.reduce(
+    (total, snapshot) => ({
+      dueLeft: total.dueLeft + snapshot.dueLeft,
+      pendingVerification:
+        total.pendingVerification + snapshot.pendingVerification,
+      advanceLeft: total.advanceLeft + snapshot.advanceLeft,
+      partialResidents:
+        total.partialResidents + (snapshot.status === "partial" ? 1 : 0),
+    }),
+    {
+      dueLeft: 0,
+      pendingVerification: 0,
+      advanceLeft: 0,
+      partialResidents: 0,
+    }
+  )
+
+  if (!isLoading && residents.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border bg-white/65 shadow-soft">
+      <div className="border-b p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              Payment overview
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">
+              Monthly dues and advance status
+            </h2>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <CompactFinanceMetric label="Monthly due" value={formatCurrency(totals.dueLeft)} />
+            <CompactFinanceMetric label="Pending" value={formatCurrency(totals.pendingVerification)} />
+            <CompactFinanceMetric label="Advance left" value={formatCurrency(totals.advanceLeft)} />
+            <CompactFinanceMetric label="Partial" value={totals.partialResidents} />
+          </div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <LoadingState variant="table" />
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Resident</TableHead>
+                <TableHead>Mobile</TableHead>
+                <TableHead>Joined</TableHead>
+                <TableHead>Monthly payment</TableHead>
+                <TableHead>Paid / pending</TableHead>
+                <TableHead>Advance</TableHead>
+                <TableHead>Total left</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ledger</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {overviewRows.map(({ resident, ledgerQuery, snapshot }) => (
+                <TableRow key={resident.id}>
+                  <TableCell>
+                    <div className="flex min-w-52 items-center gap-3">
+                      <ResidentAvatar resident={resident} />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-foreground">
+                          {resident.full_name}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {resident.admission_number}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>{resident.phone ?? "-"}</TableCell>
+                  <TableCell>{formatDate(resident.joined_on ?? resident.created_at)}</TableCell>
+                  <TableCell>{formatCurrency(resident.monthly_fee_amount)}</TableCell>
+                  {snapshot ? (
+                    <>
+                      <TableCell>
+                        <StackedMoneyLine
+                          primary={`Paid ${formatCurrency(snapshot.paidThisMonth)}`}
+                          secondary={`Pending ${formatCurrency(snapshot.pendingVerification)}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <StackedMoneyLine
+                          primary={`Paid ${formatCurrency(snapshot.advancePaid)}`}
+                          secondary={`Left ${formatCurrency(snapshot.advanceLeft)}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <StackedMoneyLine
+                          primary={formatCurrency(snapshot.reminderAmount)}
+                          secondary={`Monthly due ${formatCurrency(snapshot.dueLeft)}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={snapshot.status} />
+                      </TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell colSpan={4}>
+                        <span className="text-sm text-muted-foreground">
+                          {ledgerQuery?.isError ? "Ledger unavailable" : "Loading ledger"}
+                        </span>
+                      </TableCell>
+                    </>
+                  )}
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onOpenResident(resident)}
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      Open
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CompactFinanceMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border bg-background/70 px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function StackedMoneyLine({
+  primary,
+  secondary,
+}: {
+  primary: string
+  secondary: string
+}) {
+  return (
+    <div className="min-w-32">
+      <p className="text-sm font-medium text-foreground">{primary}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{secondary}</p>
+    </div>
   )
 }
 
@@ -953,34 +1163,54 @@ function ResidentFinancePanel({
       : isSameMonth(payment.created_at, new Date())
   )
   const paidThisMonth = currentPayments
-    .filter((payment) => payment.status === "verified")
+    .filter((payment) => payment.status === "verified" && !payment.is_advance)
     .reduce((total, payment) => total + payment.amount, 0)
   const pendingThisMonth = currentPayments
-    .filter((payment) => payment.status === "pending" || payment.status === "initiated")
+    .filter(
+      (payment) =>
+        !payment.is_advance &&
+        (payment.status === "pending" || payment.status === "initiated")
+    )
     .reduce((total, payment) => total + payment.amount, 0)
+  const advanceAppliedToCurrentRecord = currentRecord
+    ? currentPayments.some((payment) => payment.status === "verified" && payment.is_advance)
+    : false
   const thisMonthLeft =
-    currentRecord?.balance_amount ??
-    Math.max(resident.monthly_fee_amount - paidThisMonth - pendingThisMonth, 0)
+    currentRecord && !advanceAppliedToCurrentRecord
+      ? currentRecord.balance_amount
+      : Math.max(
+          (currentRecord?.total_amount ?? resident.monthly_fee_amount) -
+            paidThisMonth -
+            pendingThisMonth,
+          0
+        )
   const recordableDueRecord =
     currentRecord &&
-    ["pending", "partial", "overdue"].includes(currentRecord.status) &&
-    currentRecord.balance_amount > 0
+    ((["pending", "partial", "overdue"].includes(currentRecord.status) &&
+      currentRecord.balance_amount > 0) ||
+      (advanceAppliedToCurrentRecord && thisMonthLeft > 0))
       ? currentRecord
       : null
   const recordableDueAmount = recordableDueRecord
-    ? Math.max(recordableDueRecord.balance_amount - pendingThisMonth, 0)
+    ? Math.max(
+        (advanceAppliedToCurrentRecord
+          ? thisMonthLeft
+          : recordableDueRecord.balance_amount) - pendingThisMonth,
+        0
+      )
     : 0
   const advanceRequired = resident.monthly_fee_amount
   const advancePaid = ledger.totals.advanceBalance
   const advanceLeft = Math.max(advanceRequired - advancePaid, 0)
-  const reminderAmount = ledger.totals.currentDue + advanceLeft
+  const dueLeft = currentRecord ? Math.max(ledger.totals.currentDue, thisMonthLeft) : thisMonthLeft
+  const reminderAmount = dueLeft + advanceLeft
   const reminderMessage = buildAdminPaymentReminderMessage({
     resident,
     periodMonth: currentRecord?.period_month ?? currentPeriod,
     monthlyFee: resident.monthly_fee_amount,
     paidThisMonth,
     pendingThisMonth,
-    dueLeft: ledger.totals.currentDue,
+    dueLeft,
     advanceLeft,
   })
   const whatsappUrl = buildWhatsappUrl({
@@ -1007,7 +1237,7 @@ function ResidentFinancePanel({
             One-month advance is required before stay continuity.
           </p>
         </div>
-        <StatusBadge status={ledger.totals.currentDue > 0 || advanceLeft > 0 ? "pending" : "paid"} />
+        <StatusBadge status={dueLeft > 0 || advanceLeft > 0 ? "pending" : "paid"} />
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1015,7 +1245,7 @@ function ResidentFinancePanel({
         <ProfileMetric label="Paid this month" value={formatCurrency(paidThisMonth)} />
         <ProfileMetric label="Left this month" value={formatCurrency(thisMonthLeft)} />
         <ProfileMetric label="Pending verification" value={formatCurrency(ledger.totals.pendingVerification)} />
-        <ProfileMetric label="Total due left" value={formatCurrency(ledger.totals.currentDue)} />
+        <ProfileMetric label="Total due left" value={formatCurrency(dueLeft)} />
         <ProfileMetric label="Total paid" value={formatCurrency(ledger.totals.verifiedPaid)} />
         <ProfileMetric label="Advance required" value={formatCurrency(advanceRequired)} />
         <ProfileMetric label="Advance left" value={formatCurrency(advanceLeft)} />
@@ -1031,6 +1261,16 @@ function ResidentFinancePanel({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {recordableDueRecord && recordableDueAmount > 0 && advanceLeft > 0 ? (
+              <RecordInitialCollectionDialog
+                organizationId={organizationId}
+                resident={resident}
+                dueRecord={recordableDueRecord}
+                dueAmount={recordableDueAmount}
+                advanceAmount={advanceLeft}
+                onSaved={onSaved}
+              />
+            ) : null}
             <RecordInPersonPaymentDialog
               organizationId={organizationId}
               resident={resident}
@@ -1303,6 +1543,152 @@ function RecordInPersonPaymentDialog({
   )
 }
 
+function RecordInitialCollectionDialog({
+  organizationId,
+  resident,
+  dueRecord,
+  dueAmount,
+  advanceAmount,
+  onSaved,
+}: {
+  organizationId?: string | null
+  resident: Tables<"residents">
+  dueRecord: Tables<"monthly_fee_records">
+  dueAmount: number
+  advanceAmount: number
+  onSaved: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [method, setMethod] = useState<"cash" | "bank_transfer">("cash")
+  const [manualReference, setManualReference] = useState("")
+  const [notes, setNotes] = useState("")
+  const recordPayment = useRecordInPersonPayment()
+  const totalAmount = dueAmount + advanceAmount
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!organizationId) {
+      toast.error("Tenant context is still loading.")
+      return
+    }
+
+    try {
+      await recordPayment.mutateAsync({
+        organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+        monthlyFeeRecordId: dueRecord.id,
+        amount: dueAmount,
+        method,
+        manualReference: manualReference.trim() || undefined,
+        notes: notes.trim() || "First month fee collected with admission advance.",
+        isAdvance: false,
+        isPartial: dueAmount < dueRecord.balance_amount,
+        idempotencyKey: `admin-first-month-${crypto.randomUUID()}`,
+      })
+      await recordPayment.mutateAsync({
+        organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+        amount: advanceAmount,
+        method,
+        manualReference: manualReference.trim() || undefined,
+        notes: notes.trim() || "One-month advance collected with first month fee.",
+        isAdvance: true,
+        isPartial: false,
+        idempotencyKey: `admin-first-advance-${crypto.randomUUID()}`,
+      })
+
+      toast.success("First month fee and advance recorded separately.")
+      setOpen(false)
+      onSaved()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to record first collection."
+      )
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <WalletCards className="size-3.5" aria-hidden="true" />
+        Record first fee + advance
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Record first collection</DialogTitle>
+          <DialogDescription>
+            Split the cash into first month fee and one-month advance so the ledger stays clear.
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={submit}>
+          <div className="grid gap-3 rounded-xl border bg-muted/35 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span>First month fee</span>
+              <strong>{formatCurrency(dueAmount)}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>One-month advance</span>
+              <strong>{formatCurrency(advanceAmount)}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t pt-3">
+              <span>Total received</span>
+              <strong>{formatCurrency(totalAmount)}</strong>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="initial-collection-method">Payment method</Label>
+            <Select
+              value={method}
+              onValueChange={(value) => setMethod(value as "cash" | "bank_transfer")}
+            >
+              <SelectTrigger id="initial-collection-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="initial-collection-reference">Reference</Label>
+            <Input
+              id="initial-collection-reference"
+              value={manualReference}
+              onChange={(event) => setManualReference(event.target.value)}
+              placeholder="Receipt or transfer reference"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="initial-collection-notes">Notes</Label>
+            <Textarea
+              id="initial-collection-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Optional note"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={recordPayment.isPending}>
+              {recordPayment.isPending ? "Recording..." : "Record split payment"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ResidentInfoLine({ icon: Icon, value }: { icon: LucideIcon; value: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -1364,6 +1750,83 @@ function SummaryCard({
       </div>
     </motion.article>
   )
+}
+
+type ResidentFinanceSnapshot = {
+  currentPeriod: string
+  currentRecord: Tables<"monthly_fee_records"> | null
+  currentPayments: Tables<"payments">[]
+  paidThisMonth: number
+  pendingThisMonth: number
+  pendingVerification: number
+  advancePaid: number
+  advanceLeft: number
+  dueLeft: number
+  reminderAmount: number
+  status: "paid" | "partial" | "pending" | "overdue"
+}
+
+function getResidentFinanceSnapshot(
+  resident: Tables<"residents">,
+  ledger: ResidentPaymentLedger
+): ResidentFinanceSnapshot {
+  const currentPeriod = currentPeriodMonth()
+  const currentRecord =
+    ledger.feeRecords.find((record) => record.period_month === currentPeriod) ??
+    ledger.primaryDueRecord
+  const currentPayments = ledger.payments.filter((payment) =>
+    currentRecord
+      ? payment.monthly_fee_record_id === currentRecord.id
+      : isSameMonth(payment.created_at, new Date())
+  )
+  const paidThisMonth = currentPayments
+    .filter((payment) => payment.status === "verified" && !payment.is_advance)
+    .reduce((total, payment) => total + payment.amount, 0)
+  const pendingThisMonth = currentPayments
+    .filter(
+      (payment) =>
+        !payment.is_advance &&
+        (payment.status === "pending" || payment.status === "initiated")
+    )
+    .reduce((total, payment) => total + payment.amount, 0)
+  const advanceAppliedToCurrentRecord = currentRecord
+    ? currentPayments.some((payment) => payment.status === "verified" && payment.is_advance)
+    : false
+  const thisMonthLeft =
+    currentRecord && !advanceAppliedToCurrentRecord
+      ? currentRecord.balance_amount
+      : Math.max(
+          (currentRecord?.total_amount ?? resident.monthly_fee_amount) -
+            paidThisMonth -
+            pendingThisMonth,
+          0
+        )
+  const advancePaid = ledger.totals.advanceBalance
+  const advanceLeft = Math.max(resident.monthly_fee_amount - advancePaid, 0)
+  const dueLeft = currentRecord ? Math.max(ledger.totals.currentDue, thisMonthLeft) : thisMonthLeft
+  const reminderAmount = dueLeft + advanceLeft
+  const status =
+    ledger.totals.overdue > 0 || currentRecord?.status === "overdue"
+      ? "overdue"
+      : reminderAmount <= 0
+        ? "paid"
+        : paidThisMonth > 0 || pendingThisMonth > 0 || currentRecord?.status === "partial"
+          ? "partial"
+          : "pending"
+
+  return {
+    currentPeriod,
+    currentRecord,
+    currentPayments,
+    paidThisMonth,
+    pendingThisMonth,
+    pendingVerification: ledger.totals.pendingVerification,
+    advancePaid,
+    advanceLeft,
+    dueLeft,
+    reminderAmount,
+    status,
+  }
 }
 
 function buildAdminPaymentReminderMessage(input: {

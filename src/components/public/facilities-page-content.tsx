@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { hostelImages } from "@/constants/hostel-images"
 import { fallbackFacilities } from "@/constants/public-content"
-import type { FacilityItem } from "@/types/frontend"
+import { pickGalleryImage } from "@/lib/public-gallery"
+import type { FacilityItem, GalleryItem } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
   bath: Bath,
@@ -60,10 +61,15 @@ const extraFacilities = [
 
 export function FacilitiesPageContent({
   facilities = fallbackFacilities,
+  galleryItems,
 }: {
   facilities?: FacilityItem[]
+  galleryItems?: GalleryItem[]
 }) {
   const allFacilities = [...facilities, ...extraFacilities]
+  const facilityImageUrl =
+    pickGalleryImage(galleryItems, ["facility", "facilities", "dining", "amenity"], 0) ??
+    hostelImages.uploadedFacility
 
   return (
     <main className="flex flex-1 flex-col bg-white">
@@ -80,14 +86,24 @@ export function FacilitiesPageContent({
           </p>
           </div>
           <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border bg-slate-100 shadow-lifted">
-            <Image
-              src={hostelImages.building}
-              alt="Sadhana Boys Hostel facilities view"
-              fill
-              priority
-              className="object-cover"
-              sizes="(min-width: 1024px) 48vw, 100vw"
-            />
+            {facilityImageUrl.startsWith("/") ? (
+              <Image
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facilities view"
+                fill
+                priority
+                className="object-cover"
+                sizes="(min-width: 1024px) 48vw, 100vw"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facilities view"
+                className="absolute inset-0 size-full object-cover"
+                fetchPriority="high"
+              />
+            )}
             <div className="absolute inset-0 bg-linear-to-t from-slate-950/60 to-transparent" />
             <div className="absolute bottom-0 p-5 text-white">
               <p className="text-sm font-medium text-cyan-100">Actual hostel building</p>

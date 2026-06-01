@@ -9,6 +9,7 @@ import type {
   CreateGalleryItemInput,
   FacilitiesListInput,
   GalleryListInput,
+  UpdateFacilityInput,
   UpdateWebsiteSettingInput,
   UploadGalleryImageInput,
   WebsiteSettingsListInput,
@@ -52,6 +53,22 @@ export function useCreateFacility() {
 
   return useMutation({
     mutationFn: (input: CreateFacilityInput) => websiteSdk.createFacility(input),
+    onSuccess: (facility) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.website.all({
+          organizationId: facility.organization_id,
+          hostelId: facility.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useUpdateFacility() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateFacilityInput) => websiteSdk.updateFacility(input),
     onSuccess: (facility) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.website.all({

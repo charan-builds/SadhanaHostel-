@@ -17,6 +17,7 @@ export type ResidentOnboardingRequirements = {
   completionPercent: number
   missing: OnboardingRequirementKey[]
   canSubmitForVerification: boolean
+  canCompleteOnboarding: boolean
   canAccessResidentOperations: boolean
 }
 
@@ -49,6 +50,7 @@ export function getResidentOnboardingRequirements(
     completionPercent,
     missing,
     canSubmitForVerification: missing.length === 0,
+    canCompleteOnboarding: missing.length === 0,
     canAccessResidentOperations: isResidentOperationallyVerified(resident),
   }
 }

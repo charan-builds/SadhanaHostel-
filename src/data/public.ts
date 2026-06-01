@@ -95,8 +95,8 @@ export const roomTypes: RoomTypeCard[] = [
     title: "Employees",
     price: HOSTEL_FEES.employee,
     priceLabel: "₹5000/month",
-    description: "Rooms for employees with attached bathroom facilities and vehicle access.",
-    features: ["Attached bathroom facilities", "Parking", "Vehicle access"],
+    description: "Rooms for employees with parking support and vehicle access.",
+    features: ["Parking support", "Vehicle access", "Work-friendly stay"],
     icon: "BriefcaseBusiness",
   },
 ]
@@ -148,7 +148,7 @@ export const testimonials: TestimonialItem[] = [
   {
     name: "Suresh Naik",
     role: "Employee resident",
-    quote: "Parking and attached bathroom facilities make the stay practical for employees.",
+    quote: "Parking support and the practical room setup make the stay useful for employees.",
   },
 ]
 

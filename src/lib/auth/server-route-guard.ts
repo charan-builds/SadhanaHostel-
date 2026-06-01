@@ -13,6 +13,7 @@ import {
   type ProtectedRouteArea,
 } from "@/constants/auth"
 import { toApiError } from "@/lib/api/api-error"
+import { isResidentLimitedAccessPath } from "@/lib/auth/resident-onboarding-access"
 import { AuthService } from "@/services/auth.service"
 import { ResidentOnboardingService } from "@/services/onboarding/resident-onboarding.service"
 
@@ -64,7 +65,7 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
 
   if (
     area === "resident" &&
-    !isResidentOnboardingAllowedPath(requestedPath)
+    !isResidentLimitedAccessPath(requestedPath)
   ) {
     const onboardingService = await ResidentOnboardingService.create()
     let overview: Awaited<ReturnType<ResidentOnboardingService["getCurrentStatus"]>>
@@ -124,17 +125,6 @@ function getAdminRouteRequiredPermission(requestedPath: string): PermissionKey |
   if (pathname.startsWith("/admin/notices")) return "notices.manage"
 
   return null
-}
-
-function isResidentOnboardingAllowedPath(requestedPath: string) {
-  const pathname = requestedPath.split("?")[0]
-
-  return (
-    pathname === AUTH_REDIRECTS.residentOnboarding ||
-    pathname.startsWith(`${AUTH_REDIRECTS.residentOnboarding}/`) ||
-    pathname === "/resident/support" ||
-    pathname.startsWith("/resident/support/")
-  )
 }
 
 async function getAuthenticatedContext(

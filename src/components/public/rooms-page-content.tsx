@@ -20,7 +20,7 @@ const comparisonRows = [
   ["Monthly fee", `₹${hostelConfig.fees.student}/month`, `₹${hostelConfig.fees.employee}/month`],
   ["Best for", "College students", "Employees / working professionals"],
   ["Stay focus", "Affordable, study-friendly routine", "Comfort, parking, and vehicle access"],
-  ["Extra facilities", "Daily essentials", "Attached bathroom facilities and cots can be provided"],
+  ["Extra facilities", "Daily essentials", "Parking support and work-friendly routine"],
 ] as const
 
 export function RoomsPageContent({

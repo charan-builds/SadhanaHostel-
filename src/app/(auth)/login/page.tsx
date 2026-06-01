@@ -8,21 +8,21 @@ import { getPublicCmsContent } from "@/lib/cms/public-cms"
 import { pickBrandLogo } from "@/lib/public-gallery"
 
 export const metadata: Metadata = {
-  title: "Admin Login",
-  description: "Sign in to the Sadhana Boys Hostel admin ERP dashboard.",
+  title: "Sign In",
+  description: "Sign in to Sadhana Boys Hostel.",
 }
 
-export default async function AdminLoginPage() {
+export default async function LoginPage() {
   const cms = await getPublicCmsContent()
 
   return (
     <AuthShell
-      title="Admin portal sign in"
-      description="Secure access for hostel owners, admins, and authorized staff."
+      title="Sign in"
+      description="Use your admin, staff, or resident credentials to continue."
       logoUrl={pickBrandLogo(cms.galleryItems)}
     >
-      <Suspense fallback={<GlobalLoader label="Loading admin login..." />}>
-        <LoginForm expectedArea="admin" />
+      <Suspense fallback={<GlobalLoader label="Loading login..." />}>
+        <LoginForm />
       </Suspense>
     </AuthShell>
   )

@@ -415,11 +415,11 @@ export class SupportService {
       alerts.push({
         id: "onboarding.pending",
         severity: "medium",
-        title: "Resident onboarding needs verification",
-        description: "Residents cannot access full operations until profile and documents are reviewed.",
+        title: "Resident onboarding needs follow-up",
+        description: "Older or incomplete profiles need staff help before residents can finish.",
         count: onboardingPending,
         href: "/admin/residents/verification",
-        ctaLabel: "Open verification",
+        ctaLabel: "Open onboarding",
       })
     }
 
@@ -795,11 +795,11 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
       return {
         ...shared,
         title: "Onboarding recovery",
-        summary: "You can correct rejected details and re-submit for admin verification.",
+        summary: "You can correct rejected details and finish onboarding again.",
         steps: [
           "Open resident onboarding and review missing or rejected sections.",
           "Re-upload clearer Aadhaar, photo, or student ID documents if requested.",
-          "Submit for verification again after all required items are complete.",
+          "Finish onboarding again after all required items are complete.",
         ],
       }
     case "payment":

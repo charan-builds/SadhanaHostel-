@@ -165,6 +165,43 @@ export class WebsiteRepository {
     return data
   }
 
+  async getFacilityById(facilityId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("facilities")
+      .select("*")
+      .eq("id", facilityId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load facility.")
+    }
+
+    return data
+  }
+
+  async updateFacility(
+    facilityId: string,
+    organizationId: string,
+    values: TablesUpdate<"facilities">
+  ) {
+    const { data, error } = await this.db
+      .from("facilities")
+      .update(values)
+      .eq("id", facilityId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to update facility.")
+    }
+
+    return data
+  }
+
   async listGallery(
     filters: ListGalleryFilters
   ): Promise<PaginatedResult<GalleryWithDocumentRow>> {

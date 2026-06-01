@@ -38,7 +38,15 @@ export const paymentProofLookupSchema = z.object({
   expiresInSeconds: z.coerce.number().int().positive().max(3600).default(900),
 })
 
+export const documentPreviewLookupSchema = z.object({
+  organizationId: uuidSchema,
+  documentId: uuidSchema,
+  residentId: uuidSchema.optional(),
+  expiresInSeconds: z.coerce.number().int().positive().max(3600).default(900),
+})
+
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>
 export type UploadPaymentProofInput = z.infer<typeof uploadPaymentProofSchema>
 export type UploadProfilePhotoInput = z.infer<typeof uploadProfilePhotoSchema>
 export type PaymentProofLookupInput = z.infer<typeof paymentProofLookupSchema>
+export type DocumentPreviewLookupInput = z.infer<typeof documentPreviewLookupSchema>

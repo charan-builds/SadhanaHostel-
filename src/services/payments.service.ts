@@ -35,7 +35,6 @@ import {
 import { assertFound, AuthService } from "./auth.service"
 import { InvoicesService } from "./invoices"
 import { NotificationService } from "./notifications"
-import { isResidentOperationallyVerified } from "./onboarding/resident-onboarding.policy"
 import { RealtimeService } from "./realtime"
 import { UploadsService } from "./uploads.service"
 
@@ -283,25 +282,11 @@ export class PaymentsService {
       idempotencyKey
     )
 
-    if (verifiedPayment.monthly_fee_record_id) {
-      try {
-        await this.invoicesService.generateMonthlyFeeInvoice({
-          organizationId: values.organizationId,
-          monthlyFeeRecordId: verifiedPayment.monthly_fee_record_id,
-        })
-        verifiedPayment =
-          (await this.paymentsRepository.getById(
-            verifiedPayment.id,
-            verifiedPayment.organization_id
-          )) ?? verifiedPayment
-      } catch (error) {
-        logError(error, {
-          event: "payment.invoice_generation_after_manual_entry_failed",
-          paymentId: verifiedPayment.id,
-          organizationId: verifiedPayment.organization_id,
-        })
-      }
-    }
+    verifiedPayment = await this.ensureVerifiedPaymentInvoice(
+      verifiedPayment,
+      context.authUser.id,
+      "payment.invoice_generation_after_manual_entry_failed"
+    )
 
     logPaymentEvent({
       action: "verified",
@@ -343,10 +328,6 @@ export class PaymentsService {
       throw forbidden("Residents can only submit payments for their own profile.")
     }
 
-    if (!isFinanceUser && !isResidentOperationallyVerified(resident)) {
-      throw forbidden("Complete resident onboarding verification before submitting payments.")
-    }
-
     if (resident.hostel_id !== values.hostelId) {
       throw conflict("Payment hostel does not match resident hostel.")
     }
@@ -363,7 +344,7 @@ export class PaymentsService {
       organizationId: values.organizationId,
       hostelId: values.hostelId,
       residentId: values.residentId,
-      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
       amount: values.amount,
       isPartial: values.isPartial,
       isAdvance: values.isAdvance,
@@ -376,7 +357,7 @@ export class PaymentsService {
       organizationId: values.organizationId,
       hostelId: values.hostelId,
       residentId: values.residentId,
-      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
       amount: values.amount,
       transactionId,
       idempotencyKey: values.idempotencyKey,
@@ -1004,25 +985,11 @@ export class PaymentsService {
       values.idempotencyKey
     )
 
-    if (verifiedPayment.monthly_fee_record_id) {
-      try {
-        await this.invoicesService.generateMonthlyFeeInvoice({
-          organizationId: values.organizationId,
-          monthlyFeeRecordId: verifiedPayment.monthly_fee_record_id,
-        })
-        verifiedPayment =
-          (await this.paymentsRepository.getById(
-            verifiedPayment.id,
-            verifiedPayment.organization_id
-          )) ?? verifiedPayment
-      } catch (error) {
-        logError(error, {
-          event: "payment.invoice_generation_after_verification_failed",
-          paymentId: verifiedPayment.id,
-          organizationId: verifiedPayment.organization_id,
-        })
-      }
-    }
+    verifiedPayment = await this.ensureVerifiedPaymentInvoice(
+      verifiedPayment,
+      context.authUser.id,
+      "payment.invoice_generation_after_verification_failed"
+    )
 
     logPaymentEvent({
       action: "verified",
@@ -1337,6 +1304,52 @@ export class PaymentsService {
     }
   }
 
+  private async ensureVerifiedPaymentInvoice(
+    payment: PaymentRow,
+    actorUserId: string,
+    failureEvent: string
+  ) {
+    try {
+      if (payment.monthly_fee_record_id) {
+        await this.invoicesService.generateMonthlyFeeInvoice({
+          organizationId: payment.organization_id,
+          monthlyFeeRecordId: payment.monthly_fee_record_id,
+        })
+
+        return (
+          (await this.paymentsRepository.getById(
+            payment.id,
+            payment.organization_id
+          )) ?? payment
+        )
+      }
+
+      if (payment.invoice_id) {
+        return payment
+      }
+
+      const invoice = await this.invoicesService.generatePaymentReceiptInvoice({
+        payment,
+        actorUserId,
+      })
+
+      return this.paymentsRepository.updateInvoiceLink(
+        payment.id,
+        payment.organization_id,
+        invoice.id,
+        actorUserId
+      )
+    } catch (error) {
+      logError(error, {
+        event: failureEvent,
+        paymentId: payment.id,
+        organizationId: payment.organization_id,
+      })
+
+      return payment
+    }
+  }
+
   private async ensureManualPaymentProof(
     payment: PaymentRow,
     actorUserId: string,
@@ -1473,7 +1486,25 @@ export class PaymentsService {
         throw conflict("Payment due record does not match this resident.")
       }
 
-      if (!["pending", "partial", "overdue"].includes(linkedRecord.status)) {
+      const advanceAppliedToRecord = payments.data
+        .filter(
+          (payment) =>
+            payment.monthly_fee_record_id === values.monthlyFeeRecordId &&
+            payment.status === "verified" &&
+            payment.is_advance
+        )
+        .reduce((total, payment) => total + payment.amount, 0)
+      const effectiveBalance =
+        linkedRecord.balance_amount > 0
+          ? linkedRecord.balance_amount
+          : advanceAppliedToRecord > 0
+            ? Math.min(linkedRecord.total_amount, advanceAppliedToRecord)
+            : linkedRecord.balance_amount
+
+      if (
+        !["pending", "partial", "overdue"].includes(linkedRecord.status) &&
+        !(linkedRecord.status === "paid" && effectiveBalance > 0)
+      ) {
         throw conflict("This due record is not payable anymore.")
       }
 
@@ -1481,10 +1512,11 @@ export class PaymentsService {
         .filter(
           (payment) =>
             payment.monthly_fee_record_id === values.monthlyFeeRecordId &&
+            !payment.is_advance &&
             (payment.status === "pending" || payment.status === "initiated")
         )
         .reduce((total, payment) => total + payment.amount, 0)
-      const payableForRecord = Math.max(linkedRecord.balance_amount - pendingForRecord, 0)
+      const payableForRecord = Math.max(effectiveBalance - pendingForRecord, 0)
 
       this.assertPayableAmount({
         amount: values.amount,
@@ -1505,7 +1537,11 @@ export class PaymentsService {
       .filter((record) => ["pending", "partial", "overdue"].includes(record.status))
       .reduce((total, record) => total + record.balance_amount, 0)
     const pendingVerification = payments.data
-      .filter((payment) => payment.status === "pending" || payment.status === "initiated")
+      .filter(
+        (payment) =>
+          !payment.is_advance &&
+          (payment.status === "pending" || payment.status === "initiated")
+      )
       .reduce((total, payment) => total + payment.amount, 0)
     const payableDue = Math.max(currentDue - pendingVerification, 0)
 

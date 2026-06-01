@@ -25,7 +25,7 @@ export default async function HomePage() {
       <HomeHighlights facilities={cms.facilities} />
       <AboutPreview />
       <RoomsPreview roomTypes={cms.roomTypes} galleryItems={cms.galleryItems} />
-      <FacilitiesPreview facilities={cms.facilities} />
+      <FacilitiesPreview facilities={cms.facilities} galleryItems={cms.galleryItems} />
       <GalleryPreview galleryItems={cms.galleryItems} />
       <TestimonialsSection />
       <InquirySection />

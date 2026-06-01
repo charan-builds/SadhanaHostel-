@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 export default async function FacilitiesPage() {
   const cms = await getPublicCmsContent()
 
-  return <FacilitiesPageContent facilities={cms.facilities} />
+  return <FacilitiesPageContent facilities={cms.facilities} galleryItems={cms.galleryItems} />
 }

@@ -3,10 +3,10 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import Link from "next/link"
 import type { Route } from "next"
-import { Copy, ExternalLink, KeyRound, Loader2, MessageCircle, Save, UserPlus } from "lucide-react"
+import { Banknote, Copy, ExternalLink, KeyRound, Loader2, MessageCircle, Save, UserPlus } from "lucide-react"
 import type { ReactNode } from "react"
 import { useState } from "react"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
+import { formatCurrency } from "@/lib/format"
 import { useAdmissionsVacancy, useCreateResident, useCreateResidentInvite, useUpdateResident } from "@/hooks"
 import type { ResidentInviteCreated } from "@/types/invites"
 import type { Tables } from "@/types/database"
@@ -62,11 +63,37 @@ const residentFormSchema = z.object({
   permanentAddress: optionalTextSchema.pipe(z.string().max(500).optional()),
   monthlyFeeAmount: z.coerce.number().nonnegative(),
   securityDepositAmount: z.coerce.number().nonnegative(),
+  advancePaymentStatus: z.enum(["not_paid", "paid"]).default("not_paid"),
+  advancePaymentAmount: z.coerce.number().nonnegative(),
+  advancePaymentMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
+  advanceManualReference: optionalTextSchema.pipe(z.string().max(120).optional()),
+  advanceNotes: optionalTextSchema.pipe(z.string().max(1000).optional()),
+  firstMonthFeeStatus: z.enum(["not_paid", "paid"]).default("not_paid"),
+  firstMonthFeeAmount: z.coerce.number().nonnegative(),
+  firstMonthFeeMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
+  firstMonthFeeManualReference: optionalTextSchema.pipe(z.string().max(120).optional()),
+  firstMonthFeeNotes: optionalTextSchema.pipe(z.string().max(1000).optional()),
   roomId: z.string().uuid("Choose an available room.").optional().or(z.literal("")),
   bedLabel: optionalTextSchema.pipe(z.string().max(40).optional()),
   allocatedFrom: optionalTextSchema,
   notes: optionalTextSchema.pipe(z.string().max(1000).optional()),
   status: z.enum(["draft", "active", "suspended", "checked_out", "archived"]).optional(),
+}).superRefine((value, context) => {
+  if (value.advancePaymentStatus === "paid" && value.advancePaymentAmount <= 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["advancePaymentAmount"],
+      message: "Enter the advance amount received.",
+    })
+  }
+
+  if (value.firstMonthFeeStatus === "paid" && value.firstMonthFeeAmount <= 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["firstMonthFeeAmount"],
+      message: "Enter the first month fee received.",
+    })
+  }
 })
 
 type ResidentFormInput = z.input<typeof residentFormSchema>
@@ -103,6 +130,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   )
   const [createdResident, setCreatedResident] = useState<Tables<"residents"> | null>(null)
   const [createdInvite, setCreatedInvite] = useState<ResidentInviteCreated | null>(null)
+  const [createdAdvancePayment, setCreatedAdvancePayment] = useState<Tables<"payments"> | null>(null)
+  const [createdFirstMonthFeePayment, setCreatedFirstMonthFeePayment] = useState<Tables<"payments"> | null>(null)
   const [duplicateDetails, setDuplicateDetails] = useState<DuplicateResidentDetails | null>(null)
   const vacancyQuery = useAdmissionsVacancy({
     organizationId: organizationId ?? "",
@@ -138,6 +167,16 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       permanentAddress: resident?.permanent_address ?? "",
       monthlyFeeAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
       securityDepositAmount: resident?.security_deposit_amount ?? 0,
+      advancePaymentStatus: "not_paid",
+      advancePaymentAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
+      advancePaymentMethod: "cash",
+      advanceManualReference: "",
+      advanceNotes: "",
+      firstMonthFeeStatus: "not_paid",
+      firstMonthFeeAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
+      firstMonthFeeMethod: "cash",
+      firstMonthFeeManualReference: "",
+      firstMonthFeeNotes: "",
       roomId: "",
       bedLabel: "",
       allocatedFrom: new Date().toISOString().slice(0, 10),
@@ -146,6 +185,9 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
     },
   })
   const isCreate = !resident
+  const advancePaymentStatus = useWatch({ control, name: "advancePaymentStatus" })
+  const firstMonthFeeStatus = useWatch({ control, name: "firstMonthFeeStatus" })
+  const currentMonthlyFee = useWatch({ control, name: "monthlyFeeAmount" })
 
   async function onSubmit(values: ResidentFormValues) {
     if (!organizationId || !hostelId) {
@@ -168,6 +210,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       setDuplicateDetails(null)
       setCreatedInvite(null)
       setCreatedResident(null)
+      setCreatedAdvancePayment(null)
+      setCreatedFirstMonthFeePayment(null)
 
       let savedResident: Tables<"residents">
       let generatedInvite: ResidentInviteCreated | null = null
@@ -216,6 +260,16 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             monthlyFeeAmount:
               values.residentType === "student" ? HOSTEL_FEES.student : values.monthlyFeeAmount,
             securityDepositAmount: values.securityDepositAmount,
+            advancePaymentAmount:
+              values.advancePaymentStatus === "paid" ? values.advancePaymentAmount : undefined,
+            advancePaymentMethod: values.advancePaymentMethod,
+            advanceManualReference: values.advanceManualReference || undefined,
+            advanceNotes: values.advanceNotes || undefined,
+            firstMonthFeeAmount:
+              values.firstMonthFeeStatus === "paid" ? values.firstMonthFeeAmount : undefined,
+            firstMonthFeeMethod: values.firstMonthFeeMethod,
+            firstMonthFeeManualReference: values.firstMonthFeeManualReference || undefined,
+            firstMonthFeeNotes: values.firstMonthFeeNotes || undefined,
             roomId: values.roomId || undefined,
             bedLabel: undefined,
             allocatedFrom: values.allocatedFrom || undefined,
@@ -227,6 +281,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
 
         savedResident = createResult.resident
         generatedInvite = createResult.invite
+        setCreatedAdvancePayment(createResult.advancePayment)
+        setCreatedFirstMonthFeePayment(createResult.firstMonthFeePayment)
       }
 
       if (!resident) {
@@ -309,6 +365,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         <CreatedResidentAccessPanel
           resident={createdResident}
           invite={createdInvite}
+          advancePayment={createdAdvancePayment}
+          firstMonthFeePayment={createdFirstMonthFeePayment}
           invitePending={createInvite.isPending}
         />
       ) : null}
@@ -341,11 +399,19 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                 onValueChange={(value) => {
                   field.onChange(value)
                   if (value === "student" || value === "employee") {
+                    const feeAmount =
+                      value === "employee" ? HOSTEL_FEES.employee : HOSTEL_FEES.student
                     setValue(
                       "monthlyFeeAmount",
-                      value === "employee" ? HOSTEL_FEES.employee : HOSTEL_FEES.student,
+                      feeAmount,
                       { shouldValidate: true }
                     )
+                    if (advancePaymentStatus === "paid") {
+                      setValue("advancePaymentAmount", feeAmount, { shouldValidate: true })
+                    }
+                    if (firstMonthFeeStatus === "paid") {
+                      setValue("firstMonthFeeAmount", feeAmount, { shouldValidate: true })
+                    }
                   }
                 }}
               >
@@ -395,12 +461,151 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             <Input id="securityDepositAmount" type="number" {...register("securityDepositAmount")} />
           </Field>
         ) : null}
+        {isCreate ? (
+          <div className="md:col-span-2 rounded-lg border border-dashed bg-muted/30 p-4">
+            <div className="grid gap-4 md:grid-cols-[1fr_220px] md:items-start">
+              <div className="text-sm">
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <Banknote className="size-4 text-primary" aria-hidden="true" />
+                  Advance paid at admission
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Mark this when the resident has already paid advance. It is saved as a
+                  verified advance payment and appears in the admin and resident ledgers.
+                </p>
+              </div>
+              <Field id="advancePaymentStatus" label="Advance status" error={errors.advancePaymentStatus?.message}>
+                <Controller
+                  control={control}
+                  name="advancePaymentStatus"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value)
+                        if (value === "paid") {
+                          setValue("advancePaymentAmount", currentMonthlyFee, {
+                            shouldValidate: true,
+                          })
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="advancePaymentStatus" className="h-9 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="not_paid">Not paid yet</SelectItem>
+                        <SelectItem value="paid">Already paid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </Field>
+            </div>
+            {advancePaymentStatus === "paid" ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Field id="advancePaymentAmount" label="Advance amount" error={errors.advancePaymentAmount?.message}>
+                  <Input id="advancePaymentAmount" type="number" {...register("advancePaymentAmount")} />
+                </Field>
+                <Field id="advancePaymentMethod" label="Payment method" error={errors.advancePaymentMethod?.message}>
+                  <Controller
+                    control={control}
+                    name="advancePaymentMethod"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="advancePaymentMethod" className="h-9 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                <Field id="advanceManualReference" label="Reference" error={errors.advanceManualReference?.message}>
+                  <Input id="advanceManualReference" {...register("advanceManualReference")} />
+                </Field>
+                <Field id="advanceNotes" label="Advance notes" error={errors.advanceNotes?.message}>
+                  <Input id="advanceNotes" {...register("advanceNotes")} />
+                </Field>
+              </div>
+            ) : null}
+            <div className="mt-5 grid gap-4 border-t pt-4 md:grid-cols-[1fr_220px] md:items-start">
+              <div className="text-sm">
+                <p className="font-medium text-foreground">First month fee</p>
+                <p className="mt-1 text-muted-foreground">
+                  Use this when the first month hostel fee was received along with the advance.
+                </p>
+              </div>
+              <Field id="firstMonthFeeStatus" label="Fee status" error={errors.firstMonthFeeStatus?.message}>
+                <Controller
+                  control={control}
+                  name="firstMonthFeeStatus"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value)
+                        if (value === "paid") {
+                          setValue("firstMonthFeeAmount", currentMonthlyFee, {
+                            shouldValidate: true,
+                          })
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="firstMonthFeeStatus" className="h-9 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="not_paid">Not paid yet</SelectItem>
+                        <SelectItem value="paid">Already paid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </Field>
+            </div>
+            {firstMonthFeeStatus === "paid" ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Field id="firstMonthFeeAmount" label="First month fee amount" error={errors.firstMonthFeeAmount?.message}>
+                  <Input id="firstMonthFeeAmount" type="number" {...register("firstMonthFeeAmount")} />
+                </Field>
+                <Field id="firstMonthFeeMethod" label="Payment method" error={errors.firstMonthFeeMethod?.message}>
+                  <Controller
+                    control={control}
+                    name="firstMonthFeeMethod"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="firstMonthFeeMethod" className="h-9 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                <Field id="firstMonthFeeManualReference" label="Reference" error={errors.firstMonthFeeManualReference?.message}>
+                  <Input id="firstMonthFeeManualReference" {...register("firstMonthFeeManualReference")} />
+                </Field>
+                <Field id="firstMonthFeeNotes" label="Fee notes" error={errors.firstMonthFeeNotes?.message}>
+                  <Input id="firstMonthFeeNotes" {...register("firstMonthFeeNotes")} />
+                </Field>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {!resident ? (
           <>
             <div className="md:col-span-2">
               <h3 className="text-sm font-semibold text-foreground">Room assignment</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Save a preferred room for onboarding. Occupancy and dues start only after verification and final room allocation.
+                Save a preferred room for onboarding. When the resident completes their
+                profile, the room is activated automatically if capacity is still available.
               </p>
             </div>
             <Field id="roomId" label="Preferred room" error={errors.roomId?.message}>
@@ -508,10 +713,14 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
 function CreatedResidentAccessPanel({
   resident,
   invite,
+  advancePayment,
+  firstMonthFeePayment,
   invitePending,
 }: {
   resident: Tables<"residents">
   invite: ResidentInviteCreated | null
+  advancePayment: Tables<"payments"> | null
+  firstMonthFeePayment: Tables<"payments"> | null
   invitePending: boolean
 }) {
   return (
@@ -526,6 +735,17 @@ function CreatedResidentAccessPanel({
           <p className="mt-2 text-xs text-emerald-800">
             Admission: {resident.admission_number} · Status: draft
           </p>
+          {advancePayment ? (
+            <p className="mt-2 text-xs font-medium text-emerald-900">
+              Advance captured: {formatCurrency(advancePayment.amount)} · {advancePayment.method}
+            </p>
+          ) : null}
+          {firstMonthFeePayment ? (
+            <p className="mt-1 text-xs font-medium text-emerald-900">
+              First month fee captured: {formatCurrency(firstMonthFeePayment.amount)} ·{" "}
+              {firstMonthFeePayment.method}
+            </p>
+          ) : null}
         </div>
         {invitePending ? (
           <div className="inline-flex items-center gap-2 rounded-md bg-background px-3 py-2 text-xs font-medium text-foreground shadow-sm">

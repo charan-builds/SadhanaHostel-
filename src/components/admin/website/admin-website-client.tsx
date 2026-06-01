@@ -41,6 +41,7 @@ import { humanizeEnum } from "@/lib/format"
 import {
   useCreateFacility,
   useFacilities,
+  useUpdateFacility,
   useUpdateWebsiteSetting,
   useWebsiteSettings,
 } from "@/hooks"
@@ -81,6 +82,9 @@ export function AdminWebsiteClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [editingSetting, setEditingSetting] = useState<Tables<"website_settings"> | null>(
+    null
+  )
+  const [editingFacility, setEditingFacility] = useState<Tables<"facilities"> | null>(
     null
   )
   const [isFacilityDialogOpen, setIsFacilityDialogOpen] = useState(false)
@@ -184,7 +188,13 @@ export function AdminWebsiteClient() {
               Facilities feed the public homepage and facilities page.
             </CardDescription>
           </div>
-          <Button className="gap-2" onClick={() => setIsFacilityDialogOpen(true)}>
+          <Button
+            className="gap-2"
+            onClick={() => {
+              setEditingFacility(null)
+              setIsFacilityDialogOpen(true)
+            }}
+          >
             <Plus className="size-4" aria-hidden="true" />
             Add facility
           </Button>
@@ -202,7 +212,16 @@ export function AdminWebsiteClient() {
             <EmptyState
               title="No facilities yet"
               message="Add your first facility so families can see what the hostel provides."
-              action={<Button onClick={() => setIsFacilityDialogOpen(true)}>Add facility</Button>}
+              action={
+                <Button
+                  onClick={() => {
+                    setEditingFacility(null)
+                    setIsFacilityDialogOpen(true)
+                  }}
+                >
+                  Add facility
+                </Button>
+              }
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -215,7 +234,22 @@ export function AdminWebsiteClient() {
                         {facility.description}
                       </p>
                     </div>
-                    <StatusBadge status={facility.status} />
+                    <div className="grid justify-items-end gap-2">
+                      <StatusBadge status={facility.status} />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          setEditingFacility(facility)
+                          setIsFacilityDialogOpen(true)
+                        }}
+                      >
+                        <FilePenLine className="size-4" aria-hidden="true" />
+                        Edit
+                      </Button>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -231,7 +265,14 @@ export function AdminWebsiteClient() {
       />
       <FacilityDialog
         open={isFacilityDialogOpen}
-        onOpenChange={setIsFacilityDialogOpen}
+        facility={editingFacility}
+        onOpenChange={(open) => {
+          setIsFacilityDialogOpen(open)
+
+          if (!open) {
+            setEditingFacility(null)
+          }
+        }}
         organizationId={organizationId}
         hostelId={hostelId}
       />
@@ -353,36 +394,47 @@ function SettingEditorDialog({
 
 function FacilityDialog({
   open,
+  facility,
   onOpenChange,
   organizationId,
   hostelId,
 }: {
   open: boolean
+  facility: Tables<"facilities"> | null
   onOpenChange: (open: boolean) => void
   organizationId: string
   hostelId?: string
 }) {
   const createFacility = useCreateFacility()
+  const updateFacility = useUpdateFacility()
+  const isEditing = Boolean(facility)
   const form = useForm<FacilityFormInput, unknown, FacilityFormValues>({
     resolver: zodResolver(facilityFormSchema),
-    defaultValues: {
-      name: "",
-      slug: "",
-      description: "",
-      iconName: "sparkles",
-      isHighlighted: false,
-      sortOrder: 0,
-      status: "published",
-    },
+    defaultValues: getFacilityDefaults(facility),
   })
 
+  useEffect(() => {
+    form.reset(getFacilityDefaults(facility))
+  }, [facility, form, open])
+
   async function onSubmit(values: FacilityFormValues) {
-    await createFacility.mutateAsync({
-      organizationId,
-      hostelId,
-      ...values,
-    })
-    toast.success("Facility created.")
+    if (facility) {
+      await updateFacility.mutateAsync({
+        facilityId: facility.id,
+        organizationId,
+        hostelId: facility.hostel_id ?? hostelId,
+        ...values,
+      })
+      toast.success("Facility updated.")
+    } else {
+      await createFacility.mutateAsync({
+        organizationId,
+        hostelId,
+        ...values,
+      })
+      toast.success("Facility created.")
+    }
+
     form.reset()
     onOpenChange(false)
   }
@@ -392,7 +444,7 @@ function FacilityDialog({
       <DialogContent>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>Add Facility</DialogTitle>
+            <DialogTitle>{isEditing ? "Edit Facility" : "Add Facility"}</DialogTitle>
             <DialogDescription>
               Published facilities are shown on the public website.
             </DialogDescription>
@@ -471,13 +523,17 @@ function FacilityDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createFacility.isPending} className="gap-2">
-              {createFacility.isPending ? (
+            <Button
+              type="submit"
+              disabled={createFacility.isPending || updateFacility.isPending}
+              className="gap-2"
+            >
+              {createFacility.isPending || updateFacility.isPending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : (
                 <Sparkles className="size-4" aria-hidden="true" />
               )}
-              Save facility
+              {isEditing ? "Update facility" : "Save facility"}
             </Button>
           </DialogFooter>
         </form>
@@ -493,6 +549,18 @@ function getSettingDefaults(setting: Tables<"website_settings"> | null): Setting
     seoDescription: setting?.seo_description ?? "",
     status: setting?.status ?? "draft",
     contentJson: JSON.stringify(setting?.content ?? {}, null, 2),
+  }
+}
+
+function getFacilityDefaults(facility: Tables<"facilities"> | null): FacilityFormInput {
+  return {
+    name: facility?.name ?? "",
+    slug: facility?.slug ?? "",
+    description: facility?.description ?? "",
+    iconName: facility?.icon_name ?? "sparkles",
+    isHighlighted: facility?.is_highlighted ?? false,
+    sortOrder: facility?.sort_order ?? 0,
+    status: facility?.status ?? "published",
   }
 }
 

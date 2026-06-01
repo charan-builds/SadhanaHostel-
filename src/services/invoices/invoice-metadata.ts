@@ -6,7 +6,7 @@ export type InvoiceMetadataInput = {
   residentId: string
   periodMonth?: string
   generatedByUserId?: string | null
-  source?: "monthly_fee" | "manual" | "adjustment"
+  source?: "monthly_fee" | "payment_receipt" | "manual" | "adjustment"
 }
 
 export function createInvoiceMetadata(input: InvoiceMetadataInput): Json {

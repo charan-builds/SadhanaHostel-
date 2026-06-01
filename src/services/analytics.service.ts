@@ -880,8 +880,8 @@ function buildOwnerInsights(input: {
     insights.push({
       severity: "warning",
       title: "Onboarding bottleneck",
-      description: `${input.onboardingIncomplete} residents are not fully verified. Operational access may be blocked.`,
-      action: "Review the verification queue.",
+      description: `${input.onboardingIncomplete} residents have not finished onboarding. Operational access may be blocked.`,
+      action: "Open onboarding follow-up.",
     })
   }
 

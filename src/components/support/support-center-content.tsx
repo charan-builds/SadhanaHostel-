@@ -141,11 +141,11 @@ export function SupportCenterContent() {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <Faq
             question="Can I activate without an invite?"
-            answer="No. Resident accounts are invite-only so hostel staff can verify admission, room allocation, and documents."
+            answer="No. Resident accounts are invite-only, then profile completion activates the dashboard."
           />
           <Faq
-            question="Can I pay before onboarding verification?"
-            answer="No. Payments unlock after resident verification to prevent wrong-account payments and finance reconciliation mistakes."
+            question="When do payments unlock?"
+            answer="Residents can submit payment proof before profile completion. Other dashboard actions unlock after required profile details and documents are complete."
           />
           <Faq
             question="What if my room allocation looks wrong?"

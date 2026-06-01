@@ -19,6 +19,7 @@ import {
   createGalleryItemSchema,
   facilitiesListSchema,
   galleryListSchema,
+  updateFacilitySchema,
   updateWebsiteSettingSchema,
   uploadGalleryImageSchema,
   websiteSettingsListSchema,
@@ -180,6 +181,56 @@ export class WebsiteService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+
+    return facility
+  }
+
+  async updateFacility(input: unknown) {
+    const values = updateFacilitySchema.parse(input)
+    const context = await this.authService.requirePermission("cms.manage")
+    const existingFacility = await this.websiteRepository.getFacilityById(
+      values.facilityId,
+      values.organizationId
+    )
+
+    if (!existingFacility) {
+      throw notFound("Facility not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingFacility.organization_id,
+      existingFacility.hostel_id
+    )
+
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId ?? existingFacility.hostel_id ?? undefined
+    )
+    const publishedAt =
+      values.status === "published" && existingFacility.status !== "published"
+        ? new Date().toISOString()
+        : undefined
+    const facility = await this.websiteRepository.updateFacility(
+      values.facilityId,
+      values.organizationId,
+      {
+        hostel_id: hostelId,
+        name: values.name,
+        slug: values.slug,
+        description: values.description,
+        icon_name: values.iconName,
+        image_document_id: values.imageDocumentId,
+        is_highlighted: values.isHighlighted,
+        sort_order: values.sortOrder,
+        status: values.status,
+        published_at: publishedAt,
+        updated_by: context.authUser.id,
+      }
+    )
 
     await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
 

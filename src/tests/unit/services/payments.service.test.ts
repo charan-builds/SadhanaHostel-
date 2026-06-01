@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest"
 
 import { PaymentsService } from "@/services/payments.service"
 import {
+  FEE_RECORD_ID,
   PAYMENT_ID,
   paymentFixture,
+  RESIDENT_ID,
+  residentFixture,
   TEST_HOSTEL_ID,
   TEST_ORGANIZATION_ID,
 } from "@/tests/fixtures"
-import { adminAuthContext } from "@/tests/helpers"
+import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { PaymentSettingRow } from "@/types/payment-operations"
 
 function createServiceHarness() {
@@ -27,6 +30,9 @@ function createServiceHarness() {
     getById: vi.fn(),
     verify: vi.fn(),
     reject: vi.fn(),
+    createResidentUpiDraft: vi.fn(),
+    finalizeSubmission: vi.fn(),
+    updateInvoiceLink: vi.fn(),
   }
   const uploadsRepository = {
     findLatestPaymentProof: vi.fn(),
@@ -43,6 +49,13 @@ function createServiceHarness() {
     queue: vi.fn(),
     send: vi.fn(),
   }
+  const uploadsService = {
+    uploadPaymentProof: vi.fn(),
+  }
+  const invoicesService = {
+    generateMonthlyFeeInvoice: vi.fn(),
+    generatePaymentReceiptInvoice: vi.fn(),
+  }
 
   Object.assign(service, {
     authService,
@@ -52,13 +65,19 @@ function createServiceHarness() {
     residentsRepository,
     realtimeService,
     notificationService,
+    uploadsService,
+    invoicesService,
   })
 
   return {
     service,
+    authService,
     paymentSettingsRepository,
     paymentsRepository,
     uploadsRepository,
+    uploadsService,
+    residentsRepository,
+    invoicesService,
   }
 }
 
@@ -125,28 +144,46 @@ describe("PaymentsService", () => {
     expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
   })
 
-  it("delegates pending payment verification to the repository", async () => {
+  it("delegates pending payment verification and links a receipt invoice", async () => {
     const harness = createServiceHarness()
-    const verified = paymentFixture({ status: "verified" })
+    const verified = paymentFixture({ status: "verified", is_advance: true })
+    const linked = paymentFixture({
+      ...verified,
+      invoice_id: "00000000-0000-4000-8000-000000000155",
+    })
 
     harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
     harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue({
       resident_id: paymentFixture().resident_id,
     })
     harness.paymentsRepository.verify.mockResolvedValue(verified)
+    harness.invoicesService.generatePaymentReceiptInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
 
     await expect(
       harness.service.verifyPayment({
         organizationId: TEST_ORGANIZATION_ID,
         paymentId: PAYMENT_ID,
       })
-    ).resolves.toEqual(verified)
+    ).resolves.toEqual(linked)
 
     expect(harness.paymentsRepository.verify).toHaveBeenCalledWith(
       PAYMENT_ID,
       TEST_ORGANIZATION_ID,
       adminAuthContext().authUser.id,
       undefined
+    )
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).toHaveBeenCalledWith({
+      payment: verified,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(harness.paymentsRepository.updateInvoiceLink).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      linked.invoice_id,
+      adminAuthContext().authUser.id
     )
   })
 
@@ -249,6 +286,80 @@ describe("PaymentsService", () => {
         action: "payment_settings.qr_preview_failed",
         record_id: setting.id,
       })
+    )
+  })
+
+  it("allows residents to submit payment proof before profile completion", async () => {
+    const harness = createServiceHarness()
+    const context = residentAuthContext()
+    const file = new File(["proof"], "payment-proof.png", { type: "image/png" })
+    const draftPayment = paymentFixture({
+      amount: 10,
+      status: "initiated",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      is_partial: true,
+      created_by: context.authUser.id,
+    })
+    const submittedPayment = paymentFixture({
+      ...draftPayment,
+      status: "pending",
+    })
+    const serviceInternals = harness.service as unknown as {
+      assertPaymentSettingPolicy: ReturnType<typeof vi.fn>
+      assertResidentPaymentAmount: ReturnType<typeof vi.fn>
+    }
+
+    serviceInternals.assertPaymentSettingPolicy = vi.fn().mockResolvedValue(undefined)
+    serviceInternals.assertResidentPaymentAmount = vi.fn().mockResolvedValue(undefined)
+    harness.authService.getCurrentContext.mockResolvedValue(context)
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: context.authUser.id,
+        date_of_birth: null,
+        permanent_address: null,
+        aadhaar_document_id: null,
+        profile_image_document_id: null,
+        status: "active",
+      })
+    )
+    harness.paymentsRepository.createResidentUpiDraft.mockResolvedValue(draftPayment)
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue(null)
+    harness.uploadsService.uploadPaymentProof.mockResolvedValue({
+      document: { id: "payment-proof-document-id" },
+    })
+    harness.paymentsRepository.finalizeSubmission.mockResolvedValue(submittedPayment)
+
+    await expect(
+      harness.service.submitUpiPaymentWithProof(
+        {
+          organizationId: TEST_ORGANIZATION_ID,
+          hostelId: TEST_HOSTEL_ID,
+          residentId: RESIDENT_ID,
+          monthlyFeeRecordId: FEE_RECORD_ID,
+          amount: 10,
+          method: "upi",
+          isPartial: true,
+          idempotencyKey: "resident-payment-proof-test",
+        },
+        file
+      )
+    ).resolves.toEqual(submittedPayment)
+
+    expect(harness.paymentsRepository.createResidentUpiDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: FEE_RECORD_ID,
+        amount: 10,
+        isPartial: true,
+        actorUserId: context.authUser.id,
+      })
+    )
+    expect(harness.uploadsService.uploadPaymentProof).toHaveBeenCalledWith(
+      expect.objectContaining({
+        residentId: RESIDENT_ID,
+        paymentId: PAYMENT_ID,
+      }),
+      file
     )
   })
 

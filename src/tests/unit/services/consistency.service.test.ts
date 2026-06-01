@@ -306,6 +306,75 @@ describe("operational consistency scanning", () => {
     )
   })
 
+  it("does not report matching organization resident auth profiles as hostel mismatches", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select?.includes("user_id")) {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              user_id: "user-1",
+              status: "active",
+              is_active: true,
+              deleted_at: null,
+            },
+          ])
+        }
+
+        if (table === "users") {
+          return Promise.resolve([
+            {
+              id: "user-1",
+              organization_id: TEST_ORGANIZATION_ID,
+              is_active: true,
+              deleted_at: null,
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings.some((finding) => finding.id === "security.business_tenant_scope")).toBe(false)
+  })
+
+  it("does not report archived residents with historical auth links", async () => {
+    const repository = createRepository({
+      list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
+        if (table === "residents" && input.select?.includes("user_id")) {
+          return Promise.resolve([
+            {
+              id: RESIDENT_ID,
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              user_id: "missing-user",
+              status: "archived",
+              is_active: false,
+              deleted_at: "2026-06-01T10:37:42.950842+00:00",
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings.some((finding) => finding.id === "security.business_tenant_scope")).toBe(false)
+  })
+
   it("reports tenantless resident identity anomalies as manual repair findings", async () => {
     const repository = createRepository({
       listResidentTenantIdentityAnomalies: vi.fn().mockResolvedValue([

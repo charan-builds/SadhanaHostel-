@@ -56,7 +56,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Reservations", href: "/admin/reservations", icon: CalendarCheck },
   { title: "Vacancy", href: "/admin/vacancy", icon: BedDouble },
   { title: "Residents", href: "/admin/residents", icon: Users },
-  { title: "Verification", href: "/admin/residents/verification", icon: ShieldCheck },
+  { title: "Onboarding", href: "/admin/residents/verification", icon: ClipboardCheck },
   { title: "Rooms", href: "/admin/rooms", icon: Building2 },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
   { title: "Payment Security", href: "/admin/finance/payment-security", icon: ShieldCheck },

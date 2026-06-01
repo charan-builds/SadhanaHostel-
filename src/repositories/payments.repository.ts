@@ -248,6 +248,31 @@ export class PaymentsRepository {
     return data
   }
 
+  async updateInvoiceLink(
+    paymentId: string,
+    organizationId: string,
+    invoiceId: string,
+    actorUserId: string
+  ) {
+    const { data, error } = await this.db
+      .from("payments")
+      .update({
+        invoice_id: invoiceId,
+        updated_by: actorUserId,
+      })
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to link payment invoice.")
+    }
+
+    return data
+  }
+
   async listFeeRecords(
     filters: ListFeeRecordsFilters
   ): Promise<PaginatedResult<MonthlyFeeRecordRow>> {

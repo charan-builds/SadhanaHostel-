@@ -13,6 +13,7 @@ import type {
   HostelRow,
   ResidentRow,
 } from "@/repositories/invoices.repository"
+import type { PaymentRow } from "@/repositories/payments.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { TablesInsert } from "@/types/database"
 import {
@@ -29,7 +30,11 @@ import {
   buildInvoiceStoragePath,
   prepareInvoiceDownloadToken,
 } from "./invoice-storage"
-import { createMonthlyFeeInvoiceTemplateData } from "./invoice-template"
+import {
+  createMonthlyFeeInvoiceTemplateData,
+  createPaymentReceiptInvoiceTemplateData,
+  type InvoiceTemplateData,
+} from "./invoice-template"
 
 export type PrepareInvoiceDraftInput = {
   organizationId: string
@@ -45,6 +50,7 @@ export type PrepareInvoiceDraftInput = {
   dueDate?: string | null
   periodMonth?: string
   generatedByUserId?: string | null
+  source?: "monthly_fee" | "payment_receipt" | "manual" | "adjustment"
 }
 
 export class InvoiceFoundationService {
@@ -85,7 +91,7 @@ export class InvoiceFoundationService {
         residentId: input.residentId,
         periodMonth: input.periodMonth,
         generatedByUserId: input.generatedByUserId,
-        source: "monthly_fee",
+        source: input.source ?? "monthly_fee",
       }),
       created_by: input.generatedByUserId,
       updated_by: input.generatedByUserId,
@@ -158,7 +164,11 @@ export class InvoicesService {
           values.organizationId,
           values.monthlyFeeRecordId
         )
-        const invoiceWithPdf = await this.ensureInvoicePdf(invoice, invoiceContext, context.authUser.id)
+        const invoiceWithPdf = await this.ensureMonthlyFeeInvoicePdf(
+          invoice,
+          invoiceContext,
+          context.authUser.id
+        )
 
         logAuditEvent({
           action: "invoice.generated",
@@ -176,6 +186,89 @@ export class InvoicesService {
         return invoiceWithPdf
       }
     )
+  }
+
+  async generatePaymentReceiptInvoice(input: {
+    payment: PaymentRow
+    actorUserId: string
+  }) {
+    const { payment, actorUserId } = input
+
+    if (payment.status !== "verified") {
+      throw conflict("Only verified payments can receive a receipt invoice.")
+    }
+
+    const [organization, hostel, resident] = await Promise.all([
+      this.invoicesRepository.getOrganization(payment.organization_id),
+      this.invoicesRepository.getHostel(payment.hostel_id, payment.organization_id),
+      this.invoicesRepository.getResident(payment.resident_id, payment.organization_id),
+    ])
+    const resolvedOrganization = assertFound(organization, "Organization not found.")
+    const resolvedHostel = assertFound(hostel, "Hostel not found.")
+    const resolvedResident = assertFound(resident, "Resident not found.")
+    const issueMonth = new Date().toISOString().slice(0, 7)
+    const sequence =
+      (await this.invoicesRepository.countIssuedInvoicesForMonth(
+        payment.organization_id,
+        issueMonth
+      )) + 1
+    const foundation = new InvoiceFoundationService()
+    const invoiceDraft = foundation.prepareInvoiceDraft({
+      organizationId: payment.organization_id,
+      organizationSlug: resolvedOrganization.slug,
+      hostelId: payment.hostel_id,
+      residentId: payment.resident_id,
+      monthlyFeeRecordId: null,
+      sequence,
+      subtotalAmount: payment.amount,
+      paidAmount: payment.amount,
+      dueDate: (payment.paid_at ?? payment.verified_at ?? new Date().toISOString()).slice(
+        0,
+        10
+      ),
+      generatedByUserId: actorUserId,
+      source: "payment_receipt",
+    })
+    const invoice = await this.invoicesRepository.create({
+      ...invoiceDraft,
+      status: "paid",
+      metadata: {
+        ...(typeof invoiceDraft.metadata === "object" && invoiceDraft.metadata !== null
+          ? invoiceDraft.metadata
+          : {}),
+        payment_id: payment.id,
+        payment_method: payment.method,
+        transaction_id: payment.transaction_id,
+        manual_reference: payment.manual_reference,
+        is_advance: payment.is_advance,
+      },
+    })
+    const invoiceWithPdf = await this.ensureInvoicePdfFromTemplate(
+      invoice,
+      createPaymentReceiptInvoiceTemplateData({
+        organization: resolvedOrganization,
+        hostel: resolvedHostel,
+        resident: resolvedResident,
+        invoice,
+        payment,
+      }),
+      actorUserId
+    )
+
+    logAuditEvent({
+      action: "invoice.payment_receipt_generated",
+      actorUserId,
+      organizationId: payment.organization_id,
+      targetTable: "invoices",
+      targetId: invoiceWithPdf.id,
+      outcome: "success",
+      details: {
+        paymentId: payment.id,
+        invoiceNumber: invoiceWithPdf.invoice_number,
+      },
+    })
+
+    return invoiceWithPdf
   }
 
   async createSignedDownloadUrl(input: unknown) {
@@ -248,7 +341,7 @@ export class InvoicesService {
     }
   }
 
-  private async ensureInvoicePdf(
+  private async ensureMonthlyFeeInvoicePdf(
     invoice: InvoiceRow,
     context: {
       organization: OrganizationRow
@@ -258,6 +351,21 @@ export class InvoicesService {
     },
     actorUserId: string
   ) {
+    return this.ensureInvoicePdfFromTemplate(
+      invoice,
+      createMonthlyFeeInvoiceTemplateData({
+        ...context,
+        invoice,
+      }),
+      actorUserId
+    )
+  }
+
+  private async ensureInvoicePdfFromTemplate(
+    invoice: InvoiceRow,
+    templateData: InvoiceTemplateData,
+    actorUserId: string
+  ) {
     if (invoice.pdf_document_id && invoice.pdf_storage_path) {
       return invoice
     }
@@ -265,17 +373,12 @@ export class InvoicesService {
     const storagePath =
       invoice.pdf_storage_path ??
       buildInvoiceStoragePath({
-        organizationId: context.organization.id,
-        hostelId: context.hostel.id,
-        residentId: context.resident.id,
+        organizationId: invoice.organization_id,
+        hostelId: invoice.hostel_id,
+        residentId: invoice.resident_id,
         invoiceNumber: invoice.invoice_number,
       })
-    const pdf = await this.pdfService.render(
-      createMonthlyFeeInvoiceTemplateData({
-        ...context,
-        invoice,
-      })
-    )
+    const pdf = await this.pdfService.render(templateData)
 
     await this.storageService.uploadInvoicePdf(storagePath, pdf)
 

@@ -54,7 +54,7 @@ describe("upload access restrictions", () => {
     expect(uploadsRepository.uploadObject).not.toHaveBeenCalled()
   })
 
-  it("stores payment proof under the payment-scoped path with checksum metadata", async () => {
+  it("stores payment proof before resident profile completion", async () => {
     const service = new UploadsService({} as never)
     const authService = {
       getCurrentContext: vi.fn().mockResolvedValue({
@@ -69,7 +69,7 @@ describe("upload access restrictions", () => {
         user_id: "resident-user-id",
         hostel_id: TEST_HOSTEL_ID,
         status: "active",
-        onboarding_status: "verified",
+        onboarding_status: "profile_incomplete",
       }),
     }
     const paymentsRepository = {

@@ -54,12 +54,23 @@ export function useSubmitResidentOnboarding() {
   return useMutation({
     mutationFn: (input: OnboardingSubmitInput) => onboardingSdk.submit(input),
     onSuccess: async (result) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.onboarding.me({
-          organizationId: result.resident.organization_id,
-          hostelId: result.resident.hostel_id,
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.onboarding.me({
+            organizationId: result.resident.organization_id,
+            hostelId: result.resident.hostel_id,
+          }),
         }),
-      })
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.residents.detail(
+            {
+              organizationId: result.resident.organization_id,
+              hostelId: result.resident.hostel_id,
+            },
+            "me"
+          ),
+        }),
+      ])
     },
   })
 }

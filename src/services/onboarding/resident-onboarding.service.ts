@@ -1,13 +1,14 @@
 import "server-only"
 
 import { conflict, forbidden } from "@/lib/api/api-error"
-import { logAuditEvent } from "@/lib/logger"
+import { logAuditEvent, logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import {
   ResidentsRepository,
   type ResidentWithOnboarding,
 } from "@/repositories/residents.repository"
+import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
 import {
@@ -22,7 +23,6 @@ import { assertFound, AuthService } from "../auth.service"
 import {
   getResidentOnboardingRequirements,
   isResidentOperationallyVerified,
-  isResidentSelfOnboardingComplete,
 } from "./resident-onboarding.policy"
 
 export class ResidentOnboardingService {
@@ -142,11 +142,9 @@ export class ResidentOnboardingService {
       }
     )
 
-    const finalized = await this.finalizeSelfOnboardingIfComplete(updated, context.authUser.id)
-
     return {
-      resident: finalized,
-      requirements: getResidentOnboardingRequirements(finalized),
+      resident: updated,
+      requirements: getResidentOnboardingRequirements(updated),
     }
   }
 
@@ -171,16 +169,114 @@ export class ResidentOnboardingService {
       })
     }
 
-    const updated = await this.residentsRepository.transitionOnboarding({
-      organizationId: values.organizationId,
-      residentId: resident.id,
-      nextStatus: "verification_pending",
+    const updated = await this.completeOnboardingWithoutAdminReview(
+      resident,
+      values.organizationId,
+      context.authUser.id
+    )
+
+    logAuditEvent({
+      action: "resident.onboarding_completed",
       actorUserId: context.authUser.id,
+      organizationId: values.organizationId,
+      targetTable: "residents",
+      targetId: resident.id,
+      outcome: "success",
+      details: {
+        completionMode: "resident_self_completion",
+        adminReviewRequired: false,
+      },
     })
 
     return {
       resident: updated,
       requirements: getResidentOnboardingRequirements(updated),
+    }
+  }
+
+  private async completeOnboardingWithoutAdminReview(
+    resident: ResidentWithOnboarding,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    const adminDb = createSupabaseAdminClient()
+    const adminResidentsRepository = new ResidentsRepository(adminDb)
+    const now = new Date().toISOString()
+    let updated = await adminResidentsRepository.updateExtended(
+      resident.id,
+      organizationId,
+      {
+        onboarding_status: "verified",
+        onboarding_rejection_reason: null,
+        onboarding_completed_at: resident.onboarding_completed_at ?? now,
+        onboarding_verified_at: now,
+        onboarding_verified_by: actorUserId,
+        status: "active",
+        updated_by: actorUserId,
+      }
+    )
+
+    await this.activateRequestedRoomIfPossible(adminDb, updated, actorUserId)
+
+    updated =
+      ((await adminResidentsRepository.getById(
+        resident.id,
+        organizationId
+      )) as ResidentWithOnboarding | null) ?? updated
+
+    return updated
+  }
+
+  private async activateRequestedRoomIfPossible(
+    adminDb: AppSupabaseClient,
+    resident: ResidentWithOnboarding,
+    actorUserId: string
+  ) {
+    if (!resident.hostel_id) {
+      return
+    }
+
+    const requestedRoom = getRequestedRoomAssignment(resident)
+
+    if (!requestedRoom.roomId) {
+      return
+    }
+
+    const roomsRepository = new RoomsRepository(adminDb)
+    const existingAllocation = await roomsRepository.getActiveAllocationForResidentInHostel(
+      resident.id,
+      resident.organization_id,
+      resident.hostel_id
+    )
+
+    if (existingAllocation) {
+      return
+    }
+
+    try {
+      await roomsRepository.allocateRoomAtomic({
+        organizationId: resident.organization_id,
+        hostelId: resident.hostel_id,
+        roomId: requestedRoom.roomId,
+        residentId: resident.id,
+        bedLabel: requestedRoom.bedLabel ?? undefined,
+        allocatedFrom: requestedRoom.allocatedFrom ?? new Date().toISOString().slice(0, 10),
+        monthlyFeeAmount: resident.monthly_fee_amount,
+        reason: "Resident completed onboarding; activating preferred room from admission.",
+        actorUserId,
+      })
+    } catch (error) {
+      logger.warn({
+        event: "resident.onboarding_preferred_room_activation_failed",
+        message: "Resident onboarding completed, but preferred room could not be allocated.",
+        organizationId: resident.organization_id,
+        userId: actorUserId,
+        error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        metadata: {
+          residentId: resident.id,
+          roomId: requestedRoom.roomId,
+        },
+      })
     }
   }
 
@@ -241,29 +337,6 @@ export class ResidentOnboardingService {
       requirements: getResidentOnboardingRequirements(updated),
     }
   }
-
-  private async finalizeSelfOnboardingIfComplete(
-    resident: ResidentWithOnboarding,
-    actorUserId: string
-  ) {
-    if (
-      isResidentOperationallyVerified(resident) ||
-      !isResidentSelfOnboardingComplete(resident)
-    ) {
-      return resident
-    }
-
-    const adminRepository = new ResidentsRepository(createSupabaseAdminClient())
-
-    return adminRepository.updateExtended(resident.id, resident.organization_id, {
-      status: "active",
-      onboarding_status: "verified",
-      onboarding_completed_at: resident.onboarding_completed_at ?? new Date().toISOString(),
-      onboarding_verified_at: new Date().toISOString(),
-      onboarding_verified_by: actorUserId,
-      updated_by: actorUserId,
-    })
-  }
 }
 
 function jsonObjectOrEmpty(value: Json): Record<string, unknown> {
@@ -272,4 +345,27 @@ function jsonObjectOrEmpty(value: Json): Record<string, unknown> {
   }
 
   return value
+}
+
+function getRequestedRoomAssignment(resident: ResidentWithOnboarding) {
+  const metadata = jsonObjectOrEmpty(resident.metadata)
+  const requested =
+    metadata.requested_room_assignment &&
+    typeof metadata.requested_room_assignment === "object" &&
+    !Array.isArray(metadata.requested_room_assignment)
+      ? (metadata.requested_room_assignment as Record<string, unknown>)
+      : {}
+  const roomId = typeof requested.room_id === "string" ? requested.room_id : null
+  const bedLabel = typeof requested.bed_label === "string" ? requested.bed_label : null
+  const allocatedFrom =
+    typeof requested.allocated_from === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(requested.allocated_from)
+      ? requested.allocated_from
+      : null
+
+  return {
+    roomId,
+    bedLabel,
+    allocatedFrom,
+  }
 }

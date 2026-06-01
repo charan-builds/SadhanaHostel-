@@ -203,9 +203,9 @@ export function AdminDashboardClient() {
 
   const healthCards = [
     {
-      title: "Verification Queue",
+      title: "Onboarding Follow-up",
       value: pendingVerification,
-      detail: "Documents or onboarding need review",
+      detail: "Older or rejected profiles need staff action",
       icon: FileCheck2,
       tone: pendingVerification ? "warning" : "success",
       href: "/admin/residents/verification",
@@ -252,7 +252,7 @@ export function AdminDashboardClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Admin Dashboard"
-        description="Operational overview for student lifecycle, room occupancy, payments, admissions, and verification work."
+        description="Operational overview for student lifecycle, room occupancy, payments, admissions, and onboarding work."
         badge="Live workspace"
         actions={
           <>
@@ -913,8 +913,8 @@ function buildOperationalAlerts(input: {
 
   if (input.pendingVerification > 0) {
     alerts.push({
-      title: `${input.pendingVerification} verification review${input.pendingVerification === 1 ? "" : "s"} pending`,
-      description: "Review documents so verified residents can access full hostel workflows.",
+      title: `${input.pendingVerification} onboarding follow-up${input.pendingVerification === 1 ? "" : "s"} pending`,
+      description: "Check older profiles that were already waiting before automatic completion was enabled.",
       href: "/admin/residents/verification",
     })
   }

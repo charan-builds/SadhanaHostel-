@@ -4,6 +4,8 @@ import type { ResidentInviteCreated } from "./invites"
 export type ResidentCreateResult = {
   resident: Tables<"residents">
   invite: ResidentInviteCreated | null
+  advancePayment: Tables<"payments"> | null
+  firstMonthFeePayment: Tables<"payments"> | null
 }
 
 export type ResidentPasswordResetResult = {

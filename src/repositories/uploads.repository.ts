@@ -55,6 +55,22 @@ export class UploadsRepository {
     return data.signedUrl
   }
 
+  async getDocumentById(documentId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("documents")
+      .select("*")
+      .eq("id", documentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load document metadata.")
+    }
+
+    return data
+  }
+
   getPublicUrl(bucketName: string, storagePath: string) {
     const { data } = this.db.storage.from(bucketName).getPublicUrl(storagePath)
 

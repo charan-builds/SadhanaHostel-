@@ -5,6 +5,7 @@ import type {
   OrganizationRow,
   ResidentRow,
 } from "@/repositories/invoices.repository"
+import type { PaymentRow } from "@/repositories/payments.repository"
 
 export type InvoiceLineItem = {
   description: string
@@ -85,6 +86,37 @@ export function createMonthlyFeeInvoiceTemplateData(input: {
     lineItems,
     footerNote:
       "This is a system-generated invoice for hostel fee records. Please contact hostel administration for corrections.",
+  }
+}
+
+export function createPaymentReceiptInvoiceTemplateData(input: {
+  organization: OrganizationRow
+  hostel: HostelRow
+  resident: ResidentRow
+  invoice: InvoiceRow
+  payment: PaymentRow
+}): InvoiceTemplateData {
+  const reference =
+    input.payment.transaction_id ??
+    input.payment.manual_reference ??
+    input.payment.id.slice(0, 8).toUpperCase()
+  const paymentKind = input.payment.is_advance
+    ? "Advance payment"
+    : "Verified payment"
+
+  return {
+    organization: input.organization,
+    hostel: input.hostel,
+    resident: input.resident,
+    invoice: input.invoice,
+    lineItems: [
+      {
+        description: `${paymentKind} receipt - ${reference}`,
+        amount: input.payment.amount,
+      },
+    ],
+    footerNote:
+      "This is a system-generated receipt for a verified hostel payment. Please contact hostel administration for corrections.",
   }
 }
 

@@ -10,6 +10,7 @@ import { logAuditEvent, logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
+import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UsersRepository } from "@/repositories/users.repository"
@@ -35,6 +36,14 @@ type ResidentsServiceDependencies = {
   residentsRepository?: ResidentsRepository
   residentInviteService?: Pick<ResidentInviteService, "createResidentInvite">
   operationsRepository?: Pick<OperationsRepository, "repairResidentLifecycle">
+  paymentsRepository?: Pick<
+    PaymentsRepository,
+    | "create"
+    | "createFeeRecord"
+    | "findByIdempotencyKey"
+    | "findFeeRecordByResidentPeriod"
+    | "updateFeeRecord"
+  >
 }
 
 export class ResidentsService {
@@ -42,6 +51,14 @@ export class ResidentsService {
   private readonly residentsRepository: ResidentsRepository
   private readonly residentInviteService: Pick<ResidentInviteService, "createResidentInvite">
   private readonly operationsRepository: Pick<OperationsRepository, "repairResidentLifecycle">
+  private readonly paymentsRepository: Pick<
+    PaymentsRepository,
+    | "create"
+    | "createFeeRecord"
+    | "findByIdempotencyKey"
+    | "findFeeRecordByResidentPeriod"
+    | "updateFeeRecord"
+  >
 
   constructor(
     private readonly db: AppSupabaseClient,
@@ -56,6 +73,7 @@ export class ResidentsService {
         residentsRepository: this.residentsRepository,
       })
     this.operationsRepository = dependencies.operationsRepository ?? new OperationsRepository(db)
+    this.paymentsRepository = dependencies.paymentsRepository ?? new PaymentsRepository(db)
   }
 
   static async create() {
@@ -199,6 +217,13 @@ export class ResidentsService {
     const context = await this.authService.requirePermission("residents.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+    if (
+      ((values.advancePaymentAmount && values.advancePaymentAmount > 0) ||
+        (values.firstMonthFeeAmount && values.firstMonthFeeAmount > 0)) &&
+      !anyRoleHasPermission(context.roles, "finance.manage")
+    ) {
+      throw forbidden("Finance permission is required to record admission payments.")
+    }
 
     const duplicate = await this.residentsRepository.findAdmissionDuplicate({
       organizationId: values.organizationId,
@@ -220,13 +245,182 @@ export class ResidentsService {
       deliveryChannel: values.inviteDeliveryChannel,
       expiresInHours: values.inviteExpiresInHours,
     })
+    const firstMonthFeePayment = await this.recordAdmissionFirstMonthFeePayment(
+      values,
+      currentResident,
+      context.authUser.id
+    )
+    const advancePayment = await this.recordAdmissionAdvancePayment(
+      values,
+      currentResident,
+      context.authUser.id
+    )
 
     await this.publishResidentEvent("resident.created", currentResident, context.authUser.id)
 
     return {
       resident: currentResident,
       invite,
+      advancePayment,
+      firstMonthFeePayment,
     }
+  }
+
+  private async recordAdmissionFirstMonthFeePayment(
+    values: ReturnType<typeof createResidentSchema.parse>,
+    resident: { id: string; organization_id: string; hostel_id: string | null },
+    actorUserId: string
+  ): Promise<PaymentRow | null> {
+    if (!values.firstMonthFeeAmount || values.firstMonthFeeAmount <= 0) {
+      return null
+    }
+
+    if (!resident.hostel_id) {
+      throw conflict("Resident hostel is required before recording first month fee.")
+    }
+
+    const periodMonth = currentPeriodMonth()
+    const idempotencyKey = `resident-admission-first-month-${resident.id}-${periodMonth}`
+    const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
+      values.organizationId,
+      idempotencyKey
+    )
+
+    if (existingPayment) {
+      return existingPayment
+    }
+
+    const monthlyFee = resolveResidentMonthlyFee(
+      values.residentType,
+      values.monthlyFeeAmount
+    )
+    const existingFeeRecord = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+      values.organizationId,
+      resident.id,
+      periodMonth
+    )
+    const feeRecord =
+      existingFeeRecord ??
+      (await this.paymentsRepository.createFeeRecord({
+        organization_id: values.organizationId,
+        hostel_id: resident.hostel_id,
+        resident_id: resident.id,
+        period_month: periodMonth,
+        due_date: buildDueDate(periodMonth),
+        base_amount: monthlyFee,
+        total_amount: monthlyFee,
+        balance_amount: monthlyFee,
+        status: monthlyFee === 0 ? "paid" : "pending",
+        notes: "First month fee generated from quick admission.",
+        metadata: {
+          source: "resident_quick_admission",
+          generated_for_initial_collection: true,
+        },
+        created_by: actorUserId,
+        updated_by: actorUserId,
+      }))
+    const now = new Date().toISOString()
+    const paidAmount = Math.min(
+      feeRecord.total_amount,
+      feeRecord.paid_amount + values.firstMonthFeeAmount
+    )
+    const balanceAmount = Math.max(0, feeRecord.total_amount - paidAmount)
+    const payment = await this.paymentsRepository.create({
+      organization_id: values.organizationId,
+      hostel_id: resident.hostel_id,
+      resident_id: resident.id,
+      monthly_fee_record_id: feeRecord.id,
+      amount: values.firstMonthFeeAmount,
+      method: values.firstMonthFeeMethod,
+      status: "verified",
+      idempotency_key: idempotencyKey,
+      manual_reference: normalizeOptionalText(values.firstMonthFeeManualReference) ?? null,
+      notes:
+        normalizeOptionalText(values.firstMonthFeeNotes) ??
+        "First month fee collected during resident admission.",
+      is_advance: false,
+      is_partial: balanceAmount > 0,
+      provider: "admin_quick_admission",
+      paid_at: now,
+      verified_at: now,
+      verified_by: actorUserId,
+      received_by: actorUserId,
+      metadata: {
+        idempotency_key: idempotencyKey,
+        source: "resident_quick_admission",
+        first_month_fee: true,
+        period_month: periodMonth,
+      },
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    })
+
+    await this.paymentsRepository.updateFeeRecord(
+      feeRecord.id,
+      values.organizationId,
+      {
+        paid_amount: paidAmount,
+        balance_amount: balanceAmount,
+        status: balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "pending",
+        updated_by: actorUserId,
+      }
+    )
+
+    return payment
+  }
+
+  private async recordAdmissionAdvancePayment(
+    values: ReturnType<typeof createResidentSchema.parse>,
+    resident: { id: string; organization_id: string; hostel_id: string | null },
+    actorUserId: string
+  ): Promise<PaymentRow | null> {
+    if (!values.advancePaymentAmount || values.advancePaymentAmount <= 0) {
+      return null
+    }
+
+    if (!resident.hostel_id) {
+      throw conflict("Resident hostel is required before recording admission advance.")
+    }
+
+    const idempotencyKey = `resident-admission-advance-${resident.id}`
+    const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
+      values.organizationId,
+      idempotencyKey
+    )
+
+    if (existingPayment) {
+      return existingPayment
+    }
+
+    const now = new Date().toISOString()
+
+    return this.paymentsRepository.create({
+      organization_id: values.organizationId,
+      hostel_id: resident.hostel_id,
+      resident_id: resident.id,
+      amount: values.advancePaymentAmount,
+      method: values.advancePaymentMethod,
+      status: "verified",
+      idempotency_key: idempotencyKey,
+      manual_reference: normalizeOptionalText(values.advanceManualReference) ?? null,
+      notes:
+        normalizeOptionalText(values.advanceNotes) ??
+        "Advance collected during resident admission.",
+      is_advance: true,
+      is_partial: false,
+      provider: "admin_quick_admission",
+      paid_at: now,
+      verified_at: now,
+      verified_by: actorUserId,
+      received_by: actorUserId,
+      metadata: {
+        idempotency_key: idempotencyKey,
+        source: "resident_quick_admission",
+        recorded_during_admission: true,
+      },
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    })
   }
 
   private async createDraftResident(
@@ -564,6 +758,16 @@ function generateTemporaryPassword() {
 
 function getAppBaseUrl() {
   return getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
+}
+
+function currentPeriodMonth() {
+  const now = new Date()
+
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+}
+
+function buildDueDate(periodMonth: string) {
+  return `${periodMonth.slice(0, 7)}-10`
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {

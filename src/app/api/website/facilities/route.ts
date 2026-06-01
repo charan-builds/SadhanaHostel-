@@ -30,3 +30,14 @@ export async function POST(request: Request) {
     return errorResponse(error)
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const service = await WebsiteService.create()
+    const facility = await service.updateFacility(await parseJsonBody(request))
+
+    return successResponse(facility, "Facility updated successfully.")
+  } catch (error) {
+    return errorResponse(error)
+  }
+}

@@ -57,7 +57,7 @@ export function AdminOnboardingVerificationClient() {
     })
     setRejectionReason("")
     await queue.refetch()
-    toast.success(status === "verified" ? "Resident verified." : "Resident rejected.")
+      toast.success(status === "verified" ? "Resident activated." : "Resident sent back.")
   }
 
   if (!organizationId) {
@@ -72,14 +72,14 @@ export function AdminOnboardingVerificationClient() {
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Resident Verification Queue"
-        description="Review onboarding profiles, required document status, and approve dashboard access."
+        title="Resident Onboarding Follow-up"
+        description="Track incomplete or rejected profiles. Completed resident profiles activate automatically."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
         <Metric label="Queue" value={residents.length} />
         <Metric
-          label="Ready"
+          label="Legacy ready"
           value={residents.filter((resident) => resident.onboarding_status === "verification_pending").length}
         />
         <Metric
@@ -94,9 +94,10 @@ export function AdminOnboardingVerificationClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Verification Worklist</CardTitle>
+          <CardTitle>Onboarding Worklist</CardTitle>
           <CardDescription>
-            Approving a resident marks onboarding verified and unlocks resident operations.
+            New residents activate when their profile and documents are complete. Use this only
+            for rejected profiles or older records that were already waiting.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -113,14 +114,14 @@ export function AdminOnboardingVerificationClient() {
 
           {queue.isError ? (
             <APIErrorState
-              title="Verification queue could not be loaded"
+              title="Onboarding queue could not be loaded"
               error={queue.error}
               onRetry={() => void queue.refetch()}
             />
           ) : residents.length === 0 && !queue.isLoading ? (
             <EmptyState
-              title="No residents need verification"
-              message="Newly activated residents appear here after they complete profile and document upload."
+              title="No onboarding follow-up needed"
+              message="Residents disappear from this list after completing profile and document upload."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border">
@@ -175,7 +176,7 @@ export function AdminOnboardingVerificationClient() {
                               onClick={() => void reviewResident(resident.id, "verified")}
                             >
                               <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                              Approve
+                              Activate
                             </Button>
                             <Textarea
                               value={rejectionReason}

@@ -5,6 +5,7 @@ import type {
   CreateGalleryItemInput,
   FacilitiesListInput,
   GalleryListInput,
+  UpdateFacilityInput,
   UpdateWebsiteSettingInput,
   UploadGalleryImageInput,
   WebsiteSettingsListInput,
@@ -46,6 +47,13 @@ export const websiteSdk = {
 
   createFacility(input: CreateFacilityInput) {
     return apiClient.post<Tables<"facilities">, CreateFacilityInput>(
+      "/api/website/facilities",
+      input
+    )
+  },
+
+  updateFacility(input: UpdateFacilityInput) {
+    return apiClient.patch<Tables<"facilities">, UpdateFacilityInput>(
       "/api/website/facilities",
       input
     )

@@ -5,6 +5,7 @@ import { Menu } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DashboardUserActions } from "@/components/layout/dashboard-user-actions"
+import { ResidentProfileReminder } from "@/components/resident/resident-profile-reminder"
 import { Separator } from "@/components/ui/separator"
 import { RouteTransition } from "@/components/shared/route-transition"
 import {
@@ -131,6 +132,7 @@ export function DashboardShell({
         </header>
 
         <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 pb-24 sm:px-6 lg:py-8 lg:pb-8">
+          {area === "resident" ? <ResidentProfileReminder /> : null}
           <RouteTransition className="grid gap-6">{children}</RouteTransition>
         </main>
 

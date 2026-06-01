@@ -1,6 +1,6 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { queryKeys } from "@/lib/react-query"
 import { paymentsSdk } from "@/sdk"
@@ -224,5 +224,26 @@ export function useResidentPaymentLedger(
     }, params?.residentId ?? "self"),
     queryFn: () => paymentsSdk.getLedger(params as ResidentPaymentLedgerInput),
     enabled: Boolean(params?.organizationId),
+  })
+}
+
+export function useResidentPaymentLedgers(params: {
+  organizationId?: string
+  residentIds: string[]
+}) {
+  return useQueries({
+    queries: params.residentIds.map((residentId) => ({
+      queryKey: queryKeys.payments.ledger(
+        { organizationId: params.organizationId },
+        residentId
+      ),
+      queryFn: () =>
+        paymentsSdk.getLedger({
+          organizationId: String(params.organizationId),
+          residentId,
+        }),
+      enabled: Boolean(params.organizationId && residentId),
+      staleTime: 30_000,
+    })),
   })
 }

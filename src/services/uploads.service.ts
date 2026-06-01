@@ -4,7 +4,6 @@ import { anyRoleHasPermission } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
-import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -21,8 +20,7 @@ import {
 
 import { assertFound, AuthService } from "./auth.service"
 import {
-  isResidentOperationallyVerified,
-  isResidentSelfOnboardingComplete,
+  getResidentOnboardingRequirements,
 } from "./onboarding/resident-onboarding.policy"
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024
@@ -192,14 +190,6 @@ export class UploadsService {
       throw forbidden("Residents can only upload their own files.")
     }
 
-    if (
-      input.documentType === "payment_receipt" &&
-      !isAdmin &&
-      !isResidentOperationallyVerified(existingResident)
-    ) {
-      throw forbidden("Complete resident onboarding before uploading payment proof.")
-    }
-
     if (input.paymentId) {
       const payment = assertFound(
         await this.paymentsRepository.getById(input.paymentId, input.organizationId),
@@ -290,10 +280,14 @@ export class UploadsService {
               : existingResidentWithOnboarding.student_id_document_id,
         } as ResidentWithOnboarding
 
-        await this.finalizeSelfOnboardingIfComplete(
-          completedResident,
-          context.authUser.id
-        )
+        const nextStatus = this.getPostDocumentUploadStatus(completedResident)
+
+        if (nextStatus && nextStatus !== completedResident.onboarding_status) {
+          await this.residentsRepository.updateExtended(input.residentId, input.organizationId, {
+            onboarding_status: nextStatus,
+            updated_by: context.authUser.id,
+          })
+        }
       }
 
       const signedUrl = await this.uploadsRepository.createSignedUrl(
@@ -331,27 +325,18 @@ export class UploadsService {
     }
   }
 
-  private async finalizeSelfOnboardingIfComplete(
-    resident: Parameters<typeof isResidentSelfOnboardingComplete>[0],
-    actorUserId: string
-  ) {
+  private getPostDocumentUploadStatus(resident: ResidentWithOnboarding) {
     if (
-      isResidentOperationallyVerified(resident) ||
-      !isResidentSelfOnboardingComplete(resident)
+      resident.onboarding_status === "verified" ||
+      resident.onboarding_status === "verification_pending" ||
+      resident.onboarding_status === "suspended"
     ) {
-      return resident
+      return null
     }
 
-    const adminRepository = new ResidentsRepository(createSupabaseAdminClient())
-
-    return adminRepository.updateExtended(resident.id, resident.organization_id, {
-      status: "active",
-      onboarding_status: "verified",
-      onboarding_completed_at: resident.onboarding_completed_at ?? new Date().toISOString(),
-      onboarding_verified_at: new Date().toISOString(),
-      onboarding_verified_by: actorUserId,
-      updated_by: actorUserId,
-    })
+    return getResidentOnboardingRequirements(resident).missing.length === 0
+      ? "documents_pending"
+      : "profile_incomplete"
   }
 
   private validateFile(file: File, allowedMimeTypes: Set<string>, maxBytes: number) {

@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { CalendarDays, CreditCard, FileText, User, type LucideIcon } from "lucide-react"
+import {
+  CalendarDays,
+  CreditCard,
+  FileText,
+  IndianRupee,
+  User,
+  type LucideIcon,
+} from "lucide-react"
 
 import { LoadingState } from "@/components/shared/loading-state"
 import { MotionReveal } from "@/components/shared/motion-reveal"
@@ -10,7 +17,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
-import { useCurrentResident, useLeaves, usePayments, useNotices } from "@/hooks"
+import { useCurrentResident, useLeaves, useNotices, useResidentPaymentLedger } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 
@@ -18,13 +25,14 @@ export function ResidentDashboardClient() {
   const { organizationId, session } = useAuth()
   const resident = useCurrentResident(organizationId ?? undefined)
   const hostelId = resident.data?.hostel_id ?? session?.hostelIds[0]
-  const payments = usePayments({
-    organizationId: organizationId ?? "",
-    hostelId,
-    residentId: resident.data?.id,
-    page: 1,
-    pageSize: 5,
-  })
+  const ledger = useResidentPaymentLedger(
+    organizationId
+      ? {
+          organizationId,
+          residentId: resident.data?.id,
+        }
+      : undefined
+  )
   const leaves = useLeaves({
     organizationId: organizationId ?? "",
     hostelId,
@@ -58,12 +66,37 @@ export function ResidentDashboardClient() {
     )
   }
 
-  const latestPayment = payments.data?.data[0]
+  const latestPayment = ledger.data?.payments[0]
   const latestLeave = leaves.data?.data[0]
-  const pendingAmount =
-    payments.data?.data.some((payment) => payment.status === "verified")
-      ? 0
-      : resident.data.monthly_fee_amount
+  const currentPeriod = currentPeriodMonth()
+  const currentRecord =
+    ledger.data?.feeRecords.find((record) => record.period_month === currentPeriod) ??
+    ledger.data?.primaryDueRecord
+  const currentPayments =
+    ledger.data?.payments.filter((payment) =>
+      currentRecord
+        ? payment.monthly_fee_record_id === currentRecord.id
+        : isSameMonth(payment.created_at, new Date())
+    ) ?? []
+  const paidThisMonth = currentPayments
+    .filter((payment) => payment.status === "verified" && !payment.is_advance)
+    .reduce((total, payment) => total + payment.amount, 0)
+  const pendingThisMonth = currentPayments
+    .filter(
+      (payment) =>
+        !payment.is_advance &&
+        (payment.status === "pending" || payment.status === "initiated")
+    )
+    .reduce((total, payment) => total + payment.amount, 0)
+  const monthlyLeft =
+    currentRecord?.balance_amount ??
+    Math.max(resident.data.monthly_fee_amount - paidThisMonth - pendingThisMonth, 0)
+  const currentDue = currentRecord
+    ? Math.max(ledger.data?.totals.currentDue ?? 0, monthlyLeft)
+    : monthlyLeft
+  const advancePaid = ledger.data?.totals.advanceBalance ?? 0
+  const advanceLeft = Math.max(resident.data.monthly_fee_amount - advancePaid, 0)
+  const totalPayable = currentDue + advanceLeft
 
   return (
     <div className="grid gap-6">
@@ -80,24 +113,42 @@ export function ResidentDashboardClient() {
         }
       />
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <ResidentMetric
           icon={User}
           label="Profile"
           value={resident.data.status}
           detail={resident.data.aadhaar_document_id ? "Documents started" : "Aadhaar pending"}
+          showStatus
         />
         <ResidentMetric
           icon={CreditCard}
-          label="Estimated Due"
-          value={formatCurrency(pendingAmount)}
-          detail={latestPayment ? `Last payment ${formatDate(latestPayment.created_at)}` : "No payment history yet"}
+          label="Payable Now"
+          value={formatCurrency(totalPayable)}
+          detail={
+            latestPayment
+              ? `Last payment ${formatDate(latestPayment.created_at)}`
+              : ledger.isLoading
+                ? "Ledger loading"
+                : "No payment history yet"
+          }
+        />
+        <ResidentMetric
+          icon={IndianRupee}
+          label="Advance"
+          value={formatCurrency(advancePaid)}
+          detail={
+            advanceLeft > 0
+              ? `${formatCurrency(advanceLeft)} advance left`
+              : "Advance requirement covered"
+          }
         />
         <ResidentMetric
           icon={CalendarDays}
           label="Leave Status"
           value={latestLeave?.status ?? "None"}
           detail={latestLeave ? `${formatDate(latestLeave.from_date)} to ${formatDate(latestLeave.to_date)}` : "No leave requests"}
+          showStatus
         />
         <ResidentMetric
           icon={FileText}
@@ -121,11 +172,13 @@ function ResidentMetric({
   label,
   value,
   detail,
+  showStatus = false,
 }: {
   icon: LucideIcon
   label: string
   value: string | number
   detail: string
+  showStatus?: boolean
 }) {
   return (
     <MotionReveal>
@@ -137,11 +190,30 @@ function ResidentMetric({
         </span>
       </div>
       <div className="mt-2">
-        {typeof value === "string" ? <StatusBadge status={value} /> : <p className="text-2xl font-semibold">{value}</p>}
+        {showStatus && typeof value === "string" ? (
+          <StatusBadge status={value} />
+        ) : (
+          <p className="text-2xl font-semibold">{value}</p>
+        )}
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{detail}</p>
     </article>
     </MotionReveal>
+  )
+}
+
+function currentPeriodMonth() {
+  const now = new Date()
+
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
+}
+
+function isSameMonth(value: string, date: Date) {
+  const parsed = new Date(value)
+
+  return (
+    parsed.getFullYear() === date.getFullYear() &&
+    parsed.getMonth() === date.getMonth()
   )
 }
 

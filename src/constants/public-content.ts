@@ -98,7 +98,7 @@ export const fallbackRoomTypes: RoomTypeCard[] = [
     price: HOSTEL_FEES.employee,
     priceLabel: `₹${HOSTEL_FEES.employee}/month`,
     description: "Comfortable stay option for employees and working professionals.",
-    features: ["Comfort-focused rooms", "Parking support", "Attached bathroom options"],
+    features: ["Comfort-focused rooms", "Parking support", "Work-friendly stay"],
     icon: "briefcase-business",
   },
 ]

@@ -125,7 +125,7 @@ export function ResidentLeaveClient() {
               <ShieldCheck className="size-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold">Verification required</h2>
+              <h2 className="text-base font-semibold">Onboarding required</h2>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 {verification.message}
               </p>
@@ -329,7 +329,7 @@ function getLeaveVerificationState(resident: LeaveResident) {
       canApplyLeave,
       missing,
       message:
-        "Finish the missing onboarding items below, then submit your profile for admin verification.",
+        "Finish the missing onboarding items below, then complete onboarding to unlock leave requests.",
     }
   }
 
@@ -338,7 +338,7 @@ function getLeaveVerificationState(resident: LeaveResident) {
       canApplyLeave,
       missing,
       message:
-        "Your profile is complete and waiting for admin approval. Leave requests open after verification.",
+        "Your profile is complete and waiting to be activated. Open onboarding to finish.",
     }
   }
 
@@ -346,6 +346,6 @@ function getLeaveVerificationState(resident: LeaveResident) {
     canApplyLeave,
     missing,
     message:
-      "Your resident profile must be verified and active before you can apply for leave.",
+      "Your resident profile must be complete and active before you can apply for leave.",
   }
 }

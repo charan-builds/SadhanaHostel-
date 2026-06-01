@@ -157,6 +157,8 @@ export function ResidentOnboardingClient() {
     )
   }
 
+  const onboardingComplete = requirements.canAccessResidentOperations
+
   async function saveProfile(values: FormValues) {
     if (!organizationId) {
       return
@@ -242,13 +244,13 @@ export function ResidentOnboardingClient() {
     try {
       await submitOnboarding.mutateAsync({ organizationId })
       await onboarding.refetch()
-      toast.success("Submitted for hostel admin verification.")
+      toast.success("Onboarding complete. Your dashboard is ready.")
     } catch (error) {
       form.setError("root", {
         message:
           error instanceof FrontendApiError
             ? error.message
-            : "Unable to submit onboarding for verification. Please retry.",
+            : "Unable to complete onboarding. Please retry.",
       })
     }
   }
@@ -260,8 +262,9 @@ export function ResidentOnboardingClient() {
           <div>
             <CardTitle>Resident Onboarding</CardTitle>
             <CardDescription>
-              Complete your profile and upload required documents. Payments,
-              leave, notices, and invoices unlock after admin verification.
+              Complete your profile and upload required documents. Payments can be
+              submitted now; leave, notices, invoices, and dashboard actions unlock
+              when everything is complete.
             </CardDescription>
           </div>
           <div className="rounded-lg border bg-slate-50 p-3 text-sm">
@@ -303,7 +306,7 @@ export function ResidentOnboardingClient() {
               Profile Details
             </CardTitle>
             <CardDescription>
-              Use official details. Admins verify this against uploaded documents.
+              Use official details that match your uploaded documents.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -407,7 +410,7 @@ export function ResidentOnboardingClient() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Missing Items</CardTitle>
-              <CardDescription>Fix these before submitting.</CardDescription>
+              <CardDescription>Complete these to activate your dashboard.</CardDescription>
             </CardHeader>
             <CardContent>
               {requirements.missing.length === 0 ? (
@@ -425,7 +428,11 @@ export function ResidentOnboardingClient() {
               )}
               <Button
                 className="mt-4 w-full gap-2"
-                disabled={!requirements.canSubmitForVerification || submitOnboarding.isPending}
+                disabled={
+                  onboardingComplete ||
+                  !requirements.canCompleteOnboarding ||
+                  submitOnboarding.isPending
+                }
                 onClick={() => void submitForVerification()}
               >
                 {submitOnboarding.isPending ? (
@@ -433,7 +440,7 @@ export function ResidentOnboardingClient() {
                 ) : (
                   <Send className="size-4" aria-hidden="true" />
                 )}
-                Submit for verification
+                {onboardingComplete ? "Onboarding complete" : "Finish onboarding"}
               </Button>
               {requirements.canAccessResidentOperations ? (
                 <Button asChild variant="outline" className="mt-2 w-full">

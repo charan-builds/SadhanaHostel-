@@ -22,7 +22,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { hostelImages } from "@/constants/hostel-images"
 import { fallbackFacilities } from "@/constants/public-content"
-import type { FacilityItem } from "@/types/frontend"
+import { pickGalleryImage } from "@/lib/public-gallery"
+import type { FacilityItem, GalleryItem } from "@/types/frontend"
 
 const iconMap: Record<string, LucideIcon> = {
   bath: Bath,
@@ -49,10 +50,15 @@ const iconMap: Record<string, LucideIcon> = {
 
 export function FacilitiesPreview({
   facilities = fallbackFacilities,
+  galleryItems,
 }: {
   facilities?: FacilityItem[]
+  galleryItems?: GalleryItem[]
 }) {
   const selectedFacilities = facilities.slice(0, 6)
+  const facilityImageUrl =
+    pickGalleryImage(galleryItems, ["facility", "facilities", "dining", "amenity"], 0) ??
+    hostelImages.uploadedFacility
 
   return (
     <section className="bg-muted/45 py-14 sm:py-20">
@@ -77,13 +83,23 @@ export function FacilitiesPreview({
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="group relative min-h-80 overflow-hidden rounded-2xl border shadow-lifted"
           >
-            <Image
-              src={hostelImages.building}
-              alt="Sadhana Boys Hostel facility exterior"
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              sizes="(min-width: 1024px) 42vw, 100vw"
-            />
+            {facilityImageUrl.startsWith("/") ? (
+              <Image
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facility exterior"
+                fill
+                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                sizes="(min-width: 1024px) 42vw, 100vw"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facility exterior"
+                className="absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-105"
+                loading="lazy"
+              />
+            )}
             <div className="absolute inset-0 bg-linear-to-t from-slate-950/78 via-slate-950/12 to-transparent" />
             <div className="absolute bottom-0 p-6 text-white">
               <p className="text-sm font-medium text-cyan-100">Actual hostel view</p>

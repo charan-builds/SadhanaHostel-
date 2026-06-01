@@ -8,6 +8,6 @@ export async function POST(request: Request) {
     const service = await ResidentOnboardingService.create()
     const result = await service.submitForVerification(await parseJsonBody(request))
 
-    return successResponse(result, "Onboarding submitted for verification.")
+    return successResponse(result, "Onboarding completed.")
   })
 }

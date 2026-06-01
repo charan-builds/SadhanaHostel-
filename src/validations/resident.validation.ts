@@ -20,7 +20,7 @@ export const residentListSchema = paginationSchema.extend({
   search: z.string().trim().max(120).optional(),
 })
 
-export const createResidentSchema = z.object({
+const createResidentBaseSchema = z.object({
   organizationId: uuidSchema,
   hostelId: uuidSchema,
   admissionNumber: z.string().trim().max(50).optional(),
@@ -39,6 +39,14 @@ export const createResidentSchema = z.object({
   permanentAddress: z.string().trim().max(500).optional(),
   monthlyFeeAmount: moneySchema.default(HOSTEL_FEES.student),
   securityDepositAmount: moneySchema.default(0),
+  advancePaymentAmount: moneySchema.optional(),
+  advancePaymentMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
+  advanceManualReference: z.string().trim().max(120).optional(),
+  advanceNotes: z.string().trim().max(1000).optional(),
+  firstMonthFeeAmount: moneySchema.optional(),
+  firstMonthFeeMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
+  firstMonthFeeManualReference: z.string().trim().max(120).optional(),
+  firstMonthFeeNotes: z.string().trim().max(1000).optional(),
   roomId: uuidSchema.optional(),
   bedLabel: z.string().trim().max(40).optional(),
   allocatedFrom: dateOnlySchema.optional(),
@@ -49,7 +57,27 @@ export const createResidentSchema = z.object({
   inviteExpiresInHours: z.coerce.number().int().min(1).max(24 * 14).default(72),
 })
 
-export const updateResidentSchema = createResidentSchema
+export const createResidentSchema = createResidentBaseSchema.superRefine(
+  (value, context) => {
+    if (value.advancePaymentAmount !== undefined && value.advancePaymentAmount <= 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["advancePaymentAmount"],
+        message: "Advance amount must be greater than 0 when marked as paid.",
+      })
+    }
+
+    if (value.firstMonthFeeAmount !== undefined && value.firstMonthFeeAmount <= 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["firstMonthFeeAmount"],
+        message: "First month fee amount must be greater than 0 when marked as paid.",
+      })
+    }
+  }
+)
+
+export const updateResidentSchema = createResidentBaseSchema
   .omit({
     organizationId: true,
     hostelId: true,
@@ -57,6 +85,14 @@ export const updateResidentSchema = createResidentSchema
     roomId: true,
     bedLabel: true,
     allocatedFrom: true,
+    advancePaymentAmount: true,
+    advancePaymentMethod: true,
+    advanceManualReference: true,
+    advanceNotes: true,
+    firstMonthFeeAmount: true,
+    firstMonthFeeMethod: true,
+    firstMonthFeeManualReference: true,
+    firstMonthFeeNotes: true,
     inviteDeliveryChannel: true,
     inviteExpiresInHours: true,
   })

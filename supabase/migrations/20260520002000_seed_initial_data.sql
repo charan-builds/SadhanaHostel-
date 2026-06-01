@@ -676,11 +676,10 @@ with seed_sections as (
         'Pricing and Fee Structure',
         jsonb_build_object(
           'currency', 'INR',
-          'note', 'Pricing placeholders should be reviewed before publishing live website content.',
+          'note', 'Student shared rooms are ₹3500/month and employee shared rooms are ₹5000/month. There is no separate attached bathroom plan.',
           'fee_structure', jsonb_build_array(
-            jsonb_build_object('label', 'Student shared room', 'monthly_fee', 6500, 'deposit', 5000),
-            jsonb_build_object('label', 'Employee shared room', 'monthly_fee', 8000, 'deposit', 8000),
-            jsonb_build_object('label', 'Attached bathroom room', 'monthly_fee', 9500, 'deposit', 10000)
+            jsonb_build_object('label', 'Student shared room', 'monthly_fee', 3500, 'deposit', 5000, 'description', 'Affordable shared room plan for students.', 'features', jsonb_build_array('Monthly billing', 'Hostel facilities', 'Student-friendly stay')),
+            jsonb_build_object('label', 'Employee shared room', 'monthly_fee', 5000, 'deposit', 8000, 'description', 'Shared room plan for employees and working professionals.', 'features', jsonb_build_array('Monthly billing', 'Parking support', 'Work-friendly stay'))
           )
         ),
         'Sadhana Boys Hostel Pricing',
@@ -822,11 +821,11 @@ with seed_rooms as (
   select *
   from (
     values
-      ('STU-101', 'Student Shared Room A', 'student_shared', '1', 'Student Block', 4, 6500::numeric(12,2), false, false, 'Shared student room without attached bathroom.'),
-      ('STU-102', 'Student Shared Room B', 'student_shared', '1', 'Student Block', 4, 6500::numeric(12,2), false, false, 'Shared student room for standard occupancy.'),
-      ('STU-201', 'Student Attached Bathroom Room', 'student_attached', '2', 'Student Block', 3, 9500::numeric(12,2), true, false, 'Student room with attached bathroom.'),
-      ('EMP-101', 'Employee Shared Room', 'employee_shared', '1', 'Employee Block', 3, 8000::numeric(12,2), false, false, 'Shared room suitable for working professionals.'),
-      ('EMP-201', 'Employee Premium Room', 'employee_premium', '2', 'Employee Block', 2, 11000::numeric(12,2), true, true, 'Premium employee room with attached bathroom and AC flag.')
+      ('STU-101', 'Student Shared Room A', 'student_shared', '1', 'Student Block', 4, 3500::numeric(12,2), false, false, 'Shared student room for standard occupancy.'),
+      ('STU-102', 'Student Shared Room B', 'student_shared', '1', 'Student Block', 4, 3500::numeric(12,2), false, false, 'Shared student room for standard occupancy.'),
+      ('STU-201', 'Student Shared Room C', 'student_shared', '2', 'Student Block', 3, 3500::numeric(12,2), false, false, 'Shared student room for standard occupancy.'),
+      ('EMP-101', 'Employee Shared Room A', 'employee_shared', '1', 'Employee Block', 3, 5000::numeric(12,2), false, false, 'Shared room suitable for working professionals.'),
+      ('EMP-201', 'Employee Shared Room B', 'employee_shared', '2', 'Employee Block', 2, 5000::numeric(12,2), false, false, 'Shared room suitable for working professionals.')
   ) as room_data(room_number, room_name, room_type, floor, block_name, capacity, base_monthly_fee, has_attached_bathroom, has_ac, description)
 )
 insert into public.rooms (

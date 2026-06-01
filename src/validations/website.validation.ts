@@ -46,6 +46,10 @@ export const createFacilitySchema = z.object({
   status: z.enum(Constants.public.Enums.cms_status_enum).default("draft"),
 })
 
+export const updateFacilitySchema = createFacilitySchema.extend({
+  facilityId: uuidSchema,
+})
+
 export const galleryListSchema = paginationSchema.extend({
   organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
@@ -80,6 +84,7 @@ export type WebsiteSettingsListInput = z.infer<typeof websiteSettingsListSchema>
 export type UpdateWebsiteSettingInput = z.infer<typeof updateWebsiteSettingSchema>
 export type FacilitiesListInput = z.infer<typeof facilitiesListSchema>
 export type CreateFacilityInput = z.infer<typeof createFacilitySchema>
+export type UpdateFacilityInput = z.infer<typeof updateFacilitySchema>
 export type GalleryListInput = z.infer<typeof galleryListSchema>
 export type CreateGalleryItemInput = z.infer<typeof createGalleryItemSchema>
 export type UploadGalleryImageInput = z.infer<typeof uploadGalleryImageSchema>

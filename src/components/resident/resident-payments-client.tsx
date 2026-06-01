@@ -261,7 +261,9 @@ export function ResidentPaymentsClient() {
   const currentDue = currentDueTotal
   const pendingVerification = pendingVerificationTotal
   const verifiedPaid = ledger.data?.totals.verifiedPaid ?? 0
+  const advancePaid = ledger.data?.totals.advanceBalance ?? 0
   const monthlyFee = resident.data.monthly_fee_amount
+  const advanceLeft = Math.max(monthlyFee - advancePaid, 0)
   const dueProgress =
     monthlyFee > 0 ? Math.max(0, Math.min(100, (currentDue / monthlyFee) * 100)) : 0
   const latestPayment = paymentHistory[0]
@@ -390,7 +392,7 @@ export function ResidentPaymentsClient() {
         </div>
       </motion.div>
 
-      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <FeeCard
           label="Current due"
           value={formatCurrency(currentDue)}
@@ -415,6 +417,17 @@ export function ResidentPaymentsClient() {
           detail="Submitted and awaiting admin review."
           icon={Sparkles}
           tone="warning"
+        />
+        <FeeCard
+          label="Advance paid"
+          value={formatCurrency(advancePaid)}
+          detail={
+            advanceLeft > 0
+              ? `${formatCurrency(advanceLeft)} advance left.`
+              : "Advance requirement covered."
+          }
+          icon={IndianRupee}
+          tone="success"
         />
         <FeeCard
           label="Verified paid"

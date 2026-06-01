@@ -18,6 +18,7 @@ import { ADMIN_PORTAL_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES } from "@/constants/
 import { authSdk, type SessionOverview } from "@/sdk"
 import { useAuth, resolveHomeRoute } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
+import { isResidentLimitedAccessPath } from "@/lib/auth/resident-onboarding-access"
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(3, "Enter your email or phone number."),
@@ -392,12 +393,25 @@ function resolveRedirect(
   }
 
   if (expectedArea === "resident") {
+    const residentNext =
+      nextPath?.startsWith("/resident/") || nextPath === "/resident"
+        ? nextPath
+        : null
+
+    if (
+      session?.onboardingRequired &&
+      residentNext &&
+      isResidentLimitedAccessPath(residentNext)
+    ) {
+      return residentNext
+    }
+
     if (session?.onboardingRequired && session.redirectTo?.startsWith("/resident")) {
       return session.redirectTo
     }
 
-    return nextPath?.startsWith("/resident/") || nextPath === "/resident"
-      ? nextPath
+    return residentNext
+      ? residentNext
       : AUTH_REDIRECTS.residentHome
   }
 
