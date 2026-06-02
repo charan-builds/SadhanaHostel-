@@ -62,7 +62,7 @@ export const cronRegistry = {
     name: "reservation-expiry",
     job: reservationExpiryJob,
     description: "Expire stale admissions reservations and release held beds.",
-    schedule: "*/15 * * * *",
+    schedule: "15 1 * * *",
     maxDurationSeconds: 45,
     buildPayload: ({ organization }: CronBuildInput) => ({
       organizationId: organization.id,
@@ -73,7 +73,7 @@ export const cronRegistry = {
     name: "resident-invite-expiry",
     job: residentInviteExpiryJob,
     description: "Expire stale resident activation invites.",
-    schedule: "*/30 * * * *",
+    schedule: "30 1 * * *",
     maxDurationSeconds: 45,
     buildPayload: ({ organization }: CronBuildInput) => ({
       organizationId: organization.id,
@@ -106,7 +106,7 @@ export const cronRegistry = {
     name: "occupancy-recalculation",
     job: occupancyRecalculationJob,
     description: "Recalculate vacancy snapshots for dashboards.",
-    schedule: "*/30 * * * *",
+    schedule: "45 1 * * *",
     maxDurationSeconds: 45,
     buildPayload: ({ organization }: CronBuildInput) => ({
       organizationId: organization.id,
@@ -138,7 +138,7 @@ export const cronRegistry = {
     name: "scheduled-notices",
     job: scheduledNoticesJob,
     description: "Fan out published notices into resident notifications.",
-    schedule: "0 * * * *",
+    schedule: "0 5 * * *",
     maxDurationSeconds: 60,
     buildPayload: ({ organization, now }: CronBuildInput) => ({
       organizationId: organization.id,

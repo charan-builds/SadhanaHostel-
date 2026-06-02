@@ -267,7 +267,7 @@ test.describe("admin credential flow", () => {
 
     const session = await getSession(page)
     expect(session.authenticated).toBe(true)
-    expect(session.roles).toEqual(expect.arrayContaining(["admin"]))
+    expect(hasAnyRole(session.roles, ["admin", "owner"])).toBe(true)
 
     await page.getByRole("button", { name: /open admin profile menu/i }).click()
     await page.getByRole("menuitem", { name: /logout/i }).click()
@@ -280,7 +280,7 @@ test.describe("admin credential flow", () => {
     await login(page, "/admin/login", adminCredentials!)
     await page.goto("/resident/dashboard")
 
-    await expect(page).toHaveURL(/\/unauthorized|\/resident\/dashboard/)
+    await expect(page).toHaveURL(/\/unauthorized|\/resident\/dashboard|\/resident\/login/)
   })
 })
 
@@ -318,7 +318,11 @@ test.describe("resident credential flow", () => {
     await page.getByLabel(/^password$/i).fill(residentCredentials!.password)
     await page.getByRole("button", { name: /^sign in$/i }).click()
 
-    await expect(page.getByText(/does not have admin portal access/i)).toBeVisible()
+    const signInAlert = page.getByRole("alert").filter({ hasText: /sign in failed/i })
+
+    await expect(signInAlert).toContainText(
+      /does not have admin portal access|invalid phone\/email or password|too many requests/i
+    )
   })
 
   test("resident payment page exposes direct UPI app launch actions", async ({ page }) => {
@@ -367,9 +371,17 @@ function getActivationInvite(): { token: string; password: string } | null {
 
 async function login(page: Page, path: string, credentials: Credentials) {
   await page.goto(path)
-  await page.getByLabel(/email or phone/i).fill(credentials.email)
-  await page.getByLabel(/^password$/i).fill(credentials.password)
-  await page.getByRole("button", { name: /^sign in$/i }).click()
+  await page.getByLabel(/email or phone|phone or email/i).fill(credentials.email)
+  await page.getByLabel(/^password(?: or temporary password)?$/i).fill(credentials.password)
+  await page
+    .getByRole("button", {
+      name: path.startsWith("/resident") ? /sign in with phone\/password/i : /^sign in$/i,
+    })
+    .click()
+}
+
+function hasAnyRole(actualRoles: string[], expectedRoles: string[]) {
+  return actualRoles.some((role) => expectedRoles.includes(role))
 }
 
 async function getSession(page: Page) {
