@@ -116,6 +116,24 @@ export class InvoicesRepository {
     return data
   }
 
+  async findReceiptByPaymentId(paymentId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("invoices")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .contains("metadata", { payment_id: paymentId })
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load payment receipt invoice.")
+    }
+
+    return data
+  }
+
   async countIssuedInvoicesForMonth(organizationId: string, issueMonth: string) {
     const start = `${issueMonth}-01`
     const end = new Date(`${start}T00:00:00.000Z`)
@@ -199,6 +217,26 @@ export class InvoicesRepository {
 
     if (error) {
       throwRepositoryError(error, "Unable to create invoice document.")
+    }
+
+    return data
+  }
+
+  async findInvoicePdfDocument(invoiceId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("documents")
+      .select("*")
+      .eq("invoice_id", invoiceId)
+      .eq("organization_id", organizationId)
+      .eq("document_type", "invoice_pdf")
+      .eq("status", "verified")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load invoice PDF document.")
     }
 
     return data

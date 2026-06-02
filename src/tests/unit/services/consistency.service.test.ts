@@ -713,7 +713,7 @@ describe("operational consistency scanning", () => {
             expect.objectContaining({
               tableName: "monthly_fee_records",
               residentId: RESIDENT_ID,
-              expectedState: expect.stringContaining("operational verified residents"),
+              expectedState: expect.stringContaining("billable, portal-linked residents"),
             }),
           ]),
         }),

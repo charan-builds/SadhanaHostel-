@@ -19,6 +19,7 @@ import type {
   ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
   VerifyPaymentInput,
+  GenerateMonthlyFeeInput,
 } from "@/validations/payment.validation"
 
 import type { PaginatedResult } from "./types"
@@ -56,6 +57,14 @@ export const paymentsSdk = {
   recordInPerson(input: RecordInPersonPaymentInput) {
     return apiClient.post<Tables<"payments">, RecordInPersonPaymentInput>(
       "/api/payments/record-in-person",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  generateMonthlyFee(input: GenerateMonthlyFeeInput) {
+    return apiClient.post<Tables<"monthly_fee_records">, GenerateMonthlyFeeInput>(
+      "/api/payments/monthly-fee",
       input,
       { retry: 0 }
     )

@@ -17,6 +17,7 @@ import type {
   ResidentPaymentLedgerInput,
   SubmitUpiPaymentInput,
   VerifyPaymentInput,
+  GenerateMonthlyFeeInput,
 } from "@/validations/payment.validation"
 import type { UploadOptions } from "@/sdk"
 
@@ -77,6 +78,31 @@ export function useRecordInPersonPayment() {
         queryKey: queryKeys.analytics.dashboard({
           organizationId: payment.organization_id,
           hostelId: payment.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useGenerateMonthlyFee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: GenerateMonthlyFeeInput) =>
+      paymentsSdk.generateMonthlyFee(input),
+    onSuccess: (feeRecord) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.ledger(
+          {
+            organizationId: feeRecord.organization_id,
+          },
+          feeRecord.resident_id
+        ),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.analytics.dashboard({
+          organizationId: feeRecord.organization_id,
+          hostelId: feeRecord.hostel_id,
         }),
       })
     },

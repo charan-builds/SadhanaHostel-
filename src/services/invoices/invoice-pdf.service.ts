@@ -68,14 +68,14 @@ export class InvoicePdfService {
       height: 61.89,
       color: rgb(0.08, 0.14, 0.2),
     })
-    page.drawText(data.organization.legal_name ?? data.organization.name, {
+    page.drawText(safePdfText(data.organization.legal_name ?? data.organization.name), {
       x: 42,
       y: 812,
       size: 18,
       font: bold,
       color: rgb(1, 1, 1),
     })
-    page.drawText(data.hostel.name, {
+    page.drawText(safePdfText(data.hostel.name), {
       x: 42,
       y: 792,
       size: 10,
@@ -116,21 +116,21 @@ export class InvoicePdfService {
       font: bold,
       color: rgb(0.12, 0.18, 0.24),
     })
-    page.drawText(data.resident.full_name, {
+    page.drawText(safePdfText(data.resident.full_name), {
       x: 335,
       y: 716,
       size: 11,
       font: regular,
       color: rgb(0.12, 0.18, 0.24),
     })
-    page.drawText(`Admission: ${data.resident.admission_number}`, {
+    page.drawText(safePdfText(`Admission: ${data.resident.admission_number}`), {
       x: 335,
       y: 700,
       size: 9,
       font: regular,
       color: rgb(0.28, 0.34, 0.42),
     })
-    page.drawText(`Phone: ${data.resident.phone ?? "N/A"}`, {
+    page.drawText(safePdfText(`Phone: ${data.resident.phone ?? "N/A"}`), {
       x: 335,
       y: 684,
       size: 9,
@@ -160,14 +160,14 @@ export class InvoicePdfService {
     data.lineItems.forEach((item, index) => {
       const y = startY - 28 * (index + 1)
 
-      page.drawText(item.description.slice(0, 70), {
+      page.drawText(safePdfText(item.description).slice(0, 70), {
         x: 56,
         y: y + 9,
         size: 10,
         font: regular,
         color: rgb(0.12, 0.18, 0.24),
       })
-      page.drawText(formatCurrency(item.amount), {
+      page.drawText(formatCurrencyForPdf(item.amount), {
         x: 440,
         y: y + 9,
         size: 10,
@@ -196,7 +196,7 @@ export class InvoicePdfService {
       const font = label === "Balance" ? bold : regular
 
       page.drawText(label, { x: 365, y, size: 10, font })
-      page.drawText(formatCurrency(amount), { x: 455, y, size: 10, font })
+      page.drawText(formatCurrencyForPdf(amount), { x: 455, y, size: 10, font })
     })
   }
 
@@ -211,14 +211,14 @@ export class InvoicePdfService {
       .filter(Boolean)
       .join(", ")
 
-    page.drawText(data.footerNote, {
+    page.drawText(safePdfText(data.footerNote), {
       x: 42,
       y: 118,
       size: 8,
       font: regular,
       color: rgb(0.38, 0.44, 0.52),
     })
-    page.drawText(address || data.organization.name, {
+    page.drawText(safePdfText(address || data.organization.name), {
       x: 42,
       y: 92,
       size: 8,
@@ -243,7 +243,7 @@ export class InvoicePdfService {
       font: bold,
       color: rgb(0.12, 0.18, 0.24),
     })
-    page.drawText(value, {
+    page.drawText(safePdfText(value), {
       x: x + 78,
       y,
       size: 9,
@@ -251,4 +251,19 @@ export class InvoicePdfService {
       color: rgb(0.12, 0.18, 0.24),
     })
   }
+}
+
+function formatCurrencyForPdf(amount: number) {
+  return safePdfText(formatCurrency(amount))
+}
+
+function safePdfText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\u20b9/g, "Rs.")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u00a0/g, " ")
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "")
 }

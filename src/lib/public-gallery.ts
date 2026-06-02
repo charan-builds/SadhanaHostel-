@@ -14,6 +14,16 @@ const galleryCategoryLabels: Record<string, string> = {
   logo: "Logo",
 }
 
+const broadGalleryPreferences = new Set([
+  "building",
+  "facilities",
+  "facility",
+  "gallery",
+  "hostel",
+  "room",
+  "rooms",
+])
+
 export function hydrateGalleryItems(galleryItems?: GalleryItem[]) {
   const sourceItems = galleryItems && galleryItems.length > 0 ? galleryItems : fallbackGalleryItems
 
@@ -29,10 +39,10 @@ export function pickGalleryImage(
   fallbackIndex = 0
 ) {
   const hydratedItems = hydrateGalleryItems(galleryItems)
-  const normalizedCategories = preferredCategories.map((category) => category.toLowerCase())
-  const matchedItem = hydratedItems.find((item) =>
-    normalizedCategories.some((category) => item.category.toLowerCase().includes(category))
-  )
+  const normalizedCategories = preferredCategories
+    .map(normalizeGalleryMatchKey)
+    .filter(Boolean)
+  const matchedItem = findPreferredGalleryItem(hydratedItems, normalizedCategories)
 
   return matchedItem?.imageUrl ?? hydratedItems[fallbackIndex % hydratedItems.length]?.imageUrl
 }
@@ -52,9 +62,7 @@ export function pickRoomGalleryImage(
 }
 
 export function pickBrandLogo(galleryItems?: GalleryItem[]) {
-  return hydrateGalleryItems(galleryItems).find((item) =>
-    ["logo", "brand"].some((category) => item.category.toLowerCase().includes(category))
-  )?.imageUrl
+  return findPreferredGalleryItem(hydrateGalleryItems(galleryItems), ["logo", "brand"])?.imageUrl
 }
 
 export function formatGalleryCategory(category: string) {
@@ -79,6 +87,55 @@ function getRoomAudience(room: Pick<RoomTypeCard, "title" | "icon">) {
     value.includes("briefcase")
     ? "employee"
     : "student"
+}
+
+function findPreferredGalleryItem(
+  galleryItems: GalleryItem[],
+  normalizedPreferences: string[]
+) {
+  for (const preference of normalizedPreferences) {
+    const item = galleryItems.find((candidate) =>
+      matchesGalleryPreference(candidate, preference)
+    )
+
+    if (item) {
+      return item
+    }
+  }
+
+  return undefined
+}
+
+function matchesGalleryPreference(item: GalleryItem, preference: string) {
+  const category = normalizeGalleryMatchKey(item.category)
+  const title = normalizeGalleryMatchKey(item.title)
+
+  if (
+    category === preference ||
+    title === preference ||
+    title.startsWith(`${preference}-`)
+  ) {
+    return true
+  }
+
+  if (broadGalleryPreferences.has(preference)) {
+    return false
+  }
+
+  return (
+    category.startsWith(`${preference}-`) ||
+    category.endsWith(`-${preference}`) ||
+    title.includes(`-${preference}-`) ||
+    title.endsWith(`-${preference}`)
+  )
+}
+
+function normalizeGalleryMatchKey(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
 export function buildMapEmbedUrl(mapLink?: string | null) {

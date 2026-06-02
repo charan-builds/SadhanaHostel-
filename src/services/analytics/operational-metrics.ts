@@ -125,7 +125,16 @@ export function isResidentEligibleForOccupancy(resident: ResidentLifecycleRow) {
 }
 
 export function isResidentEligibleForBilling(resident: ResidentLifecycleRow) {
-  return isOperationalResident(resident)
+  return (
+    resident.status !== "suspended" &&
+    resident.status !== "checked_out" &&
+    resident.status !== "archived" &&
+    resident.onboarding_status !== "rejected" &&
+    resident.onboarding_status !== "suspended" &&
+    resident.is_active !== false &&
+    Boolean(resident.user_id) &&
+    !resident.checkout_on
+  )
 }
 
 export function isResidentEligibleForAnalytics(resident: ResidentLifecycleRow) {

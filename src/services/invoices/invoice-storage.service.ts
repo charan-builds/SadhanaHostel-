@@ -10,7 +10,11 @@ const INVOICE_BUCKET = "invoices"
 export class InvoiceStorageService {
   constructor(private readonly db: AppSupabaseClient) {}
 
-  async uploadInvoicePdf(storagePath: string, pdf: GeneratedInvoicePdf) {
+  async uploadInvoicePdf(
+    storagePath: string,
+    pdf: GeneratedInvoicePdf,
+    options: { upsert?: boolean } = {}
+  ) {
     const arrayBuffer = pdf.bytes.buffer.slice(
       pdf.bytes.byteOffset,
       pdf.bytes.byteOffset + pdf.bytes.byteLength
@@ -23,7 +27,7 @@ export class InvoiceStorageService {
       .upload(storagePath, blob, {
         cacheControl: "31536000",
         contentType: pdf.contentType,
-        upsert: false,
+        upsert: options.upsert ?? false,
       })
 
     if (error) {

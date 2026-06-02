@@ -6,6 +6,7 @@ export function logPaymentEvent(metadata: {
     | "submitted_with_proof"
     | "verification_attempted"
     | "verified"
+    | "verified_payment_reconciled"
     | "failed"
     | "rejected"
     | "payment_settings_saved"

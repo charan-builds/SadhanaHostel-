@@ -24,6 +24,11 @@ export type SupportPasswordResetApprovalResult = {
   reset: ResidentPasswordResetResult
 }
 
+export type SupportPublishNoticeResult = {
+  request: Tables<"support_requests">
+  notice: Tables<"notices">
+}
+
 export type OperationalAlert = {
   id: string
   severity: "critical" | "high" | "medium" | "low"

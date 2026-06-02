@@ -3,6 +3,7 @@ import type { Tables } from "@/types/database"
 import type {
   CreateFacilityInput,
   CreateGalleryItemInput,
+  DeleteGalleryItemInput,
   FacilitiesListInput,
   GalleryListInput,
   UpdateFacilityInput,
@@ -70,6 +71,15 @@ export const websiteSdk = {
     return apiClient.post<Tables<"gallery">, CreateGalleryItemInput>(
       "/api/website/gallery",
       input
+    )
+  },
+
+  deleteGalleryItem(input: DeleteGalleryItemInput) {
+    return apiClient.delete<Tables<"gallery">>(
+      `/api/website/gallery/${input.galleryItemId}`,
+      {
+        organizationId: input.organizationId,
+      }
     )
   },
 

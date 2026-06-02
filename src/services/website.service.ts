@@ -21,6 +21,7 @@ import {
   galleryListSchema,
   updateFacilitySchema,
   updateWebsiteSettingSchema,
+  deleteGalleryItemSchema,
   uploadGalleryImageSchema,
   websiteSettingsListSchema,
 } from "@/validations/website.validation"
@@ -392,6 +393,55 @@ export class WebsiteService {
       await this.uploadsRepository.removeObject(GALLERY_BUCKET, storagePath)
       throw error
     }
+  }
+
+  async deleteGalleryItem(input: unknown) {
+    const values = deleteGalleryItemSchema.parse(input)
+    const context = await this.authService.requirePermission("cms.manage")
+    const existingItem = await this.websiteRepository.getGalleryItemById(
+      values.galleryItemId,
+      values.organizationId
+    )
+
+    if (!existingItem) {
+      throw notFound("Gallery image not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingItem.organization_id,
+      existingItem.hostel_id
+    )
+
+    const deletedAt = new Date().toISOString()
+    const item = await this.websiteRepository.updateGalleryItem(
+      values.galleryItemId,
+      values.organizationId,
+      {
+        status: "archived",
+        is_active: false,
+        deleted_at: deletedAt,
+        deleted_by: context.authUser.id,
+        updated_by: context.authUser.id,
+      }
+    )
+
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+    logAuditEvent({
+      action: "cms.gallery.deleted",
+      actorUserId: context.authUser.id,
+      organizationId: values.organizationId,
+      targetTable: "gallery",
+      targetId: item.id,
+      outcome: "success",
+      details: {
+        hostelId: existingItem.hostel_id,
+        documentId: existingItem.document_id,
+        deletedAt,
+      },
+    })
+
+    return item
   }
 
   private validateGalleryFile(file: File) {

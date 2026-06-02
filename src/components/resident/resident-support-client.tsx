@@ -34,6 +34,9 @@ const categories = [
   "invite",
   "upload",
   "room",
+  "lost_found",
+  "maintenance",
+  "safety",
   "account",
   "session",
   "general",
@@ -41,6 +44,7 @@ const categories = [
 
 type Category = (typeof categories)[number]
 type Priority = NonNullable<SupportRequestCreateInput["priority"]>
+const residentReportCategories = ["lost_found", "maintenance", "safety"] as const
 
 export function ResidentSupportClient() {
   const searchParams = useSearchParams()
@@ -114,7 +118,7 @@ export function ResidentSupportClient() {
         priority,
         subject,
         description,
-        workflow: category,
+        workflow: isResidentReportCategory(category) ? "resident_report" : category,
         idempotencyKey,
       })
 
@@ -133,7 +137,7 @@ export function ResidentSupportClient() {
     <div className="grid gap-6">
       <PageHeader
         title="Support & Recovery"
-        description="Get unstuck from onboarding, uploads, payments, expired invites, account issues, or room conflicts."
+        description="Get unstuck from onboarding, uploads, payments, lost/found items, facility issues, or account access."
         actions={
           <>
             <Button asChild variant="outline">
@@ -223,7 +227,7 @@ export function ResidentSupportClient() {
                 minLength={10}
                 maxLength={4000}
                 className="min-h-32"
-                placeholder="Example: My Aadhaar upload failed twice on mobile after selecting a JPG file."
+                placeholder={descriptionPlaceholder(category)}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
@@ -325,10 +329,35 @@ function defaultSubject(category: Category) {
     invite: "Invite access needed",
     upload: "Upload retry needed",
     room: "Room or vacancy issue",
+    lost_found: "Lost or found item report",
+    maintenance: "Maintenance issue report",
+    safety: "Safety issue report",
     account: "Account access issue",
     session: "Session recovery needed",
     general: "Support request",
   }
 
   return labels[category]
+}
+
+function descriptionPlaceholder(category: Category) {
+  const placeholders: Record<Category, string> = {
+    onboarding: "Example: My Aadhaar upload failed twice after selecting a JPG file.",
+    payment: "Example: I paid by UPI, but my payment is still pending after uploading proof.",
+    invite: "Example: My invite link expired before I completed activation.",
+    upload: "Example: The screenshot upload failed on mobile even after retrying.",
+    room: "Example: My room allocation does not match the room shown in the portal.",
+    lost_found: "Example: I found a black wallet near the dining area at 8 pm.",
+    maintenance: "Example: The fan in room 204 is not working since this morning.",
+    safety: "Example: The staircase light near the second floor is not working at night.",
+    account: "Example: I can log in, but my resident profile is not linked correctly.",
+    session: "Example: My login keeps redirecting back to the login page.",
+    general: "Example: I need help with a hostel portal issue.",
+  }
+
+  return placeholders[category]
+}
+
+function isResidentReportCategory(category: Category) {
+  return (residentReportCategories as readonly string[]).includes(category)
 }

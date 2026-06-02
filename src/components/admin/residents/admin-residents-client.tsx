@@ -96,6 +96,7 @@ import {
   useCheckoutResident,
   useDashboardAnalytics,
   useDeactivateResident,
+  useGenerateMonthlyFee,
   useRecordInPersonPayment,
   useResidentPaymentLedger,
   useResidentPaymentLedgers,
@@ -327,7 +328,7 @@ export function AdminResidentsClient() {
               onClick={() => void queuePaymentReminders()}
             >
               <Bell className="size-4" aria-hidden="true" />
-              Send reminders
+              Bulk reminders
             </Button>
             <Button asChild>
               <Link href={"/admin/residents/new" as Route}>
@@ -724,70 +725,91 @@ function ResidentPaymentOverview({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {overviewRows.map(({ resident, ledgerQuery, snapshot }) => (
-                <TableRow key={resident.id}>
-                  <TableCell>
-                    <div className="flex min-w-52 items-center gap-3">
-                      <ResidentAvatar resident={resident} />
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground">
-                          {resident.full_name}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {resident.admission_number}
-                        </p>
+              {overviewRows.map(({ resident, ledgerQuery, snapshot }) => {
+                const reminderUrl = snapshot
+                  ? buildResidentReminderUrl(resident, snapshot)
+                  : null
+
+                return (
+                  <TableRow key={resident.id}>
+                    <TableCell>
+                      <div className="flex min-w-52 items-center gap-3">
+                        <ResidentAvatar resident={resident} />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">
+                            {resident.full_name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {resident.admission_number}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{resident.phone ?? "-"}</TableCell>
-                  <TableCell>{formatDate(resident.joined_on ?? resident.created_at)}</TableCell>
-                  <TableCell>{formatCurrency(resident.monthly_fee_amount)}</TableCell>
-                  {snapshot ? (
-                    <>
-                      <TableCell>
-                        <StackedMoneyLine
-                          primary={`Paid ${formatCurrency(snapshot.paidThisMonth)}`}
-                          secondary={`Pending ${formatCurrency(snapshot.pendingVerification)}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StackedMoneyLine
-                          primary={`Paid ${formatCurrency(snapshot.advancePaid)}`}
-                          secondary={`Left ${formatCurrency(snapshot.advanceLeft)}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StackedMoneyLine
-                          primary={formatCurrency(snapshot.reminderAmount)}
-                          secondary={`Monthly due ${formatCurrency(snapshot.dueLeft)}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={snapshot.status} />
-                      </TableCell>
-                    </>
-                  ) : (
-                    <>
-                      <TableCell colSpan={4}>
-                        <span className="text-sm text-muted-foreground">
-                          {ledgerQuery?.isError ? "Ledger unavailable" : "Loading ledger"}
-                        </span>
-                      </TableCell>
-                    </>
-                  )}
-                  <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onOpenResident(resident)}
-                    >
-                      <Eye className="size-3.5" aria-hidden="true" />
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>{resident.phone ?? "-"}</TableCell>
+                    <TableCell>{formatDate(resident.joined_on ?? resident.created_at)}</TableCell>
+                    <TableCell>{formatCurrency(resident.monthly_fee_amount)}</TableCell>
+                    {snapshot ? (
+                      <>
+                        <TableCell>
+                          <StackedMoneyLine
+                            primary={`Paid ${formatCurrency(snapshot.paidThisMonth)}`}
+                            secondary={`Pending ${formatCurrency(snapshot.pendingVerification)}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <StackedMoneyLine
+                            primary={`Paid ${formatCurrency(snapshot.advancePaid)}`}
+                            secondary={`Left ${formatCurrency(snapshot.advanceLeft)}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <StackedMoneyLine
+                            primary={formatCurrency(snapshot.reminderAmount)}
+                            secondary={`Last date ${formatDate(snapshot.dueDate)}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={snapshot.status} />
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell colSpan={4}>
+                          <span className="text-sm text-muted-foreground">
+                            {ledgerQuery?.isError ? "Ledger unavailable" : "Loading ledger"}
+                          </span>
+                        </TableCell>
+                      </>
+                    )}
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {reminderUrl ? (
+                          <Button asChild size="sm" variant="outline">
+                            <a href={reminderUrl} target="_blank" rel="noreferrer">
+                              <MessageCircle className="size-3.5" aria-hidden="true" />
+                              Send due
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button type="button" size="sm" variant="outline" disabled>
+                            <MessageCircle className="size-3.5" aria-hidden="true" />
+                            Send due
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onOpenResident(resident)}
+                        >
+                          <Eye className="size-3.5" aria-hidden="true" />
+                          Open
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </div>
@@ -1203,10 +1225,12 @@ function ResidentFinancePanel({
   const advancePaid = ledger.totals.advanceBalance
   const advanceLeft = Math.max(advanceRequired - advancePaid, 0)
   const dueLeft = currentRecord ? Math.max(ledger.totals.currentDue, thisMonthLeft) : thisMonthLeft
+  const dueDate = recordableDueRecord?.due_date ?? currentRecord?.due_date ?? buildMonthlyDueDate(currentPeriod)
   const reminderAmount = dueLeft + advanceLeft
   const reminderMessage = buildAdminPaymentReminderMessage({
     resident,
     periodMonth: currentRecord?.period_month ?? currentPeriod,
+    dueDate,
     monthlyFee: resident.monthly_fee_amount,
     paidThisMonth,
     pendingThisMonth,
@@ -1275,9 +1299,14 @@ function ResidentFinancePanel({
               organizationId={organizationId}
               resident={resident}
               dueRecord={recordableDueRecord}
-              defaultAmount={recordableDueAmount}
+              defaultAmount={recordableDueRecord ? recordableDueAmount : dueLeft}
               mode="due"
-              disabled={!organizationId || !recordableDueRecord || recordableDueAmount <= 0}
+              periodMonth={recordableDueRecord?.period_month ?? currentPeriod}
+              dueDate={dueDate}
+              disabled={
+                !organizationId ||
+                (recordableDueRecord ? recordableDueAmount <= 0 : dueLeft <= 0)
+              }
               onSaved={onSaved}
             />
             <RecordInPersonPaymentDialog
@@ -1328,7 +1357,7 @@ function ResidentFinancePanel({
             ))}
             {ledger.feeRecords.length === 0 ? (
               <p className="rounded-lg border bg-muted/35 p-3 text-sm text-muted-foreground">
-                No monthly dues generated yet. Use Generate dues above for the current month.
+                No monthly dues generated yet. Record cash can create the current month due automatically.
               </p>
             ) : null}
           </div>
@@ -1369,6 +1398,8 @@ function RecordInPersonPaymentDialog({
   dueRecord,
   defaultAmount,
   mode,
+  periodMonth,
+  dueDate,
   disabled,
   onSaved,
 }: {
@@ -1377,6 +1408,8 @@ function RecordInPersonPaymentDialog({
   dueRecord: Tables<"monthly_fee_records"> | null
   defaultAmount: number
   mode: "due" | "advance"
+  periodMonth?: string
+  dueDate?: string
   disabled: boolean
   onSaved: () => void
 }) {
@@ -1388,13 +1421,14 @@ function RecordInPersonPaymentDialog({
   const [manualReference, setManualReference] = useState("")
   const [notes, setNotes] = useState("")
   const recordPayment = useRecordInPersonPayment()
+  const generateMonthlyFee = useGenerateMonthlyFee()
   const isAdvance = mode === "advance"
   const title = isAdvance ? "Record advance" : "Record cash payment"
   const payableLabel = isAdvance
     ? "One-month advance balance"
     : dueRecord
       ? `${formatPeriodMonth(dueRecord.period_month)} due balance`
-      : "Monthly due"
+      : "Current month due"
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1404,8 +1438,8 @@ function RecordInPersonPaymentDialog({
       return
     }
 
-    if (!isAdvance && !dueRecord) {
-      toast.error("Generate or select a monthly due before recording payment.")
+    if (!isAdvance && (!periodMonth || !dueDate)) {
+      toast.error("Monthly due period is missing. Refresh and try again.")
       return
     }
 
@@ -1417,17 +1451,35 @@ function RecordInPersonPaymentDialog({
     }
 
     try {
+      let targetDueRecord = dueRecord
+
+      if (!isAdvance && !targetDueRecord) {
+        targetDueRecord = await generateMonthlyFee.mutateAsync({
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+          periodMonth: periodMonth as string,
+          dueDate: dueDate as string,
+          baseAmount: resident.monthly_fee_amount,
+          discountAmount: 0,
+          penaltyAmount: 0,
+          adjustmentAmount: 0,
+          advanceAdjustmentAmount: 0,
+          notes: "Generated from resident cash collection.",
+        })
+      }
+
       await recordPayment.mutateAsync({
         organizationId,
         hostelId: resident.hostel_id,
         residentId: resident.id,
-        monthlyFeeRecordId: isAdvance ? undefined : dueRecord?.id,
+        monthlyFeeRecordId: isAdvance ? undefined : targetDueRecord?.id,
         amount: parsedAmount,
         method,
         manualReference: manualReference.trim() || undefined,
         notes: notes.trim() || undefined,
         isAdvance,
-        isPartial: !isAdvance && dueRecord ? parsedAmount < dueRecord.balance_amount : false,
+        isPartial: !isAdvance && targetDueRecord ? parsedAmount < targetDueRecord.balance_amount : false,
         idempotencyKey: `admin-manual-${crypto.randomUUID()}`,
       })
 
@@ -1533,8 +1585,10 @@ function RecordInPersonPaymentDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={recordPayment.isPending}>
-              {recordPayment.isPending ? "Recording..." : "Record payment"}
+            <Button type="submit" disabled={recordPayment.isPending || generateMonthlyFee.isPending}>
+              {recordPayment.isPending || generateMonthlyFee.isPending
+                ? "Recording..."
+                : "Record payment"}
             </Button>
           </DialogFooter>
         </form>
@@ -1756,6 +1810,7 @@ type ResidentFinanceSnapshot = {
   currentPeriod: string
   currentRecord: Tables<"monthly_fee_records"> | null
   currentPayments: Tables<"payments">[]
+  dueDate: string
   paidThisMonth: number
   pendingThisMonth: number
   pendingVerification: number
@@ -1818,6 +1873,7 @@ function getResidentFinanceSnapshot(
     currentPeriod,
     currentRecord,
     currentPayments,
+    dueDate: currentRecord?.due_date ?? buildMonthlyDueDate(currentPeriod),
     paidThisMonth,
     pendingThisMonth,
     pendingVerification: ledger.totals.pendingVerification,
@@ -1832,6 +1888,7 @@ function getResidentFinanceSnapshot(
 function buildAdminPaymentReminderMessage(input: {
   resident: Tables<"residents">
   periodMonth: string
+  dueDate: string
   monthlyFee: number
   paidThisMonth: number
   pendingThisMonth: number
@@ -1842,6 +1899,7 @@ function buildAdminPaymentReminderMessage(input: {
     `Hello ${input.resident.full_name}, this is a Sadhana Boys Hostel fee reminder.`,
     `Admission: ${input.resident.admission_number}`,
     `Month: ${formatPeriodMonth(input.periodMonth)}`,
+    `Last date: ${formatDate(input.dueDate)}`,
     `Monthly fee: ${formatCurrency(input.monthlyFee)}`,
     `Paid this month: ${formatCurrency(input.paidThisMonth)}`,
     input.pendingThisMonth > 0
@@ -1857,6 +1915,29 @@ function buildAdminPaymentReminderMessage(input: {
     .join("\n")
 }
 
+function buildResidentReminderUrl(
+  resident: Tables<"residents">,
+  snapshot: ResidentFinanceSnapshot
+) {
+  if (snapshot.reminderAmount <= 0) {
+    return null
+  }
+
+  return buildWhatsappUrl({
+    phone: resident.phone,
+    message: buildAdminPaymentReminderMessage({
+      resident,
+      periodMonth: snapshot.currentRecord?.period_month ?? snapshot.currentPeriod,
+      dueDate: snapshot.dueDate,
+      monthlyFee: resident.monthly_fee_amount,
+      paidThisMonth: snapshot.paidThisMonth,
+      pendingThisMonth: snapshot.pendingThisMonth,
+      dueLeft: snapshot.dueLeft,
+      advanceLeft: snapshot.advanceLeft,
+    }),
+  })
+}
+
 function currentPeriodMonth() {
   const now = new Date()
 
@@ -1865,6 +1946,10 @@ function currentPeriodMonth() {
 
 function todayDateOnly() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function buildMonthlyDueDate(periodMonth: string) {
+  return `${periodMonth.slice(0, 7)}-10`
 }
 
 function formatPeriodMonth(value: string) {

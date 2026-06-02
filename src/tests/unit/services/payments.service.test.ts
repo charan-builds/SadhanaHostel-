@@ -124,24 +124,38 @@ function paymentSettingFixture(
 }
 
 describe("PaymentsService", () => {
-  it("does not verify an already verified payment", async () => {
+  it("reconciles an already verified payment by ensuring receipt invoice linkage", async () => {
     const harness = createServiceHarness()
+    const verified = paymentFixture({ status: "verified", is_advance: true })
+    const linked = paymentFixture({
+      ...verified,
+      invoice_id: "00000000-0000-4000-8000-000000000155",
+    })
 
-    harness.paymentsRepository.getById.mockResolvedValue(
-      paymentFixture({ status: "verified" })
-    )
+    harness.paymentsRepository.getById.mockResolvedValue(verified)
+    harness.invoicesService.generatePaymentReceiptInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
 
     await expect(
       harness.service.verifyPayment({
         organizationId: TEST_ORGANIZATION_ID,
         paymentId: PAYMENT_ID,
       })
-    ).rejects.toMatchObject({
-      code: "CONFLICT",
-      message: "Payment is already verified.",
-    })
+    ).resolves.toEqual(linked)
 
     expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).toHaveBeenCalledWith({
+      payment: verified,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(harness.paymentsRepository.updateInvoiceLink).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      linked.invoice_id,
+      adminAuthContext().authUser.id
+    )
   })
 
   it("delegates pending payment verification and links a receipt invoice", async () => {

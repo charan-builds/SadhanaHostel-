@@ -168,6 +168,7 @@ export class SupportRepository {
     status?: SupportStatus | SupportStatus[]
     priority?: SupportPriority | SupportPriority[]
     category?: string | string[]
+    workflow?: string
   }) {
     let query = this.db
       .from("support_requests")
@@ -195,6 +196,10 @@ export class SupportRepository {
       query = query.in("category", filters.category)
     } else if (filters.category) {
       query = query.eq("category", filters.category)
+    }
+
+    if (filters.workflow) {
+      query = query.contains("metadata", { workflow: filters.workflow })
     }
 
     const { error, count } = await query

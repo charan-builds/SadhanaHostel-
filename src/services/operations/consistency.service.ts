@@ -20,7 +20,10 @@ import {
   consistencyReportQuerySchema,
   consistencyRepairSchema,
 } from "@/validations/operations.validation"
-import { isResidentEligibleForOccupancy } from "@/services/analytics/operational-metrics"
+import {
+  isResidentEligibleForBilling,
+  isResidentEligibleForOccupancy,
+} from "@/services/analytics/operational-metrics"
 
 import { AuthService } from "../auth.service"
 
@@ -1361,7 +1364,7 @@ async function detectInvalidDuesAnomalies(
       return false
     }
 
-    return !isResidentEligibleForOccupancy({
+    return !isResidentEligibleForBilling({
       id: stringValue(resident, "id"),
       status: stringValue(resident, "status"),
       is_active: booleanValue(resident, "is_active"),
@@ -1392,15 +1395,15 @@ async function detectInvalidDuesAnomalies(
           "payment",
           "high",
           "Inactive residents have open dues",
-          "Draft, unverified, suspended, left, or archived residents must not carry unpaid operational dues unless finance explicitly keeps them open.",
+          "Suspended, left, archived, rejected, or unlinked residents must not carry unpaid operational dues unless finance explicitly keeps them open.",
           invalidFeeRecords.length + invalidInvoices.length,
           "reconcile_dues",
           [
             ...rowDetails(invalidFeeRecords, {
               tableName: "monthly_fee_records",
               anomalyType: "inactive_resident_fee_record",
-              expectedState: "pending/overdue dues only belong to operational verified residents",
-              actualState: "open unpaid dues linked to a non-operational resident",
+              expectedState: "pending/overdue dues only belong to billable, portal-linked residents",
+              actualState: "open unpaid dues linked to a non-billable resident",
               repairAction: "reconcile_dues",
               recommendation: "Run dues reconciliation to cancel unpaid invalid fee records and linked unpaid invoices.",
             }),

@@ -1,11 +1,12 @@
 "use client"
 
-import { ImageIcon, Loader2, UploadCloud } from "lucide-react"
+import { ImageIcon, Loader2, Trash2, UploadCloud } from "lucide-react"
 import { useState, type FormEvent } from "react"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { BrandMark } from "@/components/shared/brand-mark"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
 import { Button } from "@/components/ui/button"
@@ -39,7 +40,7 @@ import { hostelGalleryImages, hostelImages } from "@/constants/hostel-images"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import { formatGalleryCategory } from "@/lib/public-gallery"
-import { useGallery, useUploadGalleryImage } from "@/hooks"
+import { useDeleteGalleryItem, useGallery, useUploadGalleryImage } from "@/hooks"
 
 type GallerySlot = {
   id: string
@@ -60,6 +61,11 @@ type SlotGalleryItem = {
   status: string
   imageUrl?: string | null
   alt_text?: string | null
+}
+
+type GalleryDeleteTarget = {
+  id: string
+  title: string
 }
 
 const gallerySlots: GallerySlot[] = [
@@ -153,31 +159,54 @@ const galleryCategoryOptions = [
 ] as const
 
 function findGallerySlotItem<T extends SlotGalleryItem>(items: T[], slot: GallerySlot) {
-  const matches = items.filter((item) => {
-    const category = item.category.toLowerCase()
-    const title = item.title.toLowerCase()
+  const slotCategory = normalizeGallerySlotKey(slot.category)
+  const exactMatches = items.filter(
+    (item) => normalizeGallerySlotKey(item.category) === slotCategory
+  )
+  const exactMatch = pickPreferredSlotItem(exactMatches)
 
-    return slot.aliases.some((alias) => category.includes(alias) || title.includes(alias))
-  })
+  if (exactMatch) {
+    return exactMatch
+  }
 
-  return matches.find((item) => item.status === "published") ?? matches[0]
+  const matches = items.filter((item) => matchesGallerySlot(item, slot))
+
+  return pickPreferredSlotItem(matches)
 }
 
 function getGalleryItemUsage(item: SlotGalleryItem) {
-  const category = item.category.toLowerCase()
-  const title = item.title.toLowerCase()
-
   return Array.from(
     new Set(
-      gallerySlots.flatMap((slot) => {
-        const matchesSlot = slot.aliases.some(
-          (alias) => category.includes(alias) || title.includes(alias)
-        )
-
-        return matchesSlot ? slot.visibleIn : []
-      })
+      gallerySlots.flatMap((slot) => (matchesGallerySlot(item, slot) ? slot.visibleIn : []))
     )
   )
+}
+
+function pickPreferredSlotItem<T extends SlotGalleryItem>(items: T[]) {
+  return items.find((item) => item.status === "published") ?? items[0]
+}
+
+function matchesGallerySlot(item: SlotGalleryItem, slot: GallerySlot) {
+  const category = normalizeGallerySlotKey(item.category)
+  const title = normalizeGallerySlotKey(item.title)
+
+  return slot.aliases.some((alias) => {
+    const slotAlias = normalizeGallerySlotKey(alias)
+
+    return (
+      category === slotAlias ||
+      title === slotAlias ||
+      title.startsWith(`${slotAlias}-`)
+    )
+  })
+}
+
+function normalizeGallerySlotKey(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
 export function AdminGalleryClient() {
@@ -194,6 +223,7 @@ export function AdminGalleryClient() {
   const [selectedSlot, setSelectedSlot] = useState<GallerySlot | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<GalleryDeleteTarget | null>(null)
   const [formValues, setFormValues] = useState({
     title: "",
     description: "",
@@ -207,6 +237,7 @@ export function AdminGalleryClient() {
     pageSize: 50,
   })
   const uploadGalleryImage = useUploadGalleryImage()
+  const deleteGalleryItem = useDeleteGalleryItem()
 
   if (!organizationId) {
     return (
@@ -302,6 +333,19 @@ export function AdminGalleryClient() {
     }
   }
 
+  async function handleRemoveGalleryItem() {
+    if (!deleteTarget || !galleryOrganizationId) {
+      return
+    }
+
+    await deleteGalleryItem.mutateAsync({
+      galleryItemId: deleteTarget.id,
+      organizationId: galleryOrganizationId,
+    })
+    toast.success("Gallery image removed.")
+    setDeleteTarget(null)
+  }
+
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-3">
@@ -393,16 +437,35 @@ export function AdminGalleryClient() {
                         Upload with category <code>{slot.category}</code> to replace this slot.
                       </p>
                     )}
-                    <Button
-                      type="button"
-                      variant={slotItem ? "outline" : "default"}
-                      size="sm"
-                      className="w-full"
-                      onClick={() => openSlotUpload(slot)}
-                    >
-                      <UploadCloud className="size-3.5" aria-hidden="true" />
-                      {slotItem ? "Replace image" : "Upload image"}
-                    </Button>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant={slotItem ? "outline" : "default"}
+                        size="sm"
+                        className="w-full"
+                        onClick={() => openSlotUpload(slot)}
+                      >
+                        <UploadCloud className="size-3.5" aria-hidden="true" />
+                        {slotItem ? "Replace image" : "Upload image"}
+                      </Button>
+                      {slotItem ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="w-full"
+                          onClick={() =>
+                            setDeleteTarget({
+                              id: slotItem.id,
+                              title: slotItem.title,
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" aria-hidden="true" />
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               )
@@ -621,7 +684,23 @@ export function AdminGalleryClient() {
                     <div className="grid gap-3 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <h2 className="font-semibold">{item.title}</h2>
-                        <StatusBadge status={item.status} />
+                        <div className="flex shrink-0 items-center gap-2">
+                          <StatusBadge status={item.status} />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon-sm"
+                            aria-label={`Remove ${item.title}`}
+                            onClick={() =>
+                              setDeleteTarget({
+                                id: item.id,
+                                title: item.title,
+                              })
+                            }
+                          >
+                            <Trash2 className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {formatGalleryCategory(item.category)}
@@ -658,6 +737,23 @@ export function AdminGalleryClient() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+        title="Remove gallery image?"
+        description={
+          deleteTarget
+            ? `${deleteTarget.title} will be removed from the admin gallery and public website slots.`
+            : undefined
+        }
+        confirmLabel="Remove image"
+        variant="danger"
+        onConfirm={handleRemoveGalleryItem}
+      />
     </div>
   )
 }

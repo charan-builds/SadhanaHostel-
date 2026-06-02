@@ -450,14 +450,20 @@ export class AnalyticsService {
         .map((resident) => resident.id)
         .filter((residentId): residentId is string => Boolean(residentId))
     )
+    const billingEligibleResidentIds = new Set(
+      residents
+        .filter(isResidentEligibleForBilling)
+        .map((resident) => resident.id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
     const activeAllocations = allocations.filter(
       (allocation) =>
         allocation.status === "active" &&
         allocation.resident_id &&
         analyticsEligibleResidentIds.has(allocation.resident_id)
     )
-    const operationalFeeRecords = feeRecords.filter((record) =>
-      analyticsEligibleResidentIds.has(record.resident_id)
+    const billingFeeRecords = feeRecords.filter((record) =>
+      billingEligibleResidentIds.has(record.resident_id)
     )
     const configuredBeds = activeRooms.reduce((total, room) => total + room.capacity, 0)
     const totalBeds = configuredBeds || capacitySnapshot?.total_beds || 0
@@ -471,7 +477,7 @@ export class AnalyticsService {
     const maintenanceBlockedBeds = capacitySnapshot?.maintenance_blocked_beds ?? 0
     const availableBeds = Math.max(0, totalBeds - occupiedBeds)
     const verifiedPayments = payments.filter((payment) => payment.status === "verified")
-    const pendingFeeRecords = operationalFeeRecords.filter((record) =>
+    const pendingFeeRecords = billingFeeRecords.filter((record) =>
       ["pending", "partial", "overdue"].includes(record.status)
     )
     const unpaidResidentIds = new Set(
@@ -494,12 +500,12 @@ export class AnalyticsService {
         residents: operationalResidents,
         reservations,
         payments,
-        feeRecords: operationalFeeRecords,
+        feeRecords: billingFeeRecords,
         allocations: activeAllocations,
       })
     )
     const revenue = sum(verifiedPayments.map((payment) => payment.amount))
-    const billed = sum(operationalFeeRecords.map((record) => record.total_amount))
+    const billed = sum(billingFeeRecords.map((record) => record.total_amount))
     const pendingDues = sum(pendingFeeRecords.map((record) => record.balance_amount))
     const paymentConversion =
       payments.length === 0
@@ -577,15 +583,31 @@ export class AnalyticsService {
 }
 
 function normalizeAnalyticsRange(fromDate?: string, toDate?: string) {
-  const end = toDate ? new Date(toDate) : new Date()
+  const end = toDate ? parseAnalyticsBoundary(toDate, "end") : new Date()
   const start = fromDate
-    ? new Date(fromDate)
+    ? parseAnalyticsBoundary(fromDate, "start")
     : new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 5, 1))
 
   return {
     fromDate: start.toISOString(),
     toDate: end.toISOString(),
   }
+}
+
+function parseAnalyticsBoundary(value: string, boundary: "start" | "end") {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z"
+
+    return new Date(`${value}${suffix}`)
+  }
+
+  const parsed = new Date(value)
+
+  if (boundary === "end") {
+    parsed.setUTCHours(23, 59, 59, 999)
+  }
+
+  return parsed
 }
 
 function buildMonthBuckets(fromDate: string, toDate: string) {

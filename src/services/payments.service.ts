@@ -958,7 +958,23 @@ export class PaymentsService {
     })
 
     if (existingPayment.status === "verified") {
-      throw conflict("Payment is already verified.")
+      const reconciledPayment = await this.ensureVerifiedPaymentInvoice(
+        existingPayment,
+        context.authUser.id,
+        "payment.invoice_generation_for_verified_payment_failed"
+      )
+
+      logPaymentEvent({
+        action: "verified_payment_reconciled",
+        paymentId: reconciledPayment.id,
+        residentId: reconciledPayment.resident_id,
+        organizationId: reconciledPayment.organization_id,
+        actorUserId: context.authUser.id,
+        amount: reconciledPayment.amount,
+        status: reconciledPayment.status,
+      })
+
+      return reconciledPayment
     }
 
     if (existingPayment.status === "initiated") {
@@ -1073,6 +1089,16 @@ export class PaymentsService {
     const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
+
+    const existing = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+      values.organizationId,
+      values.residentId,
+      values.periodMonth
+    )
+
+    if (existing) {
+      return existing
+    }
 
     const totalAmount =
       values.baseAmount +

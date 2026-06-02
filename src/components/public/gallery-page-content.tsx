@@ -67,7 +67,7 @@ export function GalleryPageContent({
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleItems.map((item, index) => (
-              <article key={item.title} className="group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lifted">
+              <article key={galleryItemKey(item, index)} className="group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lifted">
                 {item.imageUrl?.startsWith("/") ? (
                   <div className="relative aspect-[4/3] overflow-hidden">
                     <Image
@@ -108,4 +108,8 @@ export function GalleryPageContent({
       </section>
     </main>
   )
+}
+
+function galleryItemKey(item: GalleryItem, index: number) {
+  return `${item.category}-${item.title}-${item.imageUrl ?? index}-${index}`
 }

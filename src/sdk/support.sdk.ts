@@ -3,6 +3,7 @@ import type {
   OperationalAlert,
   ResidentPasswordResetRequestResult,
   SupportPasswordResetApprovalResult,
+  SupportPublishNoticeResult,
   SupportRequestResult,
 } from "@/types/support"
 import type { Tables } from "@/types/database"
@@ -10,6 +11,7 @@ import type {
   OperationalAlertsQueryInput,
   ResidentPasswordResetRequestInput,
   SupportPasswordResetApprovalInput,
+  SupportPublishNoticeInput,
   SupportRequestCreateInput,
   SupportRequestListInput,
   SupportRequestUpdateInput,
@@ -57,6 +59,15 @@ export const supportSdk = {
       SupportPasswordResetApprovalResult,
       Omit<SupportPasswordResetApprovalInput, "requestId">
     >(`/api/support/requests/${requestId}/resident-password-reset`, body, { retry: 0 })
+  },
+
+  publishRequestAsNotice(input: SupportPublishNoticeInput) {
+    const { requestId, ...body } = input
+
+    return apiClient.post<
+      SupportPublishNoticeResult,
+      Omit<SupportPublishNoticeInput, "requestId">
+    >(`/api/support/requests/${requestId}/publish-notice`, body, { retry: 0 })
   },
 
   operationalAlerts(params: OperationalAlertsQueryInput) {

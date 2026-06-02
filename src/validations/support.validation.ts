@@ -10,6 +10,9 @@ export const supportCategorySchema = z.enum([
   "invite",
   "upload",
   "room",
+  "lost_found",
+  "maintenance",
+  "safety",
   "account",
   "session",
   "general",
@@ -74,6 +77,16 @@ export const supportPasswordResetApprovalSchema = z.object({
   requestId: uuidSchema,
 })
 
+export const supportPublishNoticeSchema = z.object({
+  organizationId: uuidSchema,
+  requestId: uuidSchema,
+  title: z.string().trim().min(2).max(160).optional(),
+  body: z.string().trim().min(5).max(5000).optional(),
+  audienceType: z.enum(["all", "hostel"]).default("hostel"),
+  isPinned: z.boolean().default(false),
+  expiresAt: z.string().datetime().optional(),
+})
+
 export const operationalAlertsQuerySchema = z.object({
   organizationId: uuidSchema.optional(),
   hostelId: uuidSchema.optional(),
@@ -85,4 +98,5 @@ export type SupportRequestCreateInput = z.infer<typeof supportRequestCreateSchem
 export type SupportRequestUpdateInput = z.infer<typeof supportRequestUpdateSchema>
 export type ResidentPasswordResetRequestInput = z.infer<typeof residentPasswordResetRequestSchema>
 export type SupportPasswordResetApprovalInput = z.infer<typeof supportPasswordResetApprovalSchema>
+export type SupportPublishNoticeInput = z.infer<typeof supportPublishNoticeSchema>
 export type OperationalAlertsQueryInput = z.infer<typeof operationalAlertsQuerySchema>

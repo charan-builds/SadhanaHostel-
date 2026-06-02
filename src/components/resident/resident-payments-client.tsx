@@ -178,9 +178,8 @@ export function ResidentPaymentsClient() {
 
   const watchedAmount = useWatch({ control, name: "amount" })
   const watchedNotes = useWatch({ control, name: "notes" })
-  const currentPaymentAmount = isPaymentAmountValue(watchedAmount)
-    ? Number(watchedAmount)
-    : suggestedAmount
+  const preparedPaymentAmount = isPaymentAmountValue(watchedAmount) ? Number(watchedAmount) : 0
+  const currentPaymentAmount = preparedPaymentAmount > 0 ? preparedPaymentAmount : suggestedAmount
   const paymentReference = useMemo(
     () =>
       mounted
@@ -214,7 +213,7 @@ export function ResidentPaymentsClient() {
         ? buildUpiPaymentLink({
             upiId: paymentSettings.data?.upi_id,
             payeeName: paymentSettings.data?.account_name,
-            amount: currentPaymentAmount,
+            amount: preparedPaymentAmount,
             transactionReference: paymentReference,
             note: upiPaymentNote,
           })
@@ -224,7 +223,7 @@ export function ResidentPaymentsClient() {
       paymentReference,
       paymentSettings.data?.account_name,
       paymentSettings.data?.upi_id,
-      currentPaymentAmount,
+      preparedPaymentAmount,
       upiPaymentNote,
     ]
   )
@@ -446,65 +445,40 @@ export function ResidentPaymentsClient() {
         />
       ) : null}
 
-      <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="saas-surface overflow-hidden rounded-xl">
-          <div className="grid gap-6 p-5 lg:grid-cols-[1fr_240px]">
+      <motion.section variants={reveal} className="saas-surface overflow-hidden rounded-xl">
+        <div className="p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+              <TrendingUp className="size-4" aria-hidden="true" />
+            </span>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
-                  <TrendingUp className="size-4" aria-hidden="true" />
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold">Due amount visualization</h2>
-                  <p className="text-sm text-muted-foreground">Monthly fee coverage and payment status.</p>
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Outstanding balance</p>
-                    <p className="mt-1 text-4xl font-semibold tracking-tight">{formatCurrency(currentDue)}</p>
-                  </div>
-                  <StatusBadge status={currentDue > 0 ? "pending" : "verified"} />
-                </div>
-                <div className="mt-5 h-3 overflow-hidden rounded-full bg-muted">
-                  <motion.div
-                    className="h-full rounded-full bg-linear-to-r from-primary via-cyan-500 to-emerald-500"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${dueProgress}%` }}
-                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-                  <span>{Math.round(dueProgress)}% of monthly fee currently due</span>
-                  <span>{formatCurrency(payableDue)} payable now</span>
-                </div>
-              </div>
+              <h2 className="text-base font-semibold">Due amount visualization</h2>
+              <p className="text-sm text-muted-foreground">Monthly fee coverage and payment status.</p>
             </div>
+          </div>
 
-            <ReceiptPreview
-              reference={paymentReference}
-              amount={currentPaymentAmount}
-              residentName={resident.data.full_name}
-              admissionNumber={resident.data.admission_number}
-              latestStatus={latestPayment?.status}
-            />
+          <div className="mt-6">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Outstanding balance</p>
+                <p className="mt-1 text-4xl font-semibold tracking-tight">{formatCurrency(currentDue)}</p>
+              </div>
+              <StatusBadge status={currentDue > 0 ? "pending" : "verified"} />
+            </div>
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-muted">
+              <motion.div
+                className="h-full rounded-full bg-linear-to-r from-primary via-cyan-500 to-emerald-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${dueProgress}%` }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+              <span>{Math.round(dueProgress)}% of monthly fee currently due</span>
+              <span>{formatCurrency(payableDue)} payable now</span>
+            </div>
           </div>
         </div>
-
-        <QrPaymentSection
-          isLoading={paymentSettings.isLoading}
-          isError={paymentSettings.isError}
-          error={paymentSettings.error}
-          accountName={paymentSettings.data?.account_name}
-          instructions={paymentSettings.data?.instructions}
-          qrImageSignedUrl={paymentSettings.data?.qrImageSignedUrl}
-          upiId={paymentSettings.data?.upi_id}
-          upiPaymentLink={upiPaymentLink}
-          paymentReference={paymentReference}
-          onRetry={() => void paymentSettings.refetch()}
-        />
       </motion.section>
 
       <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
@@ -536,22 +510,16 @@ export function ResidentPaymentsClient() {
           ) : null}
 
           <div className="mt-5 grid gap-4">
-            {upiPaymentLink ? (
-              <div className="rounded-lg border bg-muted/35 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Smartphone className="size-4 text-primary" aria-hidden="true" />
-                  Payment note
-                </div>
-                <p className="mt-2 break-all text-xs leading-5 text-muted-foreground">{upiPaymentNote}</p>
-              </div>
-            ) : null}
-
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
               <div className="grid gap-2">
-                <Label htmlFor="amount">Amount</Label>
+                <Label htmlFor="amount">1. Enter payment amount</Label>
                 <Input id="amount" type="number" {...register("amount")} />
                 <p className="text-xs text-muted-foreground">
-                  UPI apps will receive {formatCurrency(currentPaymentAmount)} as the payable amount.
+                  The QR and UPI buttons below use this exact amount:
+                  {" "}
+                  {preparedPaymentAmount > 0
+                    ? formatCurrency(preparedPaymentAmount)
+                    : "enter amount first"}.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -588,14 +556,48 @@ export function ResidentPaymentsClient() {
                 </div>
                 {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="transactionId">UPI reference / transaction ID</Label>
-                <Input id="transactionId" placeholder="Optional" {...register("transactionId")} />
-                <p className="text-xs text-muted-foreground">
-                  Optional. Screenshot upload is compulsory for verification.
-                </p>
-                {errors.transactionId ? <p className="text-xs text-destructive">{errors.transactionId.message}</p> : null}
+
+              <ReceiptPreview
+                reference={paymentReference}
+                amount={preparedPaymentAmount}
+                residentName={resident.data.full_name}
+                admissionNumber={resident.data.admission_number}
+                latestStatus={latestPayment?.status}
+              />
+            </div>
+
+            {upiPaymentLink ? (
+              <div className="rounded-lg border bg-muted/35 p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Smartphone className="size-4 text-primary" aria-hidden="true" />
+                  Payment note
+                </div>
+                <p className="mt-2 break-all text-xs leading-5 text-muted-foreground">{upiPaymentNote}</p>
               </div>
+            ) : null}
+
+            <QrPaymentSection
+              isLoading={paymentSettings.isLoading}
+              isError={paymentSettings.isError}
+              error={paymentSettings.error}
+              accountName={paymentSettings.data?.account_name}
+              instructions={paymentSettings.data?.instructions}
+              qrImageSignedUrl={paymentSettings.data?.qrImageSignedUrl}
+              upiId={paymentSettings.data?.upi_id}
+              upiPaymentLink={upiPaymentLink}
+              paymentReference={paymentReference}
+              paymentAmount={preparedPaymentAmount}
+              variant="embedded"
+              onRetry={() => void paymentSettings.refetch()}
+            />
+
+            <div className="grid gap-2">
+              <Label htmlFor="transactionId">UPI reference / transaction ID</Label>
+              <Input id="transactionId" placeholder="Optional" {...register("transactionId")} />
+              <p className="text-xs text-muted-foreground">
+                Optional. Screenshot upload is compulsory for verification.
+              </p>
+              {errors.transactionId ? <p className="text-xs text-destructive">{errors.transactionId.message}</p> : null}
             </div>
 
             <div className="grid gap-2 rounded-xl border border-dashed bg-white/55 p-4">
@@ -684,6 +686,8 @@ function QrPaymentSection({
   upiId,
   upiPaymentLink,
   paymentReference,
+  paymentAmount,
+  variant = "surface",
   onRetry,
 }: {
   isLoading: boolean
@@ -695,9 +699,17 @@ function QrPaymentSection({
   upiId?: string | null
   upiPaymentLink: string | null
   paymentReference: string
+  paymentAmount: number
+  variant?: "surface" | "embedded"
   onRetry: () => void
 }) {
   const [exactAmountQrUrl, setExactAmountQrUrl] = useState<string | null>(null)
+  const hasPreparedAmount =
+    Number.isFinite(paymentAmount) && paymentAmount > 0
+  const containerClassName =
+    variant === "embedded"
+      ? "rounded-xl border bg-white/55 p-4"
+      : "saas-surface rounded-xl p-5"
 
   useEffect(() => {
     let active = true
@@ -733,14 +745,14 @@ function QrPaymentSection({
   const displayQrUrl = upiPaymentLink ? exactAmountQrUrl : null
 
   return (
-    <div className="saas-surface rounded-xl p-5">
+    <div className={containerClassName}>
       <div className="flex items-center gap-2 text-sm font-medium">
         <QrCode className="size-4 text-primary" aria-hidden="true" />
-        QR payment section
+        2. Generate QR and open UPI app
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
-        Open PhonePe, Google Pay, Paytm, or BHIM with the entered amount and reference already
-        filled in, then upload proof below.
+        Enter the amount first. The QR and UPI app buttons are generated only for that amount and
+        reference.
       </p>
 
       {isLoading ? (
@@ -755,6 +767,13 @@ function QrPaymentSection({
             onRetry={onRetry}
           />
         </div>
+      ) : accountName && !hasPreparedAmount ? (
+        <div className="mt-4">
+          <EmptyState
+            title="Enter amount first"
+            message="After you type the payment amount, the QR code and UPI app buttons will appear here."
+          />
+        </div>
       ) : accountName ? (
         <div className="mt-4 grid gap-4">
           <div className="grid gap-4 sm:grid-cols-[180px_1fr] xl:grid-cols-1 2xl:grid-cols-[180px_1fr]">
@@ -766,25 +785,19 @@ function QrPaymentSection({
                   alt="Exact amount UPI QR code"
                   className="h-full w-full rounded-lg object-contain"
                 />
-              ) : qrImageSignedUrl ? (
-                // Signed URLs are short-lived and generated server-side.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={qrImageSignedUrl}
-                  alt="Hostel UPI QR code"
-                  className="h-full w-full rounded-lg object-contain opacity-80"
-                />
               ) : (
                 <div className="grid place-items-center text-center text-sm text-muted-foreground">
                   <QrCode className="mx-auto mb-2 size-10 text-primary" aria-hidden="true" />
-                  QR not uploaded
+                  Exact QR preparing
                 </div>
               )}
             </div>
             <div className="grid content-start gap-3">
               {displayQrUrl ? (
                 <div className="rounded-lg border bg-success-surface p-3 text-xs leading-5 text-success-foreground">
-                  This QR is generated from the entered amount and reference. Scan it before submitting proof.
+                  This QR is generated for {formatCurrency(paymentAmount)} and reference
+                  {" "}
+                  {paymentReference}. Scan it before submitting proof.
                 </div>
               ) : null}
               <div>
@@ -810,6 +823,7 @@ function QrPaymentSection({
                     <Button key={app.id} asChild size="sm" variant="outline">
                       <a
                         href={upiPaymentLink}
+                        aria-label={`Open ${app.label} for ${formatCurrency(paymentAmount)}`}
                         onClick={() => toast.info("Complete payment in your UPI app, then upload the screenshot and UTR here.")}
                       >
                         {app.label}
@@ -838,6 +852,12 @@ function QrPaymentSection({
               </Button>
             </div>
             {instructions ? <p className="mt-2 leading-5">{instructions}</p> : null}
+            {!upiPaymentLink && qrImageSignedUrl ? (
+              <p className="mt-2 leading-5">
+                Exact-amount QR could not be generated. Ask finance to confirm the UPI ID before
+                paying.
+              </p>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -1136,7 +1156,9 @@ function isPaymentAmountValue(value: unknown): value is string | number {
   }
 
   if (typeof value === "string") {
-    return value.trim().length > 0
+    const amount = Number(value)
+
+    return Number.isFinite(amount) && amount > 0
   }
 
   return false

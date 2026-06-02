@@ -3,7 +3,7 @@
 import Link from "next/link"
 import type { Route } from "next"
 import { useSearchParams } from "next/navigation"
-import { AlertTriangle, CheckCircle2, Copy, KeyRound, Loader2 } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Copy, KeyRound, Loader2, Megaphone } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -33,9 +33,11 @@ import { formatDateTime, humanizeEnum } from "@/lib/format"
 import {
   useOperationalAlerts,
   useApproveResidentPasswordResetRequest,
+  usePublishSupportRequestNotice,
   useSupportRequests,
   useUpdateSupportRequest,
 } from "@/hooks"
+import type { Tables } from "@/types/database"
 import type { OperationalAlert } from "@/types/support"
 import type { SupportPasswordResetApprovalResult } from "@/types/support"
 
@@ -49,6 +51,7 @@ export function AdminOperationalAlertsClient({
   const hostelId = session?.hostelIds[0]
   const passwordResetQueue =
     passwordResetOnly || searchParams.get("queue") === "password-resets"
+  const residentReportQueue = searchParams.get("queue") === "resident-reports"
   const [passwordResetResult, setPasswordResetResult] =
     useState<SupportPasswordResetApprovalResult | null>(null)
   const alerts = useOperationalAlerts({
@@ -59,12 +62,17 @@ export function AdminOperationalAlertsClient({
     organizationId: organizationId ?? "",
     hostelId,
     category: passwordResetQueue ? "account" : undefined,
-    workflow: passwordResetQueue ? "resident_password_reset" : undefined,
+    workflow: passwordResetQueue
+      ? "resident_password_reset"
+      : residentReportQueue
+        ? "resident_report"
+        : undefined,
     page: 1,
     pageSize: 50,
   })
   const updateRequest = useUpdateSupportRequest()
   const approvePasswordReset = useApproveResidentPasswordResetRequest()
+  const publishNotice = usePublishSupportRequestNotice()
 
   async function setStatus(requestId: string, status: "in_progress" | "waiting_on_resident" | "resolved" | "closed") {
     if (!organizationId) {
@@ -108,6 +116,26 @@ export function AdminOperationalAlertsClient({
     }
   }
 
+  async function publishResidentReport(request: Tables<"support_requests">) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await publishNotice.mutateAsync({
+        organizationId,
+        requestId: request.id,
+        audienceType: "hostel",
+        isPinned: request.category === "safety" || request.priority === "urgent",
+      })
+      await requests.refetch()
+      await alerts.refetch()
+      toast.success("Resident report published as a notice.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to publish notice.")
+    }
+  }
+
   if (!organizationId) {
     return (
       <EmptyState
@@ -120,10 +148,18 @@ export function AdminOperationalAlertsClient({
   return (
     <div className="grid gap-6">
       <PageHeader
-        title={passwordResetQueue ? "Password Reset Requests" : "Operational Alerts"}
+        title={
+          passwordResetQueue
+            ? "Password Reset Requests"
+            : residentReportQueue
+              ? "Resident Reports"
+              : "Operational Alerts"
+        }
         description={
           passwordResetQueue
             ? "Verify resident identity, generate a temporary password, and share it securely."
+            : residentReportQueue
+              ? "Evaluate lost/found, maintenance, and safety reports before publishing notices."
             : "Recovery queue for blocked residents, payment reviews, onboarding issues, capacity risk, and missing configuration."
         }
       />
@@ -141,8 +177,8 @@ export function AdminOperationalAlertsClient({
           <div className="rounded-xl border bg-background p-5 text-sm text-muted-foreground">
             Loading alerts...
           </div>
-        ) : visibleAlerts(alerts.data, passwordResetQueue).length ? (
-          visibleAlerts(alerts.data, passwordResetQueue).map((alert) => (
+        ) : visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue).length ? (
+          visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue).map((alert) => (
             <AlertCard key={alert.id} alert={alert} />
           ))
         ) : (
@@ -150,25 +186,43 @@ export function AdminOperationalAlertsClient({
             <CheckCircle2 className="mb-2 size-5" aria-hidden="true" />
             {passwordResetQueue
               ? "No resident password reset requests are currently waiting."
+              : residentReportQueue
+                ? "No resident reports are currently waiting for review."
               : "No operational blockers are currently detected."}
           </div>
         )}
       </section>
 
       <DataTableShell
-        title={passwordResetQueue ? "Resident password reset queue" : "Support recovery queue"}
+        title={
+          passwordResetQueue
+            ? "Resident password reset queue"
+            : residentReportQueue
+              ? "Resident report review queue"
+              : "Support recovery queue"
+        }
         description={
           passwordResetQueue
             ? "Only resident password reset requests are shown here."
+            : residentReportQueue
+              ? "Review resident-submitted lost/found and issue reports, then publish safe items as notices."
             : "Track and resolve resident support requests without opening Supabase."
         }
         empty={
           requests.data?.data.length === 0 ? (
             <EmptyState
-              title={passwordResetQueue ? "No password reset requests" : "No recovery requests"}
+              title={
+                passwordResetQueue
+                  ? "No password reset requests"
+                  : residentReportQueue
+                    ? "No resident reports"
+                    : "No recovery requests"
+              }
               message={
                 passwordResetQueue
                   ? "When an existing resident asks admin to reset their password, the request will appear here."
+                  : residentReportQueue
+                    ? "Lost/found, maintenance, and safety reports will appear here after residents submit them."
                   : "When residents get blocked by onboarding, uploads, payments, or account access, their requests will appear here."
               }
             />
@@ -191,6 +245,11 @@ export function AdminOperationalAlertsClient({
                     {isResidentPasswordResetRequest(request) &&
                     !hasActiveResidentPortalAccount(request) ? (
                       <Badge variant="outline">Invite required</Badge>
+                    ) : null}
+                    {isResidentReportRequest(request) ? (
+                      <Badge variant="outline">
+                        {hasPublishedNotice(request) ? "Notice published" : "Resident report"}
+                      </Badge>
                     ) : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -239,6 +298,22 @@ export function AdminOperationalAlertsClient({
                         Create or resend the invite before sharing login access.
                       </p>
                     </>
+                  ) : null}
+                  {isResidentReportRequest(request) && !hasPublishedNotice(request) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={publishNotice.isPending || request.status === "closed"}
+                      onClick={() => void publishResidentReport(request)}
+                    >
+                      {publishNotice.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Megaphone className="size-3.5" aria-hidden="true" />
+                      )}
+                      Publish as notice
+                    </Button>
                   ) : null}
                   <Select
                     value={request.status}
@@ -372,16 +447,41 @@ function isResidentPasswordResetRequest(request: { metadata: unknown }) {
   return recordFromUnknown(request.metadata).workflow === "resident_password_reset"
 }
 
+function isResidentReportRequest(request: { category: string; metadata: unknown }) {
+  const metadata = recordFromUnknown(request.metadata)
+
+  return (
+    metadata.workflow === "resident_report" ||
+    ["lost_found", "maintenance", "safety"].includes(request.category)
+  )
+}
+
+function hasPublishedNotice(request: { metadata: unknown }) {
+  const publishedNoticeId = recordFromUnknown(request.metadata).publishedNoticeId
+
+  return typeof publishedNoticeId === "string" && publishedNoticeId.length > 0
+}
+
 function hasActiveResidentPortalAccount(request: { metadata: unknown }) {
   return recordFromUnknown(request.metadata).portalAccountActive !== false
 }
 
-function visibleAlerts(alerts: OperationalAlert[] | undefined, passwordResetQueue: boolean) {
+function visibleAlerts(
+  alerts: OperationalAlert[] | undefined,
+  passwordResetQueue: boolean,
+  residentReportQueue: boolean
+) {
   const source = alerts ?? []
 
-  return passwordResetQueue
-    ? source.filter((alert) => alert.id === "support.password_reset")
-    : source
+  if (passwordResetQueue) {
+    return source.filter((alert) => alert.id === "support.password_reset")
+  }
+
+  if (residentReportQueue) {
+    return source.filter((alert) => alert.id === "support.resident_reports")
+  }
+
+  return source
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {

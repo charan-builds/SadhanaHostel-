@@ -8,6 +8,7 @@ import type {
   OperationalAlertsQueryInput,
   ResidentPasswordResetRequestInput,
   SupportPasswordResetApprovalInput,
+  SupportPublishNoticeInput,
   SupportRequestCreateInput,
   SupportRequestListInput,
   SupportRequestUpdateInput,
@@ -78,6 +79,28 @@ export function useApproveResidentPasswordResetRequest() {
           organizationId: result.request.organization_id,
           hostelId: result.request.hostel_id,
         }),
+      })
+    },
+  })
+}
+
+export function usePublishSupportRequestNotice() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: SupportPublishNoticeInput) =>
+      supportSdk.publishRequestAsNotice(input),
+    onSuccess: (result) => {
+      const scope = {
+        organizationId: result.request.organization_id,
+        hostelId: result.request.hostel_id,
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.support.all(scope),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notices.all(scope),
       })
     },
   })

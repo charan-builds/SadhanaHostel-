@@ -7,6 +7,7 @@ import { websiteSdk } from "@/sdk"
 import type {
   CreateFacilityInput,
   CreateGalleryItemInput,
+  DeleteGalleryItemInput,
   FacilitiesListInput,
   GalleryListInput,
   UpdateFacilityInput,
@@ -122,6 +123,22 @@ export function useUploadGalleryImage() {
         queryKey: queryKeys.website.all({
           organizationId: result.gallery.organization_id,
           hostelId: result.gallery.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useDeleteGalleryItem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: DeleteGalleryItemInput) => websiteSdk.deleteGalleryItem(input),
+    onSuccess: (item) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.website.all({
+          organizationId: item.organization_id,
+          hostelId: item.hostel_id,
         }),
       })
     },

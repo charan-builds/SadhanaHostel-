@@ -301,4 +301,41 @@ export class WebsiteRepository {
 
     return data
   }
+
+  async getGalleryItemById(galleryItemId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("gallery")
+      .select("*")
+      .eq("id", galleryItemId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load gallery item.")
+    }
+
+    return data
+  }
+
+  async updateGalleryItem(
+    galleryItemId: string,
+    organizationId: string,
+    values: TablesUpdate<"gallery">
+  ) {
+    const { data, error } = await this.db
+      .from("gallery")
+      .update(values)
+      .eq("id", galleryItemId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to update gallery item.")
+    }
+
+    return data
+  }
 }

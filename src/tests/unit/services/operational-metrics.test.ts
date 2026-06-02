@@ -62,7 +62,7 @@ describe("operational dashboard resident lifecycle metrics", () => {
     expect(summary.verifiedResidents).toBe(1)
   })
 
-  it("allows only fully verified linked residents into occupancy and billing", () => {
+  it("keeps occupancy verified while allowing portal-linked residents into billing", () => {
     const operationalResident = {
       status: "active",
       onboarding_status: "verified",
@@ -79,11 +79,23 @@ describe("operational dashboard resident lifecycle metrics", () => {
         ...operationalResident,
         status: "draft",
       })
-    ).toBe(false)
+    ).toBe(true)
     expect(
       isResidentEligibleForBilling({
         ...operationalResident,
         onboarding_status: "verification_pending",
+      })
+    ).toBe(true)
+    expect(
+      isResidentEligibleForBilling({
+        ...operationalResident,
+        user_id: null,
+      })
+    ).toBe(false)
+    expect(
+      isResidentEligibleForBilling({
+        ...operationalResident,
+        onboarding_status: "rejected",
       })
     ).toBe(false)
     expect(

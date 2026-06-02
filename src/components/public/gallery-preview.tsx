@@ -41,7 +41,7 @@ export function GalleryPreview({
         >
           {previewItems.map((item, index) => (
             <motion.article
-              key={item.title}
+              key={galleryItemKey(item, index)}
               variants={{
                 hidden: { opacity: 0, y: 18, filter: "blur(8px)" },
                 show: { opacity: 1, y: 0, filter: "blur(0px)" },
@@ -87,4 +87,8 @@ export function GalleryPreview({
       </div>
     </section>
   )
+}
+
+function galleryItemKey(item: GalleryItem, index: number) {
+  return `${item.category}-${item.title}-${item.imageUrl ?? index}-${index}`
 }

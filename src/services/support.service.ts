@@ -11,6 +11,7 @@ import { AdmissionsService } from "@/services/admissions.service"
 import { NotificationService } from "@/services/notifications"
 import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import { OperationsRepository } from "@/repositories/operations.repository"
+import { NoticesRepository } from "@/repositories/notices.repository"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -25,12 +26,14 @@ import type {
   RecoveryGuidance,
   ResidentPasswordResetRequestResult,
   SupportPasswordResetApprovalResult,
+  SupportPublishNoticeResult,
   SupportRequestResult,
 } from "@/types/support"
 import {
   operationalAlertsQuerySchema,
   residentPasswordResetRequestSchema,
   supportPasswordResetApprovalSchema,
+  supportPublishNoticeSchema,
   supportRequestCreateSchema,
   supportRequestListSchema,
   supportRequestUpdateSchema,
@@ -48,6 +51,7 @@ export class SupportService {
   private readonly paymentsRepository: PaymentsRepository
   private readonly paymentSettingsRepository: PaymentSettingsRepository
   private readonly operationsRepository: OperationsRepository
+  private readonly noticesRepository: NoticesRepository
   private readonly notificationService: NotificationService
 
   constructor(private readonly db: AppSupabaseClient) {
@@ -57,6 +61,7 @@ export class SupportService {
     this.paymentsRepository = new PaymentsRepository(db)
     this.paymentSettingsRepository = new PaymentSettingsRepository(db)
     this.operationsRepository = new OperationsRepository(db)
+    this.noticesRepository = new NoticesRepository(db)
     this.notificationService = new NotificationService(db)
   }
 
@@ -263,6 +268,89 @@ export class SupportService {
     }
   }
 
+  async publishRequestAsNotice(input: unknown): Promise<SupportPublishNoticeResult> {
+    const values = supportPublishNoticeSchema.parse(input)
+    const context = await this.authService.requirePermission("notices.manage")
+    const previous = assertFound(
+      await this.supportRepository.getById(values.requestId, values.organizationId),
+      "Support request not found."
+    )
+
+    this.authService.requireHostelAccess(context, previous.organization_id, previous.hostel_id)
+
+    if (isResidentPasswordResetRequest(previous)) {
+      throw badRequest("Password reset requests cannot be published as resident notices.")
+    }
+
+    if (previous.status === "closed") {
+      throw badRequest("Closed support requests cannot be published as resident notices.")
+    }
+
+    const metadata = recordFromUnknown(previous.metadata)
+    const existingNoticeId = metadata.publishedNoticeId
+
+    if (typeof existingNoticeId === "string" && existingNoticeId) {
+      const existingNotice = await this.noticesRepository.getById(
+        existingNoticeId,
+        previous.organization_id
+      )
+
+      if (existingNotice) {
+        return {
+          request: previous,
+          notice: existingNotice,
+        }
+      }
+    }
+
+    const now = new Date().toISOString()
+    const workflow =
+      typeof metadata.workflow === "string" && metadata.workflow
+        ? metadata.workflow
+        : "resident_report"
+    const notice = await this.noticesRepository.create({
+      organization_id: previous.organization_id,
+      hostel_id: values.audienceType === "hostel" ? previous.hostel_id : null,
+      title: values.title ?? buildNoticeTitleFromSupportRequest(previous),
+      body: values.body ?? buildNoticeBodyFromSupportRequest(previous),
+      status: "published",
+      audience_type: values.audienceType,
+      audience_filter: {},
+      is_pinned: values.isPinned,
+      expires_at: values.expiresAt,
+      published_at: now,
+      published_by: context.authUser.id,
+      created_by: context.authUser.id,
+      updated_by: context.authUser.id,
+    })
+    const request = await this.supportRepository.update(
+      previous.id,
+      previous.organization_id,
+      {
+        status: "resolved",
+        resolution_notes:
+          previous.resolution_notes ||
+          "Reviewed by hostel staff and published as a resident notice.",
+        resolved_at: previous.resolved_at ?? now,
+        metadata: {
+          ...metadata,
+          workflow,
+          publishedNoticeId: notice.id,
+          publishedNoticeAt: now,
+          publishedNoticeBy: context.authUser.id,
+        } satisfies Json,
+        updated_by: context.authUser.id,
+      }
+    )
+
+    await this.audit("support.request.published_notice", context, request, previous, request)
+
+    return {
+      request,
+      notice,
+    }
+  }
+
   async updateRequest(input: unknown) {
     const values = supportRequestUpdateSchema.parse(input)
     const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
@@ -323,6 +411,7 @@ export class SupportService {
     const alerts: OperationalAlert[] = []
     const [
       passwordResetCount,
+      residentReportCount,
       urgentSupportCount,
       pendingSupportCount,
       onboardingPending,
@@ -338,6 +427,12 @@ export class SupportService {
         organizationId,
         hostelId,
         status: ["open", "in_progress"],
+      }),
+      this.supportRepository.count({
+        organizationId,
+        hostelId,
+        status: ["open", "in_progress"],
+        workflow: "resident_report",
       }),
       this.supportRepository.count({
         organizationId,
@@ -384,6 +479,18 @@ export class SupportService {
         count: passwordResetCount,
         href: "/admin/password-resets",
         ctaLabel: "Issue passwords",
+      })
+    }
+
+    if (residentReportCount > 0) {
+      alerts.push({
+        id: "support.resident_reports",
+        severity: "medium",
+        title: "Resident reports need review",
+        description: "Lost/found, maintenance, or safety reports are waiting for staff evaluation.",
+        count: residentReportCount,
+        href: "/admin/alerts?queue=resident-reports",
+        ctaLabel: "Review reports",
       })
     }
 
@@ -846,6 +953,39 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
           "Staff can re-check vacancy and assign another room if needed.",
         ],
       }
+    case "lost_found":
+      return {
+        ...shared,
+        title: "Lost and found report",
+        summary: "Hostel staff will review the details before sharing anything publicly.",
+        steps: [
+          "Mention where and when the item was lost or found.",
+          "Avoid posting private identifiers like full ID numbers.",
+          "Staff may publish a notice after checking the report.",
+        ],
+      }
+    case "maintenance":
+      return {
+        ...shared,
+        title: "Maintenance issue report",
+        summary: "Staff will evaluate the issue and decide whether residents need a notice.",
+        steps: [
+          "Include the room, floor, or common area involved.",
+          "Describe whether the issue is urgent or blocking daily use.",
+          "Staff can publish a notice after confirming the repair plan.",
+        ],
+      }
+    case "safety":
+      return {
+        ...shared,
+        title: "Safety issue report",
+        summary: "Safety reports go to staff review before any resident-wide notice is published.",
+        steps: [
+          "Describe the location and immediate risk clearly.",
+          "Contact hostel staff directly if urgent action is needed.",
+          "Staff may publish a notice once the wording is safe for all residents.",
+        ],
+      }
     case "account":
     case "session":
       return {
@@ -874,6 +1014,40 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
 
 function isResidentPasswordResetRequest(request: SupportRequestRow) {
   return recordFromUnknown(request.metadata).workflow === "resident_password_reset"
+}
+
+function buildNoticeTitleFromSupportRequest(request: SupportRequestRow) {
+  const label = publicReportLabel(request.category)
+  const subject = request.subject.trim()
+
+  return truncateText(subject.startsWith(label) ? subject : `${label}: ${subject}`, 160)
+}
+
+function buildNoticeBodyFromSupportRequest(request: SupportRequestRow) {
+  return truncateText(
+    [
+      request.description.trim(),
+      "",
+      "This update was reviewed by hostel staff before publishing.",
+    ].join("\n"),
+    5000
+  )
+}
+
+function publicReportLabel(category: string) {
+  const labels: Record<string, string> = {
+    lost_found: "Lost and found",
+    maintenance: "Maintenance issue",
+    safety: "Safety issue",
+  }
+
+  return labels[category] ?? "Resident update"
+}
+
+function truncateText(value: string, maxLength: number) {
+  const trimmed = value.trim()
+
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {

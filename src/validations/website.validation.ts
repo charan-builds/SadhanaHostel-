@@ -80,6 +80,11 @@ export const uploadGalleryImageSchema = z.object({
   status: z.enum(Constants.public.Enums.cms_status_enum).default("published"),
 })
 
+export const deleteGalleryItemSchema = z.object({
+  galleryItemId: uuidSchema,
+  organizationId: uuidSchema,
+})
+
 export type WebsiteSettingsListInput = z.infer<typeof websiteSettingsListSchema>
 export type UpdateWebsiteSettingInput = z.infer<typeof updateWebsiteSettingSchema>
 export type FacilitiesListInput = z.infer<typeof facilitiesListSchema>
@@ -88,3 +93,4 @@ export type UpdateFacilityInput = z.infer<typeof updateFacilitySchema>
 export type GalleryListInput = z.infer<typeof galleryListSchema>
 export type CreateGalleryItemInput = z.infer<typeof createGalleryItemSchema>
 export type UploadGalleryImageInput = z.infer<typeof uploadGalleryImageSchema>
+export type DeleteGalleryItemInput = z.infer<typeof deleteGalleryItemSchema>

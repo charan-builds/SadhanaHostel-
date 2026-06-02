@@ -158,10 +158,20 @@ export function ResidentDashboardClient() {
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <QuickAction href="/resident/profile" title="Complete profile" description="Update contacts and upload documents." />
         <QuickAction href="/resident/payments" title="Submit UPI payment" description="Enter reference and upload proof." />
         <QuickAction href="/resident/leave" title="Apply leave" description="Submit dates, reason, destination, and travel mode." />
+        <QuickAction
+          href={"/resident/support?category=lost_found" as Route}
+          title="Report item or issue"
+          description="Submit lost/found, maintenance, or safety reports."
+        />
+        <QuickAction
+          href={"/resident/security" as Route}
+          title="Change password"
+          description="Update your resident portal password."
+        />
       </section>
     </div>
   )

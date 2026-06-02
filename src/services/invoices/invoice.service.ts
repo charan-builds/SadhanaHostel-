@@ -4,6 +4,7 @@ import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { measureAsync } from "@/lib/performance"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { InvoicesRepository } from "@/repositories/invoices.repository"
 import type {
@@ -116,14 +117,20 @@ export class InvoiceFoundationService {
 export class InvoicesService {
   private readonly authService: AuthService
   private readonly invoicesRepository: InvoicesRepository
+  private readonly adminInvoicesRepository: InvoicesRepository
   private readonly pdfService: InvoicePdfService
   private readonly storageService: InvoiceStorageService
+  private readonly adminStorageService: InvoiceStorageService
 
   constructor(private readonly db: AppSupabaseClient) {
+    const adminDb = createSupabaseAdminClient()
+
     this.authService = new AuthService(db)
     this.invoicesRepository = new InvoicesRepository(db)
+    this.adminInvoicesRepository = new InvoicesRepository(adminDb)
     this.pdfService = new InvoicePdfService()
     this.storageService = new InvoiceStorageService(db)
+    this.adminStorageService = new InvoiceStorageService(adminDb)
   }
 
   static async create() {
@@ -206,6 +213,25 @@ export class InvoicesService {
     const resolvedOrganization = assertFound(organization, "Organization not found.")
     const resolvedHostel = assertFound(hostel, "Hostel not found.")
     const resolvedResident = assertFound(resident, "Resident not found.")
+    const existingInvoice = await this.invoicesRepository.findReceiptByPaymentId(
+      payment.id,
+      payment.organization_id
+    )
+
+    if (existingInvoice) {
+      return this.ensureInvoicePdfFromTemplate(
+        existingInvoice,
+        createPaymentReceiptInvoiceTemplateData({
+          organization: resolvedOrganization,
+          hostel: resolvedHostel,
+          resident: resolvedResident,
+          invoice: existingInvoice,
+          payment,
+        }),
+        actorUserId
+      )
+    }
+
     const issueMonth = new Date().toISOString().slice(0, 7)
     const sequence =
       (await this.invoicesRepository.countIssuedInvoicesForMonth(
@@ -370,6 +396,19 @@ export class InvoicesService {
       return invoice
     }
 
+    const existingDocument = await this.adminInvoicesRepository.findInvoicePdfDocument(
+      invoice.id,
+      invoice.organization_id
+    )
+
+    if (existingDocument) {
+      return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
+        pdf_document_id: existingDocument.id,
+        pdf_storage_path: existingDocument.storage_path,
+        updated_by: actorUserId,
+      })
+    }
+
     const storagePath =
       invoice.pdf_storage_path ??
       buildInvoiceStoragePath({
@@ -380,9 +419,9 @@ export class InvoicesService {
       })
     const pdf = await this.pdfService.render(templateData)
 
-    await this.storageService.uploadInvoicePdf(storagePath, pdf)
+    await this.adminStorageService.uploadInvoicePdf(storagePath, pdf, { upsert: true })
 
-    const document = await this.invoicesRepository.createDocument({
+    const document = await this.adminInvoicesRepository.createDocument({
       organization_id: invoice.organization_id,
       hostel_id: invoice.hostel_id,
       resident_id: invoice.resident_id,
@@ -406,7 +445,7 @@ export class InvoicesService {
       updated_by: actorUserId,
     })
 
-    return this.invoicesRepository.update(invoice.id, invoice.organization_id, {
+    return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
       pdf_document_id: document.id,
       pdf_storage_path: storagePath,
       updated_by: actorUserId,
