@@ -54,6 +54,7 @@ function createServiceHarness() {
   }
   const invoicesService = {
     generateMonthlyFeeInvoice: vi.fn(),
+    generateVerifiedMonthlyFeePaymentInvoice: vi.fn(),
     generatePaymentReceiptInvoice: vi.fn(),
   }
 
@@ -193,6 +194,48 @@ describe("PaymentsService", () => {
       payment: verified,
       actorUserId: adminAuthContext().authUser.id,
     })
+    expect(harness.paymentsRepository.updateInvoiceLink).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      linked.invoice_id,
+      adminAuthContext().authUser.id
+    )
+  })
+
+  it("reconciles an already verified monthly payment by linking its invoice PDF", async () => {
+    const harness = createServiceHarness()
+    const verified = paymentFixture({
+      status: "verified",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      is_advance: false,
+      invoice_id: null,
+    })
+    const linked = paymentFixture({
+      ...verified,
+      invoice_id: "00000000-0000-4000-8000-000000000166",
+    })
+
+    harness.paymentsRepository.getById.mockResolvedValue(verified)
+    harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).resolves.toEqual(linked)
+
+    expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
+    expect(
+      harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice
+    ).toHaveBeenCalledWith({
+      payment: verified,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).not.toHaveBeenCalled()
     expect(harness.paymentsRepository.updateInvoiceLink).toHaveBeenCalledWith(
       PAYMENT_ID,
       TEST_ORGANIZATION_ID,

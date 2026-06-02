@@ -297,6 +297,33 @@ export class InvoicesService {
     return invoiceWithPdf
   }
 
+  async generateVerifiedMonthlyFeePaymentInvoice(input: {
+    payment: PaymentRow
+    actorUserId: string
+  }) {
+    const { payment, actorUserId } = input
+
+    if (payment.status !== "verified") {
+      throw conflict("Only verified payments can receive an invoice receipt.")
+    }
+
+    if (!payment.monthly_fee_record_id) {
+      throw conflict("Payment is not linked to a monthly fee record.")
+    }
+
+    const invoice = await this.adminInvoicesRepository.createMonthlyFeeInvoiceAtomic(
+      payment.organization_id,
+      payment.monthly_fee_record_id,
+      actorUserId
+    )
+    const invoiceContext = await this.loadMonthlyFeeInvoiceContext(
+      payment.organization_id,
+      payment.monthly_fee_record_id
+    )
+
+    return this.ensureMonthlyFeeInvoicePdf(invoice, invoiceContext, actorUserId)
+  }
+
   async createSignedDownloadUrl(input: unknown) {
     const values = invoiceDownloadSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -349,14 +376,15 @@ export class InvoicesService {
     organizationId: string,
     monthlyFeeRecordId: string
   ) {
+    const repository = this.adminInvoicesRepository
     const feeRecord = assertFound(
-      await this.invoicesRepository.getFeeRecord(monthlyFeeRecordId, organizationId),
+      await repository.getFeeRecord(monthlyFeeRecordId, organizationId),
       "Monthly fee record not found."
     )
     const [organization, hostel, resident] = await Promise.all([
-      this.invoicesRepository.getOrganization(organizationId),
-      this.invoicesRepository.getHostel(feeRecord.hostel_id, organizationId),
-      this.invoicesRepository.getResident(feeRecord.resident_id, organizationId),
+      repository.getOrganization(organizationId),
+      repository.getHostel(feeRecord.hostel_id, organizationId),
+      repository.getResident(feeRecord.resident_id, organizationId),
     ])
 
     return {

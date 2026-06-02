@@ -1337,9 +1337,33 @@ export class PaymentsService {
   ) {
     try {
       if (payment.monthly_fee_record_id) {
-        await this.invoicesService.generateMonthlyFeeInvoice({
-          organizationId: payment.organization_id,
-          monthlyFeeRecordId: payment.monthly_fee_record_id,
+        const invoice =
+          await this.invoicesService.generateVerifiedMonthlyFeePaymentInvoice({
+            payment,
+            actorUserId,
+          })
+
+        if (payment.invoice_id === invoice.id) {
+          return (
+            (await this.paymentsRepository.getById(
+              payment.id,
+              payment.organization_id
+            )) ?? payment
+          )
+        }
+
+        return this.paymentsRepository.updateInvoiceLink(
+          payment.id,
+          payment.organization_id,
+          invoice.id,
+          actorUserId
+        )
+      }
+
+      if (payment.invoice_id) {
+        await this.invoicesService.generatePaymentReceiptInvoice({
+          payment,
+          actorUserId,
         })
 
         return (
@@ -1348,10 +1372,6 @@ export class PaymentsService {
             payment.organization_id
           )) ?? payment
         )
-      }
-
-      if (payment.invoice_id) {
-        return payment
       }
 
       const invoice = await this.invoicesService.generatePaymentReceiptInvoice({
