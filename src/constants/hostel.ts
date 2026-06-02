@@ -27,6 +27,7 @@ export const HOSTEL_RULES = [
   "Electronic devices such as iron boxes and heaters are not allowed.",
   "If residents get 3 days or more holidays, they must go home. They are not allowed to stay in the hostel if holidays are 3 days or above.",
   "Hostel fees will not be reduced during holidays such as Dussehra or Sankranti. Exception: semester break. Residents must pay monthly fees regularly.",
+  "After joining the hostel, if a resident chooses to leave, paid hostel fees, advance, or other payments will not be reversed or refunded.",
   "Once residents leave the hostel premises to go home, the hostel is not responsible.",
 ] as const
 

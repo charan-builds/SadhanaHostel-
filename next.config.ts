@@ -1,6 +1,8 @@
 import { withSentryConfig } from "@sentry/nextjs"
 import type { NextConfig } from "next"
 
+import { publicRedirects } from "./src/config/public-redirects"
+
 const hasSentryBuildCredentials = Boolean(
   process.env.SENTRY_ORG &&
     process.env.SENTRY_PROJECT &&
@@ -14,15 +16,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
-  async redirects() {
-    return [
-      {
-        source: "/login",
-        destination: "/admin/login",
-        permanent: false,
-      },
-    ]
-  },
+  redirects: publicRedirects,
 }
 
 export default withSentryConfig(nextConfig, {

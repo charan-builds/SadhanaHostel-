@@ -5,7 +5,7 @@ import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
-import { publicNavItems } from "@/constants/public-content"
+import { localSeoLandingLinks, publicNavItems } from "@/constants/public-content"
 
 const quickLinks = publicNavItems.filter((item) =>
   ["/", "/about", "/rooms", "/facilities", "/gallery"].includes(item.href),
@@ -102,6 +102,16 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
           <h2 className="text-sm font-semibold text-foreground">Important links</h2>
           <ul className="mt-4 grid gap-2">
             {importantLinks.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href as Route}
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  {item.title}
+                </Link>
+              </li>
+            ))}
+            {localSeoLandingLinks.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href as Route}

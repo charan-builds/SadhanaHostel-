@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
+import { LanguageSwitcher } from "@/components/public/language-switcher"
 import { PublicMobileMenu } from "@/components/public/public-mobile-menu"
 import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
@@ -83,6 +84,7 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
               WhatsApp
             </a>
           </Button>
+          <LanguageSwitcher className="hidden xl:flex" />
           <PublicAuthActions className="hidden md:inline-flex" />
           <PublicMobileMenu currentPathname={pathname} logoUrl={logoUrl} />
         </div>

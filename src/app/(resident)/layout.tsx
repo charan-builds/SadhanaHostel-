@@ -1,13 +1,16 @@
 import type { ReactNode } from "react"
+import type { Metadata } from "next"
 
 import { PasswordResetGate } from "@/components/auth/password-reset-gate"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionProviders } from "@/components/providers/app-providers"
 import { residentNavigation } from "@/constants/navigation"
 import { requireProtectedRoute } from "@/lib/auth/server-route-guard"
+import { noIndexMetadata } from "@/lib/seo"
 
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
+export const metadata: Metadata = noIndexMetadata
 
 export default async function ResidentLayout({ children }: { children: ReactNode }) {
   await requireProtectedRoute("resident")

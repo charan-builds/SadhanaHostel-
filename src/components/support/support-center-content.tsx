@@ -55,8 +55,8 @@ export function SupportCenterContent() {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       <PageHeader
-        title="Support Center"
-        description="Recovery guidance for residents, parents, and hostel staff. Use this when onboarding, payments, uploads, or access gets stuck."
+        title={`${hostelConfig.name} Support Center`}
+        description="Recovery guidance for residents, parents, and hostel staff in Pulivendula. Use this when onboarding, payments, uploads, or access gets stuck."
         actions={
           <>
             <Button asChild>

@@ -53,6 +53,7 @@ import {
 import { AuthService } from "../auth.service"
 
 const DEFAULT_INVITE_PERMISSIONS = ["resident.portal.access"]
+const LOCAL_APP_URL = "http://localhost:3002"
 
 type ResidentInviteServiceDependencies = {
   authService?: AuthService
@@ -1533,13 +1534,13 @@ function getActivationState(
 }
 
 function buildActivationLink(token: string) {
-  const baseUrl = getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
+  const baseUrl = getInviteAppBaseUrl()
 
   return `${baseUrl}/activate?token=${encodeURIComponent(token)}`
 }
 
 function buildResidentLoginLink(phone?: string | null) {
-  const baseUrl = getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
+  const baseUrl = getInviteAppBaseUrl()
   const params = new URLSearchParams()
   const normalizedPhone = normalizeOptionalPhoneNumber(phone)
 
@@ -1561,22 +1562,87 @@ function buildWhatsappShareUrl(input: {
 }) {
   const digits = phoneDigits(input.phone)
 
-  if (!digits) {
+  if (!digits || (!input.temporaryPassword && !input.activationLink)) {
     return null
   }
 
   const message = input.temporaryPassword
     ? `Your Sadhana Boys Hostel resident portal access is ready.\n\n` +
-      `Login: ${input.loginLink}\n` +
+      `Login link:\n${input.loginLink}\n` +
       `Phone: ${input.phone}\n` +
       `Temporary password: ${input.temporaryPassword}\n\n` +
       `Please sign in and set your permanent password during onboarding.`
     : `Your Sadhana Boys Hostel resident portal access is ready.\n\n` +
-      `Activate: ${input.activationLink}\n` +
+      `Activation link:\n${input.activationLink}\n` +
       `Invite code: ${input.inviteCode}\n\n` +
       `This link is one-time use.`
 
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
+  const url = new URL(`https://wa.me/${digits}`)
+  url.searchParams.set("text", message)
+
+  return url.toString()
+}
+
+function getInviteAppBaseUrl() {
+  const env = getServerEnv()
+  const configuredUrl = normalizeBaseUrlCandidate(env.NEXT_PUBLIC_APP_URL)
+  const vercelProductionUrl = normalizeBaseUrlCandidate(process.env.VERCEL_PROJECT_PRODUCTION_URL)
+  const vercelDeploymentUrl = normalizeBaseUrlCandidate(process.env.VERCEL_URL)
+  const isProduction =
+    env.LAUNCH_MODE === "production" ||
+    env.NEXT_PUBLIC_LAUNCH_MODE === "production" ||
+    process.env.VERCEL_ENV === "production"
+  const isVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_URL)
+
+  if (configuredUrl && !isLocalOrPlaceholderAppUrl(configuredUrl)) {
+    return configuredUrl
+  }
+
+  if (vercelProductionUrl) {
+    return vercelProductionUrl
+  }
+
+  if (isVercel && vercelDeploymentUrl) {
+    return vercelDeploymentUrl
+  }
+
+  if (isProduction) {
+    throw new Error(
+      "Cannot create resident invite links: configure NEXT_PUBLIC_APP_URL with the production domain or enable Vercel system environment variables."
+    )
+  }
+
+  return configuredUrl ?? LOCAL_APP_URL
+}
+
+function normalizeBaseUrlCandidate(value?: string | null) {
+  const rawValue = value?.trim()
+
+  if (!rawValue) {
+    return null
+  }
+
+  const withProtocol = /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`
+
+  try {
+    const url = new URL(withProtocol)
+
+    return url.origin.replace(/\/$/, "")
+  } catch {
+    return null
+  }
+}
+
+function isLocalOrPlaceholderAppUrl(value: string) {
+  const hostname = new URL(value).hostname.toLowerCase()
+
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname.endsWith(".local") ||
+    hostname.includes("example.com") ||
+    hostname.includes("placeholder")
+  )
 }
 
 function generateTemporaryPassword() {

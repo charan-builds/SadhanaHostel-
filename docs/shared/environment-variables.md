@@ -37,6 +37,9 @@ Backend responsibilities:
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Client/server | Yes after Supabase setup | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client/server | Yes after Supabase setup | Supabase anonymous key |
+| `NEXT_PUBLIC_APP_URL` | Client/server | Yes in staging/production | Canonical public app URL used for sitemap, robots, invite links, and SEO metadata |
+| `NEXT_PUBLIC_LAUNCH_MODE` | Client/server | Yes in staging/production | Public launch mode. Use `production` only for the live domain that should be indexed |
+| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | Client/server | Production SEO optional | Google Search Console HTML meta verification token for the live public domain |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Later | Privileged server operations |
 | `CASHFREE_APP_ID` | Server only | Later | Cashfree app ID |
 | `CASHFREE_SECRET_KEY` | Server only | Later | Cashfree secret |
@@ -56,6 +59,19 @@ WHATSAPP_PROVIDER_API_KEY=
 MONITORING_DSN=
 CRON_SECRET=
 ```
+
+## Production SEO Variables
+
+Set these in Vercel Production before asking Google to index the site:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://<production-domain>
+NEXT_PUBLIC_LAUNCH_MODE=production
+LAUNCH_MODE=production
+NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=<google-search-console-meta-token>
+```
+
+Leave `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` empty in local/staging unless that exact property is intentionally verified. Preview/staging domains should not be indexed.
 
 ## Environment Rules
 
@@ -87,4 +103,3 @@ const serverEnvSchema = z.object({
 - Add tenant-specific provider settings in database rather than environment variables.
 - Add secret manager if platform grows beyond Vercel-managed env.
 - Add per-environment config validation in CI.
-

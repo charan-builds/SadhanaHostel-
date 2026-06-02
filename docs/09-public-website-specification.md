@@ -19,6 +19,9 @@ The public website is the first touchpoint for residents and guardians. It shoul
 | `/gallery` | Gallery | Yes | Albums and media |
 | `/contact` | Contact | Yes | Address, phone, email, inquiry form |
 | `/terms` | Terms | Yes | Policies, privacy, refund, resident rules |
+| `/pulivendula-boys-hostel` | Local SEO landing page | No | Main Pulivendula hostel search page |
+| `/student-hostel-pulivendula` | Student hostel landing page | No | Student accommodation search page |
+| `/employee-hostel-pulivendula` | Employee hostel landing page | No | Employee accommodation search page |
 
 ## Content Model Placeholder
 
@@ -93,12 +96,15 @@ Visitor submits inquiry
 
 ## SEO Requirements
 
-- Page-specific title and description.
-- Structured data for local business if appropriate.
-- Sitemap generation.
-- Robots configuration.
-- Open Graph images.
-- Alt text for gallery images.
+- Page-specific title and description are implemented for public routes.
+- Canonical metadata uses the production app URL and fails closed if production cannot resolve a real domain.
+- Regional alternate metadata emits `en-IN` and `x-default` hreflang links for public pages.
+- Structured data includes local business, website, organization, breadcrumbs, FAQ, offer catalog, accommodation offers, and local landing page item lists.
+- Sitemap generation includes home, rooms, facilities, gallery, contact, terms, and Pulivendula landing pages with image sitemap entries.
+- Robots configuration allows public routes in production and blocks admin, resident, API, auth, activation, and reset surfaces.
+- Open Graph and Twitter image routes generate a branded Sadhana Boys Hostel Pulivendula preview image.
+- Alt text for public images should describe the actual hostel room, building, location, or facility shown.
+- Search Console verification is controlled by `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION`.
 
 ## Performance Requirements
 
@@ -132,17 +138,14 @@ Admin edits content
 - TODO: Define CMS page JSON schema.
 - TODO: Define gallery image size rules.
 - TODO: Define inquiry table and admin follow-up workflow.
-- TODO: Add public page metadata.
-- TODO: Add sitemap and robots files.
 - TODO: Define publish preview mode.
 - TODO: Define content approval workflow if needed.
 
 ## Future Expansion Notes
 
 - Add multilingual public pages.
-- Add landing pages per hostel branch.
+- Add landing pages per future hostel branch.
 - Add online admission inquiry flow.
 - Add testimonials.
 - Add public availability indicators.
 - Add blog or announcements if useful.
-

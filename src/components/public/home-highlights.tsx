@@ -76,7 +76,7 @@ export function HomeHighlights({
         <div className="max-w-3xl">
           <p className="text-sm font-medium text-primary">Hostel highlights</p>
           <h2 className="text-gradient mt-2 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-            Daily essentials for a comfortable stay.
+            Daily essentials for a boys hostel in Pulivendula.
           </h2>
           <p className="mt-3 text-base leading-7 text-muted-foreground">
             A focused setup for students and employees who want a neat place, practical facilities,

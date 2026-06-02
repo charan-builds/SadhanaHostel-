@@ -23,6 +23,24 @@ export const publicNavItems: PublicNavItem[] = [
   { title: "Terms", href: "/terms" },
 ]
 
+export const localSeoLandingLinks = [
+  {
+    title: "Hostel in Pulivendula",
+    href: "/pulivendula-boys-hostel",
+    description: "Compare boys hostel stay options for students and employees near Royals Road.",
+  },
+  {
+    title: "Student hostel in Pulivendula",
+    href: "/student-hostel-pulivendula",
+    description: `Student hostel rooms with ₹${HOSTEL_FEES.student}/month pricing and daily essentials.`,
+  },
+  {
+    title: "Employee hostel in Pulivendula",
+    href: "/employee-hostel-pulivendula",
+    description: `Employee accommodation with ₹${HOSTEL_FEES.employee}/month pricing and parking support.`,
+  },
+] as const
+
 export const fallbackHomeHighlights: FacilityItem[] = [
   {
     title: "Comfortable stay",
@@ -36,7 +54,7 @@ export const fallbackHomeHighlights: FacilityItem[] = [
   },
   {
     title: "Clear monthly fees",
-    description: `Fixed student fee of ₹${HOSTEL_FEES.student}/month.`,
+    description: `Student fee ₹${HOSTEL_FEES.student}/month and employee plan ₹${HOSTEL_FEES.employee}/month.`,
     icon: "indian-rupee",
   },
 ]
@@ -64,8 +82,8 @@ export const fallbackFacilities: FacilityItem[] = [
   },
   {
     title: "Student-friendly rooms",
-    description: "Room capacity is managed for hostel students, not separate cot plans.",
-    icon: "bath",
+    description: "Clean shared-room setup for daily study and work routines.",
+    icon: "bed",
   },
   {
     title: "Parking",
@@ -86,19 +104,19 @@ export const fallbackFacilities: FacilityItem[] = [
 
 export const fallbackRoomTypes: RoomTypeCard[] = [
   {
-    title: "College Students",
+    title: "Student hostel rooms",
     price: HOSTEL_FEES.student,
     priceLabel: `₹${HOSTEL_FEES.student}/month`,
-    description: "Affordable rooms with a study-friendly stay.",
-    features: ["Affordable rooms", "Study-friendly stay", "Near college route"],
+    description: "Affordable boys hostel rooms in Pulivendula with a study-friendly stay.",
+    features: ["₹3,500 monthly fee", "Study-friendly stay", "Near college route"],
     icon: "graduation-cap",
   },
   {
-    title: "Employees",
+    title: "Employee hostel accommodation",
     price: HOSTEL_FEES.employee,
     priceLabel: `₹${HOSTEL_FEES.employee}/month`,
-    description: "Comfortable stay option for employees and working professionals.",
-    features: ["Comfort-focused rooms", "Parking support", "Work-friendly stay"],
+    description: "Comfortable Pulivendula stay option for employees and working professionals.",
+    features: ["₹5,000 monthly fee", "Parking support", "Work-friendly stay"],
     icon: "briefcase-business",
   },
 ]
@@ -107,49 +125,49 @@ export const fallbackGalleryItems: GalleryItem[] = [
   {
     title: "Exterior",
     category: "Hostel",
-    alt: "Sadhana Boys Hostel exterior view",
+    alt: "Sadhana Boys Hostel exterior view in Pulivendula",
     imageUrl: hostelGalleryImages[0],
   },
   {
     title: "Courtyard",
     category: "Common area",
-    alt: "Hostel courtyard area",
+    alt: "Sadhana Boys Hostel common courtyard area in Pulivendula",
     imageUrl: hostelGalleryImages[2],
   },
   {
     title: "Night view",
     category: "Hostel",
-    alt: "Sadhana Boys Hostel night view",
+    alt: "Sadhana Boys Hostel night view in Pulivendula",
     imageUrl: hostelGalleryImages[1],
   },
   {
     title: "Student rooms",
     category: "student-room",
-    alt: "Student room setup",
+    alt: "Student room setup at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[5],
   },
   {
     title: "Employee rooms",
     category: "employee-room",
-    alt: "Employee room setup",
+    alt: "Employee room setup at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[1],
   },
   {
-    title: "Bathrooms",
+    title: "Water facility",
     category: "Facilities",
-    alt: "Bathroom facilities",
+    alt: "Water facility and common amenities at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[4],
   },
   {
     title: "Dining area",
     category: "Food",
-    alt: "Dining area for residents",
+    alt: "Dining area for residents at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[3],
   },
   {
     title: "Terrace",
     category: "Common area",
-    alt: "Hostel terrace space",
+    alt: "Sadhana Boys Hostel terrace common area in Pulivendula",
     imageUrl: hostelGalleryImages[1],
   },
 ]
@@ -169,12 +187,21 @@ export const fallbackTestimonials: TestimonialItem[] = [
 
 export const fallbackFaqItems = [
   {
-    question: "What is the monthly fee for students?",
-    answer: `The student fee is ₹${HOSTEL_FEES.student}/month.`,
+    question: "What is the monthly fee for students at Sadhana Boys Hostel?",
+    answer: `The student hostel fee is ₹${HOSTEL_FEES.student}/month at Sadhana Boys Hostel in Pulivendula.`,
   },
   {
-    question: "Where is the hostel located?",
-    answer: `${HOSTEL_LOCATION.address}. ${HOSTEL_LOCATION.note}.`,
+    question: "Where is Sadhana Boys Hostel located in Pulivendula?",
+    answer: `${HOSTEL_LOCATION.address}. The hostel is on ${HOSTEL_LOCATION.note}.`,
+  },
+  {
+    question: "Is accommodation available for employees and working professionals?",
+    answer: `Yes. Employee and working professional hostel accommodation is available at ₹${HOSTEL_FEES.employee}/month.`,
+  },
+  {
+    question: "What facilities are available at the hostel?",
+    answer:
+      "The hostel provides food, WiFi, CCTV monitoring, water facilities, parking support, and clean student-friendly rooms.",
   },
   {
     question: "Are electronic heaters or iron boxes allowed?",

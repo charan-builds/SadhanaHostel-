@@ -4,7 +4,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Eye, EyeOff, Loader2, LogIn, MessageCircle, Smartphone } from "lucide-react"
+import { Eye, EyeOff, Loader2, LogIn } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
@@ -26,22 +26,8 @@ const loginFormSchema = z.object({
   rememberSession: z.boolean().default(true),
 })
 
-const residentOtpRequestSchema = z.object({
-  phone: z
-    .string()
-    .trim()
-    .min(8, "Enter the phone number registered by hostel administration.")
-    .max(20),
-})
-
-const residentOtpVerifySchema = residentOtpRequestSchema.extend({
-  token: z.string().trim().min(4, "Enter the OTP.").max(12, "OTP is too long."),
-})
-
 type LoginFormInput = z.input<typeof loginFormSchema>
 type LoginFormValues = z.output<typeof loginFormSchema>
-type ResidentOtpRequestValues = z.output<typeof residentOtpRequestSchema>
-type ResidentOtpVerifyValues = z.output<typeof residentOtpVerifySchema>
 
 type LoginArea = "admin" | "resident"
 
@@ -215,168 +201,6 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
       </Button>
       </form>
 
-      {expectedArea === "resident" ? (
-        <ResidentOtpAccess
-          initialPhone={searchParams.get("phone") ?? ""}
-          nextPath={nextPath}
-          onSession={async (nextSession) => {
-            setSession(nextSession)
-            toast.success("OTP verified.")
-            router.replace(resolveRedirect(nextSession, nextPath, expectedArea) as Route)
-          }}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-function ResidentOtpAccess({
-  initialPhone,
-  nextPath,
-  onSession,
-}: {
-  initialPhone: string
-  nextPath: string | null
-  onSession: (session: SessionOverview) => Promise<void>
-}) {
-  const requestForm = useForm<ResidentOtpRequestValues>({
-    resolver: zodResolver(residentOtpRequestSchema),
-    defaultValues: { phone: initialPhone },
-  })
-  const verifyForm = useForm<ResidentOtpVerifyValues>({
-    resolver: zodResolver(residentOtpVerifySchema),
-    defaultValues: { phone: initialPhone, token: "" },
-  })
-  const [otpSentTo, setOtpSentTo] = useState<string | null>(null)
-  const [isRequesting, setIsRequesting] = useState(false)
-  const [isVerifying, setIsVerifying] = useState(false)
-
-  async function requestOtp(values: ResidentOtpRequestValues) {
-    try {
-      setIsRequesting(true)
-      const result = await authSdk.requestResidentPhoneOtp(values)
-      setOtpSentTo(result.phone)
-      verifyForm.setValue("phone", values.phone)
-      toast.success("OTP sent to registered phone.")
-    } catch (error) {
-      requestForm.setError("root", {
-        message:
-          error instanceof FrontendApiError
-            ? error.message
-            : "Unable to send OTP. Ask the hostel office to resend access.",
-      })
-    } finally {
-      setIsRequesting(false)
-    }
-  }
-
-  async function verifyOtp(values: ResidentOtpVerifyValues) {
-    try {
-      setIsVerifying(true)
-      const session = await authSdk.verifyResidentPhoneOtp({
-        ...values,
-        rememberSession: true,
-      })
-      await onSession(session)
-    } catch (error) {
-      verifyForm.setError("root", {
-        message:
-          error instanceof FrontendApiError
-            ? error.message
-            : "OTP verification failed. Request a fresh code and try again.",
-      })
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  return (
-    <div className="rounded-lg border bg-muted/30 p-4">
-      <div className="flex items-start gap-3">
-        <Smartphone className="mt-0.5 size-5 text-primary" aria-hidden="true" />
-        <div>
-          <h2 className="text-sm font-semibold">Phone OTP access</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Use OTP after your hostel office has generated resident access. New draft residents can
-            also use the temporary password shared on WhatsApp.
-          </p>
-        </div>
-      </div>
-
-      {requestForm.formState.errors.root?.message ? (
-        <div className="mt-4">
-          <APIErrorState
-            title="OTP could not be sent"
-            message={requestForm.formState.errors.root.message}
-          />
-        </div>
-      ) : null}
-
-      <form className="mt-4 grid gap-3" onSubmit={requestForm.handleSubmit(requestOtp)}>
-        <div className="grid gap-2">
-          <Label htmlFor="otp-phone">Registered phone</Label>
-          <Input
-            id="otp-phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="9876543210"
-            aria-invalid={Boolean(requestForm.formState.errors.phone)}
-            {...requestForm.register("phone")}
-          />
-          {requestForm.formState.errors.phone ? (
-            <p className="text-xs text-destructive">
-              {requestForm.formState.errors.phone.message}
-            </p>
-          ) : null}
-        </div>
-        <Button type="submit" variant="outline" disabled={isRequesting}>
-          {isRequesting ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <MessageCircle className="size-4" aria-hidden="true" />
-          )}
-          Send OTP
-        </Button>
-      </form>
-
-      {otpSentTo ? (
-        <form className="mt-4 grid gap-3" onSubmit={verifyForm.handleSubmit(verifyOtp)}>
-          <p className="text-xs text-muted-foreground">
-            OTP sent to {otpSentTo}. It expires shortly.
-            {nextPath ? " You will continue to your requested resident page after login." : ""}
-          </p>
-          {verifyForm.formState.errors.root?.message ? (
-            <APIErrorState
-              title="OTP verification failed"
-              message={verifyForm.formState.errors.root.message}
-            />
-          ) : null}
-          <div className="grid gap-2">
-            <Label htmlFor="otp-token">OTP</Label>
-            <Input
-              id="otp-token"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              aria-invalid={Boolean(verifyForm.formState.errors.token)}
-              {...verifyForm.register("token")}
-            />
-            {verifyForm.formState.errors.token ? (
-              <p className="text-xs text-destructive">
-                {verifyForm.formState.errors.token.message}
-              </p>
-            ) : null}
-          </div>
-          <Button type="submit" disabled={isVerifying}>
-            {isVerifying ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <LogIn className="size-4" aria-hidden="true" />
-            )}
-            Verify OTP
-          </Button>
-        </form>
-      ) : null}
     </div>
   )
 }

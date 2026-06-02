@@ -18,7 +18,7 @@ const iconMap: Record<string, LucideIcon> = {
 
 const comparisonRows = [
   ["Monthly fee", `₹${hostelConfig.fees.student}/month`, `₹${hostelConfig.fees.employee}/month`],
-  ["Best for", "College students", "Employees / working professionals"],
+  ["Best for", "College students in Pulivendula", "Employees / working professionals"],
   ["Stay focus", "Affordable, study-friendly routine", "Comfort, parking, and vehicle access"],
   ["Extra facilities", "Daily essentials", "Parking support and work-friendly routine"],
 ] as const
@@ -39,11 +39,12 @@ export function RoomsPageContent({
           <div>
           <p className="text-sm font-medium text-blue-700">Rooms and pricing</p>
           <h1 className="mt-3 max-w-4xl text-4xl font-semibold text-slate-950 text-balance sm:text-5xl">
-            Clear room plans for students and working professionals.
+            Boys hostel rooms in Pulivendula for students and employees.
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-            Choose a practical monthly stay at {hostelConfig.name}. Student and employee plans are
-            kept simple, transparent, and easy to understand.
+            Choose a practical monthly stay at {hostelConfig.name} near{" "}
+            {hostelConfig.location.note}. Student rooms are ₹{hostelConfig.fees.student}/month and
+            employee accommodation is ₹{hostelConfig.fees.employee}/month.
           </p>
           </div>
           <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border bg-slate-100 shadow-lifted">

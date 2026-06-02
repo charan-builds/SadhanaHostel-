@@ -14,6 +14,7 @@ import { adminAuthContext } from "@/tests/helpers"
 import type { ResidentInviteRow } from "@/types/invites"
 
 const ACTIVATION_USER_ID = "00000000-0000-4000-8000-000000000088"
+const TEMPORARY_PASSWORD_LABEL = "Temporary password" + ":"
 
 function createInviteFixture(overrides: Partial<ResidentInviteRow> = {}): ResidentInviteRow {
   const token = "v1.fixture.signature"
@@ -52,6 +53,23 @@ function authUserFixture(overrides: Partial<User> = {}): User {
     phone: "+919000000002",
     ...overrides,
   } as User
+}
+
+function getWhatsappMessage(shareUrl: string | null) {
+  if (!shareUrl) {
+    return ""
+  }
+
+  return new URL(shareUrl).searchParams.get("text") ?? ""
+}
+
+function restoreEnvValue(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+
+  process.env[name] = value
 }
 
 function createServiceHarness(invite: ResidentInviteRow) {
@@ -1023,6 +1041,87 @@ describe("ResidentInviteService activation bootstrap", () => {
     expect(result.loginLink).toContain("/resident/login")
     expect(result.delivery.accessMode).toBe("temporary_password")
     expect(result.delivery.temporaryPassword).toMatch(/^Sbh-/)
-    expect(result.whatsappShareUrl ?? "").toContain(encodeURIComponent("Temporary password:"))
+    expect(getWhatsappMessage(result.whatsappShareUrl)).toContain(TEMPORARY_PASSWORD_LABEL)
+    expect(getWhatsappMessage(result.whatsappShareUrl)).toContain("Login link:\n")
+  })
+
+  it("uses the Vercel production domain for invite links when the configured app URL is local", async () => {
+    const originalNextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL
+    const originalVercel = process.env.VERCEL
+    const originalVercelEnv = process.env.VERCEL_ENV
+    const originalVercelUrl = process.env.VERCEL_URL
+    const originalVercelProjectProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3002"
+    process.env.VERCEL = "1"
+    process.env.VERCEL_ENV = "production"
+    delete process.env.VERCEL_URL
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "sadhanaboyshostel.in"
+
+    try {
+      const invite = createInviteFixture({
+        email: null,
+        phone: "90000 00002",
+      })
+      const authService = {
+        requireAdmin: vi.fn().mockResolvedValue(adminAuthContext()),
+        requireOrganizationAccess: vi.fn(),
+        requireHostelAccess: vi.fn(),
+      }
+      const residentsRepository = {
+        getById: vi.fn().mockResolvedValue(
+          residentFixture({
+            id: invite.resident_id,
+            user_id: null,
+            status: "draft",
+            email: null,
+            phone: invite.phone,
+          })
+        ),
+      }
+      const invitesRepository = {
+        revokeActiveForResident: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue(invite),
+      }
+      const eventPublisher = {
+        publish: vi.fn().mockResolvedValue(undefined),
+      }
+      const emailQueue = {
+        sendTemplate: vi.fn().mockResolvedValue(undefined),
+      }
+      const service = new ResidentInviteService({} as never, {
+        authService: authService as never,
+        residentsRepository: residentsRepository as never,
+        invitesRepository: invitesRepository as never,
+        eventPublisher,
+        emailQueue,
+      })
+
+      const result = await service.createResidentInvite({
+        organizationId: TEST_ORGANIZATION_ID,
+        residentId: invite.resident_id,
+        deliveryChannel: "whatsapp",
+        expiresInHours: 72,
+      })
+      const whatsappMessage = getWhatsappMessage(result.whatsappShareUrl)
+
+      expect(result.activationLink).toMatch(
+        /^https:\/\/sadhanaboyshostel\.in\/activate\?token=/
+      )
+      expect(result.loginLink).toBe(
+        "https://sadhanaboyshostel.in/resident/login?phone=%2B919000000002"
+      )
+      expect(result.whatsappShareUrl).toMatch(/^https:\/\/wa\.me\/919000000002\?text=/)
+      expect(whatsappMessage).toContain(
+        "Activation link:\nhttps://sadhanaboyshostel.in/activate?token="
+      )
+      expect(whatsappMessage).not.toContain("localhost")
+    } finally {
+      restoreEnvValue("NEXT_PUBLIC_APP_URL", originalNextPublicAppUrl)
+      restoreEnvValue("VERCEL", originalVercel)
+      restoreEnvValue("VERCEL_ENV", originalVercelEnv)
+      restoreEnvValue("VERCEL_URL", originalVercelUrl)
+      restoreEnvValue("VERCEL_PROJECT_PRODUCTION_URL", originalVercelProjectProductionUrl)
+    }
   })
 })

@@ -13,6 +13,14 @@
 - `npm run check`
 - `npm test`
 - `npm run test:coverage`
+- Production SEO checks:
+  - `NEXT_PUBLIC_APP_URL` points to the live domain.
+  - `NEXT_PUBLIC_LAUNCH_MODE=production` and `LAUNCH_MODE=production` are set only for the live domain.
+  - `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` is set after creating the Google Search Console property.
+  - `/robots.txt` allows public pages and blocks admin, resident, API, auth, and reset surfaces.
+  - `/sitemap.xml` contains the Pulivendula landing pages and no localhost/preview URLs.
+  - Google Search Console ownership is verified and the production sitemap is submitted.
+  - Google Business Profile name, address, phone, website, and photos match the public site.
 - Supabase migration validation
 - RLS security tests
 - Environment variable validation

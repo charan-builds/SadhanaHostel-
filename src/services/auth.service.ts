@@ -7,7 +7,6 @@ import {
   ADMIN_PORTAL_ROLES,
   ADMIN_ROLES,
   AUTH_REDIRECTS,
-  RESIDENT_ROLES,
   anyRoleHasPermission,
   type AppRole,
   type PermissionKey,
@@ -52,9 +51,7 @@ import {
   changePasswordSchema,
   loginSchema,
   residentOnboardingSchema,
-  requestResidentPhoneOtpSchema,
   resetPasswordSchema,
-  verifyResidentPhoneOtpSchema,
 } from "@/validations/auth.validation"
 
 const ROLE_PRIORITY: Record<AppRole, number> = {
@@ -617,72 +614,6 @@ export class AuthService {
         reason: input.reason,
       },
     })
-  }
-
-  async requestResidentPhoneOtp(input: unknown) {
-    const values = requestResidentPhoneOtpSchema.parse(input)
-    const phone = normalizePhoneNumber(values.phone)
-
-    logAuthProviderPayload("resident_otp_request", {
-      rawIdentifier: values.phone,
-      normalizedPhone: phone,
-      payload: {
-        phone,
-        options: { shouldCreateUser: false },
-      },
-    })
-
-    const { error } = await this.db.auth.signInWithOtp({
-      phone,
-      options: {
-        shouldCreateUser: false,
-      },
-    })
-
-    if (error) {
-      throw unauthorized(
-        "We could not send an OTP for this phone. Ask the hostel office to resend your activation link or temporary password."
-      )
-    }
-
-    return {
-      phone: maskPhone(phone) ?? "your phone",
-      expiresInSeconds: 300,
-    }
-  }
-
-  async verifyResidentPhoneOtp(input: unknown): Promise<SessionOverview> {
-    const values = verifyResidentPhoneOtpSchema.parse(input)
-    const phone = normalizePhoneNumber(values.phone)
-
-    logAuthProviderPayload("resident_otp_verify", {
-      rawIdentifier: values.phone,
-      normalizedPhone: phone,
-      payload: {
-        phone,
-        token: "REDACTED",
-        type: "sms",
-      },
-    })
-
-    const { error } = await this.db.auth.verifyOtp({
-      phone,
-      token: values.token,
-      type: "sms",
-    })
-
-    if (error) {
-      throw unauthorized("Invalid or expired OTP. Request a fresh code and try again.")
-    }
-
-    const context = await this.getCurrentContext()
-
-    if (!context.roles.some((role) => (RESIDENT_ROLES as readonly AppRole[]).includes(role))) {
-      await this.db.auth.signOut()
-      throw forbidden("This phone number is not assigned to resident portal access.")
-    }
-
-    return this.toSessionOverview(context)
   }
 
   async logout() {
@@ -1568,7 +1499,7 @@ function maskLoginIdentifier(identifier: string) {
 }
 
 function logAuthProviderPayload(
-  mode: "password_login" | "resident_otp_request" | "resident_otp_verify",
+  mode: "password_login",
   input: {
     rawIdentifier?: string | null
     normalizedEmail?: string

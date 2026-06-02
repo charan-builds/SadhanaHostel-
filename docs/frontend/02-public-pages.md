@@ -15,6 +15,9 @@ Public routes:
 - `/gallery`
 - `/contact`
 - `/terms`
+- `/pulivendula-boys-hostel`
+- `/student-hostel-pulivendula`
+- `/employee-hostel-pulivendula`
 
 ## Responsibilities
 
@@ -55,6 +58,9 @@ Public route
 | Gallery | Albums, image grid, categories | `gallery`, storage |
 | Contact | Contact details, inquiry form, map | `website_settings`, inquiries API |
 | Terms | Rules, privacy, refunds, payment policy | CMS page |
+| Pulivendula hostel | Local hostel search landing page | Static constants |
+| Student hostel Pulivendula | Student search landing page | Static constants |
+| Employee hostel Pulivendula | Employee search landing page | Static constants |
 
 ## CMS Rendering Contract
 
@@ -84,13 +90,16 @@ Visitor fills contact form
 
 ## SEO Checklist
 
-- [ ] Metadata per route.
-- [ ] Open Graph image.
-- [ ] Canonical URLs.
-- [ ] Sitemap.
-- [ ] Robots file.
-- [ ] Local business structured data.
-- [ ] Meaningful alt text.
+- [x] Metadata per public route.
+- [x] Open Graph and Twitter image routes.
+- [x] Canonical URLs through the shared SEO URL resolver.
+- [x] Sitemap with Pulivendula landing pages and image entries.
+- [x] Robots file that indexes production public pages and blocks private routes.
+- [x] Local business structured data.
+- [x] FAQ, offer catalog, accommodation offer, breadcrumb, and item list structured data.
+- [x] Meaningful alt text for primary public images.
+- [ ] Search Console verification and sitemap submission after production deploy.
+- [ ] Google Business Profile name, address, phone, website, and photos aligned after production deploy.
 
 ## Performance Requirements
 
@@ -106,12 +115,11 @@ Visitor fills contact form
 - TODO: Define homepage final content model.
 - TODO: Define gallery filters.
 - TODO: Define inquiry success and failure copy.
-- TODO: Define SEO metadata source fields.
+- TODO: Define CMS-owned SEO metadata source fields for future admin editing.
 
 ## Future Scalability Notes
 
-- Support hostel-specific landing pages with `hostel_id`.
+- Support additional hostel-specific landing pages with `hostel_id`.
 - Add custom domain routing per organization.
 - Add multilingual CMS content.
 - Add A/B testing only after traffic volume justifies it.
-

@@ -1109,7 +1109,7 @@ async function detectPhoneIdentityAnomalies(
       "onboarding",
       "high",
       "Phone identities are not normalized",
-      "Resident login, activation, OTP, and WhatsApp delivery require E.164 Indian mobile numbers. Mixed formats can make Supabase Auth reject valid residents.",
+      "Resident login, activation, and WhatsApp delivery require E.164 Indian mobile numbers. Mixed formats can make Supabase Auth reject valid residents.",
       anomalies.length,
       "review_manually",
       anomalies.slice(0, 20).map(({ tableName, record, normalized }) => ({

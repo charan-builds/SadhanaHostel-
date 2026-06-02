@@ -1,16 +1,34 @@
 import type { Metadata } from "next"
 
 import { FacilitiesPageContent } from "@/components/public/facilities-page-content"
+import { JsonLd } from "@/components/seo/json-ld"
 import { hostelConfig } from "@/constants/hostel"
 import { getPublicCmsContent } from "@/lib/cms/public-cms"
+import { createPublicMetadata, createPublicPageJsonLd } from "@/lib/seo"
 
-export const metadata: Metadata = {
-  title: `Facilities | ${hostelConfig.name}`,
-  description: `Facilities at ${hostelConfig.name} in Pulivendula include food, WiFi, CCTV, water, parking, and clean hostel spaces.`,
-}
+const facilitiesDescription = `Facilities at ${hostelConfig.name} in Pulivendula include food, WiFi, CCTV, water facilities, parking support, and clean hostel spaces.`
+
+export const metadata: Metadata = createPublicMetadata({
+  title: `Hostel Facilities in Pulivendula | ${hostelConfig.name}`,
+  description: facilitiesDescription,
+  path: "/facilities",
+  keywords: ["hostel with food Pulivendula", "hostel WiFi CCTV Pulivendula"],
+})
 
 export default async function FacilitiesPage() {
   const cms = await getPublicCmsContent()
 
-  return <FacilitiesPageContent facilities={cms.facilities} galleryItems={cms.galleryItems} />
+  return (
+    <>
+      <JsonLd
+        data={createPublicPageJsonLd({
+          name: "Hostel facilities in Pulivendula",
+          description: facilitiesDescription,
+          path: "/facilities",
+          image: "/images/image.png",
+        })}
+      />
+      <FacilitiesPageContent facilities={cms.facilities} galleryItems={cms.galleryItems} />
+    </>
+  )
 }

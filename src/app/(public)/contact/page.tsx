@@ -1,13 +1,32 @@
 import type { Metadata } from "next"
 
 import { ContactPageContent } from "@/components/public/contact-page-content"
+import { JsonLd } from "@/components/seo/json-ld"
 import { hostelConfig } from "@/constants/hostel"
+import { createPublicMetadata, createPublicPageJsonLd } from "@/lib/seo"
 
-export const metadata: Metadata = {
-  title: `Contact ${hostelConfig.name}`,
-  description: `Contact ${hostelConfig.name} in Pulivendula by phone or WhatsApp and get directions to ${hostelConfig.location.note}.`,
-}
+const contactDescription = `Call or WhatsApp ${hostelConfig.name} in Pulivendula for hostel vacancy, student rooms, employee accommodation, and directions to ${hostelConfig.location.note}.`
+
+export const metadata: Metadata = createPublicMetadata({
+  title: `Contact ${hostelConfig.name} Pulivendula`,
+  description: contactDescription,
+  path: "/contact",
+  keywords: ["Sadhana Boys Hostel contact", "Pulivendula hostel phone number"],
+})
 
 export default function ContactPage() {
-  return <ContactPageContent />
+  return (
+    <>
+      <JsonLd
+        data={createPublicPageJsonLd({
+          name: `Contact ${hostelConfig.name}`,
+          description: contactDescription,
+          path: "/contact",
+          pageType: "ContactPage",
+          image: "/images/hostel-gate.webp",
+        })}
+      />
+      <ContactPageContent />
+    </>
+  )
 }

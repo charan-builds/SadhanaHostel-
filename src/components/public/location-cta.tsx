@@ -1,3 +1,5 @@
+import Link from "next/link"
+import type { Route } from "next"
 import { MapPin, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -13,7 +15,7 @@ export function LocationCta({ mapLink }: { mapLink?: string | null }) {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-blue-700">Location</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 text-balance sm:text-4xl">
-            Easy to find in {hostelConfig.location.city}.
+            Boys hostel location in {hostelConfig.location.city}.
           </h2>
           <div className="mt-5 flex gap-3 text-slate-700">
             <MapPin className="mt-1 size-5 shrink-0 text-blue-700" aria-hidden="true" />
@@ -34,6 +36,9 @@ export function LocationCta({ mapLink }: { mapLink?: string | null }) {
                 <Phone className="size-4" aria-hidden="true" />
                 Call
               </a>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={"/pulivendula-boys-hostel" as Route}>Hostel details</Link>
             </Button>
           </div>
         </div>

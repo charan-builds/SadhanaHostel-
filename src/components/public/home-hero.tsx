@@ -14,7 +14,7 @@ import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 const trustBadges = [
   hostelConfig.location.note,
   "CCTV monitored premises",
-  "Students and employees welcome",
+  "Student and employee hostel",
 ] as const
 
 export function HomeHero({
@@ -76,8 +76,9 @@ export function HomeHero({
           </p>
 
           <p className="mt-4 max-w-2xl text-base leading-7 text-white/70">
-            Located on {hostelConfig.location.note}, {hostelConfig.name} provides comfortable rooms,
-            tasty food, WiFi, CCTV, water facility, and a clean environment.
+            Located on {hostelConfig.location.note}, {hostelConfig.name} is a boys hostel in
+            Pulivendula with student rooms, employee accommodation, tasty food, WiFi, CCTV,
+            water facility, and a clean environment.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">

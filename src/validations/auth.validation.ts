@@ -17,15 +17,6 @@ export const loginSchema = z
     path: ["identifier"],
   })
 
-export const requestResidentPhoneOtpSchema = z.object({
-  phone: phoneSchema,
-})
-
-export const verifyResidentPhoneOtpSchema = requestResidentPhoneOtpSchema.extend({
-  token: z.string().trim().min(4).max(12),
-  rememberSession: z.boolean().optional(),
-})
-
 export const resetPasswordSchema = z.object({
   email: z.string().trim().email(),
   redirectTo: z.string().url().optional(),
@@ -70,8 +61,6 @@ export const residentOnboardingSchema = z.object({
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
-export type RequestResidentPhoneOtpInput = z.infer<typeof requestResidentPhoneOtpSchema>
-export type VerifyResidentPhoneOtpInput = z.infer<typeof verifyResidentPhoneOtpSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export type SignupInput = z.infer<typeof signupSchema>

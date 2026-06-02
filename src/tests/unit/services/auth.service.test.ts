@@ -530,25 +530,6 @@ describe("AuthService resident phone-first access", () => {
     )
   })
 
-  it("requests resident OTP without creating unaudited auth accounts", async () => {
-    const signInWithOtp = vi.fn().mockResolvedValue({ data: {}, error: null })
-    const service = new AuthService({
-      auth: { signInWithOtp },
-    } as never)
-
-    await expect(
-      service.requestResidentPhoneOtp({ phone: "90000 00002" })
-    ).resolves.toEqual({
-      phone: "********0002",
-      expiresInSeconds: 300,
-    })
-
-    expect(signInWithOtp).toHaveBeenCalledWith({
-      phone: "+919000000002",
-      options: { shouldCreateUser: false },
-    })
-  })
-
   it("continues draft residents to onboarding after temporary password login", async () => {
     const signInWithPassword = vi.fn().mockResolvedValue({ data: {}, error: null })
     const signOut = vi.fn().mockResolvedValue({ data: {}, error: null })

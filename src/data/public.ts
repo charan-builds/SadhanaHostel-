@@ -105,37 +105,37 @@ export const galleryItems: GalleryItem[] = [
   {
     title: "Exterior",
     category: "Hostel",
-    alt: "Sadhana Boys Hostel exterior view",
+    alt: "Sadhana Boys Hostel exterior view in Pulivendula",
   },
   {
     title: "Courtyard",
     category: "Common area",
-    alt: "Hostel courtyard area",
+    alt: "Sadhana Boys Hostel common courtyard area in Pulivendula",
   },
   {
     title: "Night view",
     category: "Hostel",
-    alt: "Sadhana Boys Hostel night view",
+    alt: "Sadhana Boys Hostel night view in Pulivendula",
   },
   {
     title: "Rooms",
     category: "Accommodation",
-    alt: "Resident room setup",
+    alt: "Shared resident room at Sadhana Boys Hostel Pulivendula",
   },
   {
-    title: "Bathrooms",
+    title: "Water facility",
     category: "Facilities",
-    alt: "Bathroom facilities",
+    alt: "Water facility and common amenities at Sadhana Boys Hostel Pulivendula",
   },
   {
     title: "Dining area",
     category: "Food",
-    alt: "Dining area for residents",
+    alt: "Dining area for residents at Sadhana Boys Hostel Pulivendula",
   },
   {
     title: "Terrace",
     category: "Common area",
-    alt: "Hostel terrace space",
+    alt: "Sadhana Boys Hostel terrace common area in Pulivendula",
   },
 ]
 

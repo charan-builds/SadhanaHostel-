@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { fallbackGalleryItems } from "@/constants/public-content"
+import { galleryItems as legacyPublicGalleryItems } from "@/data/public"
 import { pickGalleryImage, pickRoomGalleryImage } from "@/lib/public-gallery"
 import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
@@ -58,5 +60,27 @@ describe("public gallery image selection", () => {
     expect(pickRoomGalleryImage([studentRoom, genericRoom], employeePlan)).toBe(
       "/generic-room.jpg"
     )
+  })
+
+  it("keeps fallback gallery copy aligned with actual shared hostel facilities", () => {
+    const fallbackCopy = fallbackGalleryItems
+      .flatMap((item) => [item.title, item.category, item.alt])
+      .join(" ")
+      .toLowerCase()
+
+    expect(fallbackCopy).not.toContain("bathroom")
+    expect(fallbackCopy).not.toContain("attached bath")
+    expect(fallbackCopy).toContain("water facility")
+  })
+
+  it("keeps public gallery alt text branded for Pulivendula image search", () => {
+    const publicGalleryItems = [...fallbackGalleryItems, ...legacyPublicGalleryItems]
+
+    for (const item of publicGalleryItems) {
+      const altText = item.alt.toLowerCase()
+
+      expect(altText).toContain("sadhana boys hostel")
+      expect(altText).toContain("pulivendula")
+    }
   })
 })
