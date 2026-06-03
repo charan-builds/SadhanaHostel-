@@ -7,10 +7,7 @@ import { usePathname } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   BarChart3,
-  BedDouble,
   Bot,
-  Building2,
-  CalendarCheck,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -22,13 +19,11 @@ import {
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
-  Fingerprint,
   Megaphone,
   Plus,
   Settings,
   ShieldCheck,
   Sparkles,
-  Trash2,
   UserRoundPlus,
   Users,
   type LucideIcon,
@@ -37,6 +32,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { hostelModules } from "@/config/hostel-modules"
 import { hostelConfig } from "@/constants/hostel"
 import { useOperationalAlerts, useSupportRequests } from "@/hooks"
 import { useAuth } from "@/lib/auth"
@@ -53,11 +49,8 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
-  { title: "Reservations", href: "/admin/reservations", icon: CalendarCheck },
-  { title: "Vacancy", href: "/admin/vacancy", icon: BedDouble },
   { title: "Residents", href: "/admin/residents", icon: Users },
   { title: "Onboarding", href: "/admin/residents/verification", icon: ClipboardCheck },
-  { title: "Rooms", href: "/admin/rooms", icon: Building2 },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
   { title: "Payment Security", href: "/admin/finance/payment-security", icon: ShieldCheck },
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
@@ -67,10 +60,10 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Reports", href: "/admin/reports", icon: BarChart3 },
   { title: "Alerts", href: "/admin/alerts", icon: LifeBuoy },
   { title: "Password Resets", href: "/admin/password-resets", icon: KeyRound },
-  { title: "Launch Readiness", href: "/admin/launch-readiness", icon: ClipboardCheck },
+  ...(hostelModules.launchReadiness
+    ? [{ title: "Launch Readiness", href: "/admin/launch-readiness", icon: ClipboardCheck }]
+    : []),
   { title: "Automation", href: "/admin/operations/automation", icon: Bot },
-  { title: "Identity Repair", href: "/admin/operations/identity-repair", icon: Fingerprint },
-  { title: "Reset Demo Data", href: "/admin/operations/reset-demo-data", icon: Trash2 },
   { title: "Staff & Access", href: "/admin/settings/staff-access", icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]

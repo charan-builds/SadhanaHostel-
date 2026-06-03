@@ -328,7 +328,7 @@ function defaultSubject(category: Category) {
     payment: "Payment review or retry needed",
     invite: "Invite access needed",
     upload: "Upload retry needed",
-    room: "Room or vacancy issue",
+    room: "Hostel stay issue",
     lost_found: "Lost or found item report",
     maintenance: "Maintenance issue report",
     safety: "Safety issue report",
@@ -342,11 +342,11 @@ function defaultSubject(category: Category) {
 
 function descriptionPlaceholder(category: Category) {
   const placeholders: Record<Category, string> = {
-    onboarding: "Example: My Aadhaar upload failed twice after selecting a JPG file.",
+    onboarding: "Example: I need to correct my father or mother phone number before finishing onboarding.",
     payment: "Example: I paid by UPI, but my payment is still pending after uploading proof.",
     invite: "Example: My invite link expired before I completed activation.",
     upload: "Example: The screenshot upload failed on mobile even after retrying.",
-    room: "Example: My room allocation does not match the room shown in the portal.",
+    room: "Example: I need help with a hostel stay detail shown in the portal.",
     lost_found: "Example: I found a black wallet near the dining area at 8 pm.",
     maintenance: "Example: The fan in room 204 is not working since this morning.",
     safety: "Example: The staircase light near the second floor is not working at night.",

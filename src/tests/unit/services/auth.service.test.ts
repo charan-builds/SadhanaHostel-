@@ -14,7 +14,7 @@ import {
   userFixture,
   userRoleFixture,
 } from "@/tests/fixtures"
-import { adminAuthContext } from "@/tests/helpers"
+import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 
 const OTHER_HOSTEL_ID = "00000000-0000-4000-8000-000000000099"
 
@@ -239,6 +239,114 @@ describe("AuthService permission guards", () => {
       { redirectTo: "https://app.sadhanahostel.example/reset-password" }
     )
     process.env.NEXT_PUBLIC_APP_URL = originalAppUrl
+  })
+
+  it("requires the current password for normal resident password changes", async () => {
+    const service = new AuthService({ auth: {} } as never)
+    vi.spyOn(service, "getCurrentContext").mockResolvedValue(residentAuthContext())
+
+    await expect(
+      service.changePassword({
+        password: "NewResident123!",
+        confirmPassword: "NewResident123!",
+      })
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Current password is required.",
+    })
+  })
+
+  it("verifies current password before updating a normal resident password", async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      data: { user: authUserFixture({ id: RESIDENT_USER_ID }) },
+      error: null,
+    })
+    const updateUser = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const service = new AuthService({
+      auth: {
+        signInWithPassword,
+        updateUser,
+      },
+    } as never)
+    vi.spyOn(service, "getCurrentContext").mockResolvedValue(residentAuthContext())
+    vi.spyOn(UsersRepository.prototype, "updateProfile").mockResolvedValue(
+      userFixture({
+        id: RESIDENT_USER_ID,
+        default_role: "resident",
+        email: "resident.test@sadhanahostel.example",
+      })
+    )
+    vi.spyOn(ResidentsRepository.prototype, "getByUserId").mockResolvedValue(
+      {
+        ...residentFixture({
+          user_id: RESIDENT_USER_ID,
+        }),
+        onboarding_status: "verified",
+      } as never
+    )
+
+    await expect(
+      service.changePassword({
+        currentPassword: "OldResident123!",
+        password: "NewResident123!",
+        confirmPassword: "NewResident123!",
+      })
+    ).resolves.toMatchObject({
+      authenticated: true,
+      primaryRole: "resident",
+    })
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "resident.test@sadhanahostel.example",
+      password: "OldResident123!",
+    })
+    expect(updateUser).toHaveBeenCalledWith(
+      expect.objectContaining({ password: "NewResident123!" })
+    )
+  })
+
+  it("does not require current password while clearing temporary password access", async () => {
+    const updateUser = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const service = new AuthService({
+      auth: {
+        signInWithPassword: vi.fn(),
+        updateUser,
+      },
+    } as never)
+    vi.spyOn(service, "getCurrentContext").mockResolvedValue(
+      residentAuthContext({
+        profile: userFixture({
+          id: RESIDENT_USER_ID,
+          default_role: "resident",
+          email: "resident.test@sadhanahostel.example",
+          metadata: { force_password_reset: true },
+        }),
+      })
+    )
+    vi.spyOn(UsersRepository.prototype, "updateProfile").mockResolvedValue(
+      userFixture({
+        id: RESIDENT_USER_ID,
+        default_role: "resident",
+        email: "resident.test@sadhanahostel.example",
+      })
+    )
+    vi.spyOn(ResidentsRepository.prototype, "getByUserId").mockResolvedValue(
+      {
+        ...residentFixture({
+          user_id: RESIDENT_USER_ID,
+        }),
+        onboarding_status: "verified",
+      } as never
+    )
+
+    await expect(
+      service.changePassword({
+        password: "NewResident123!",
+        confirmPassword: "NewResident123!",
+      })
+    ).resolves.toMatchObject({
+      authenticated: true,
+      primaryRole: "resident",
+    })
   })
 })
 

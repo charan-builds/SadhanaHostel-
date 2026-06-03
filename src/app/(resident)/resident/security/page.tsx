@@ -18,8 +18,9 @@ export default function ResidentSecurityPage() {
       <div className="max-w-xl">
         <PasswordUpdateCard
           title="Change resident password"
-          description="Replace your temporary password with a private password."
+          description="Enter your current password, then set a new private password."
           submitLabel="Update password"
+          requireCurrentPassword
         />
       </div>
     </div>

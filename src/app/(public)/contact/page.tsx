@@ -5,7 +5,7 @@ import { JsonLd } from "@/components/seo/json-ld"
 import { hostelConfig } from "@/constants/hostel"
 import { createPublicMetadata, createPublicPageJsonLd } from "@/lib/seo"
 
-const contactDescription = `Call or WhatsApp ${hostelConfig.name} in Pulivendula for hostel vacancy, student rooms, employee accommodation, and directions to ${hostelConfig.location.note}.`
+const contactDescription = `Call or WhatsApp ${hostelConfig.name} in Pulivendula for joining details, student accommodation, employee accommodation, and directions to ${hostelConfig.location.note}.`
 
 export const metadata: Metadata = createPublicMetadata({
   title: `Contact ${hostelConfig.name} Pulivendula`,

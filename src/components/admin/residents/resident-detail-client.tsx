@@ -78,9 +78,8 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
           <h2 className="text-base font-semibold">Profile</h2>
           <dl className="mt-4 grid gap-3 text-sm">
             <InfoRow label="Email" value={resident.data.email ?? "-"} />
-            <InfoRow label="Parent" value={resident.data.parent_name ?? "-"} />
-            <InfoRow label="Parent phone" value={resident.data.parent_phone ?? "-"} />
-            <InfoRow label="Emergency contact" value={resident.data.emergency_contact_phone ?? "-"} />
+            <InfoRow label="Father phone" value={resident.data.parent_phone ?? "-"} />
+            <InfoRow label="Mother phone" value={resident.data.emergency_contact_phone ?? "-"} />
             <InfoRow label="Address" value={resident.data.permanent_address ?? "-"} />
           </dl>
         </div>

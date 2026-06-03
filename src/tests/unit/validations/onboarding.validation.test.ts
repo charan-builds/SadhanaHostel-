@@ -18,10 +18,7 @@ function onboardingProfile(overrides: Record<string, unknown> = {}) {
     dateOfBirth: adultBirthDate,
     phone: "+919000000002",
     email: "resident.test@sadhanahostel.example",
-    parentName: "Parent User",
     parentPhone: "+919000000003",
-    parentEmail: "parent.test@sadhanahostel.example",
-    emergencyContactName: "Emergency Contact",
     emergencyContactPhone: "+919000000004",
     permanentAddress: "Sadhana Boys Hostel, Main Road, Hyderabad",
     ...overrides,
@@ -59,6 +56,24 @@ describe("onboarding validation schemas", () => {
         })
       )
     ).toThrow(/at least 15 years old/)
+  })
+
+  it("keeps resident email optional while requiring father and mother phone numbers", () => {
+    expect(
+      onboardingProfileSchema.parse(onboardingProfile({ email: "" }))
+    ).toMatchObject({
+      email: undefined,
+      parentPhone: "+919000000003",
+      emergencyContactPhone: "+919000000004",
+    })
+
+    expect(() =>
+      onboardingProfileSchema.parse(onboardingProfile({ parentPhone: "" }))
+    ).toThrow()
+
+    expect(() =>
+      onboardingProfileSchema.parse(onboardingProfile({ emergencyContactPhone: "" }))
+    ).toThrow()
   })
 
   it("evaluates the resident onboarding client module without refined-schema omit crashes", async () => {

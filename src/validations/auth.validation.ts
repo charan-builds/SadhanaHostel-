@@ -33,6 +33,12 @@ export const strongPasswordSchema = z
 
 export const changePasswordSchema = z
   .object({
+    currentPassword: z
+      .string()
+      .transform((value) => value.trim())
+      .optional()
+      .or(z.literal(""))
+      .transform((value) => value || undefined),
     password: strongPasswordSchema,
     confirmPassword: z.string().min(1, "Confirm your password."),
   })
@@ -62,6 +68,7 @@ export const residentOnboardingSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type ChangePasswordFormInput = z.input<typeof changePasswordSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type AdminOnboardingInput = z.infer<typeof adminOnboardingSchema>

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import type { Route } from "next"
 import { usePathname } from "next/navigation"
-import { BedDouble, MessageCircle, Phone } from "lucide-react"
+import { MessageCircle, Phone } from "lucide-react"
 
 import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -61,12 +61,6 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden xl:inline-flex">
-            <Link href={"/contact" as Route}>
-              <BedDouble className="size-4" aria-hidden="true" />
-              Check vacancy
-            </Link>
-          </Button>
           <Button asChild variant="outline" size="sm" className="hidden md:inline-flex">
             <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
               <Phone className="size-4" aria-hidden="true" />

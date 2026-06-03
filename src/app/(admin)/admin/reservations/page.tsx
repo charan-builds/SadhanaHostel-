@@ -1,5 +1,5 @@
-import { AdminReservationsClient } from "@/components/admin/admissions/admin-reservations-client"
+import { redirect } from "next/navigation"
 
 export default function AdminReservationsPage() {
-  return <AdminReservationsClient />
+  redirect("/admin/dashboard")
 }

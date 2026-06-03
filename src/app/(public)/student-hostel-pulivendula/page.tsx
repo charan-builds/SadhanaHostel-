@@ -29,7 +29,7 @@ const studentFaqItems = [
   {
     question: "Can students call before visiting?",
     answer:
-      "Yes. Students or parents can call or WhatsApp before visiting to confirm vacancy and joining details.",
+      "Yes. Students or parents can call or WhatsApp before visiting to ask joining details.",
   },
 ]
 

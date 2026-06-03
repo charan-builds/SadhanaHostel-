@@ -30,9 +30,9 @@ export function InquirySection() {
             />
             <div className="absolute inset-0 bg-linear-to-t from-slate-950/80 via-transparent to-transparent" />
             <div className="absolute bottom-0 p-6">
-              <p className="text-sm font-medium text-cyan-100">Visit or reserve</p>
+              <p className="text-sm font-medium text-cyan-100">Visit or contact</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-                Check vacancy before you visit.
+                Speak with the hostel office before you visit.
               </h2>
             </div>
           </div>

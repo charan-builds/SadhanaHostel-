@@ -27,9 +27,9 @@ const employeeFaqItems = [
     answer: `${hostelConfig.name} is located at ${hostelConfig.location.address}. The hostel is on ${hostelConfig.location.note}.`,
   },
   {
-    question: "Can working professionals check vacancy by phone?",
+    question: "Can working professionals call before visiting?",
     answer:
-      "Yes. Working professionals can call or WhatsApp before visiting to confirm current vacancy and joining details.",
+      "Yes. Working professionals can call or WhatsApp before visiting to ask joining details.",
   },
 ]
 
@@ -90,8 +90,8 @@ export default function EmployeeHostelPulivendulaPage() {
             description: "Parking support is available for residents, subject to hostel rules.",
           },
           {
-            title: "Easy to check vacancy",
-            description: "Call or WhatsApp before visiting to confirm rooms and joining details.",
+            title: "Easy to contact",
+            description: "Call or WhatsApp before visiting to ask joining details.",
           },
         ]}
         faqItems={employeeFaqItems}

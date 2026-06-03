@@ -20,8 +20,8 @@ describe("resident validation", () => {
     expect(result.residentType).toBe("student")
   })
 
-  it("rejects invalid parent email", () => {
-    const result = createResidentSchema.safeParse({
+  it("does not keep parent email in resident admission input", () => {
+    const result = createResidentSchema.parse({
       organizationId: TEST_ORGANIZATION_ID,
       hostelId: TEST_HOSTEL_ID,
       admissionNumber: "SBH-001",
@@ -30,6 +30,6 @@ describe("resident validation", () => {
       parentEmail: "not-an-email",
     })
 
-    expect(result.success).toBe(false)
+    expect("parentEmail" in result).toBe(false)
   })
 })

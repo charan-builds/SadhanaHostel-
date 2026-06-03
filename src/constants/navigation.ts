@@ -1,10 +1,7 @@
 import {
   Bell,
   BarChart3,
-  BedDouble,
   Bot,
-  Building2,
-  CalendarCheck,
   CalendarDays,
   ClipboardList,
   ClipboardCheck,
@@ -26,12 +23,12 @@ import {
 } from "lucide-react"
 import type { Route } from "next"
 
+import { hostelModules } from "@/config/hostel-modules"
 import type { NavItem } from "@/types/navigation"
 
 export const publicNavigation: NavItem[] = [
   { title: "Home", href: "/", icon: Home },
   { title: "About", href: "/about", icon: Info },
-  { title: "Rooms", href: "/rooms", icon: Building2 },
   { title: "Facilities", href: "/facilities", icon: ShieldCheck },
   { title: "Gallery", href: "/gallery", icon: ImageIcon },
   { title: "Contact", href: "/contact", icon: Mail },
@@ -43,16 +40,15 @@ export const adminNavigation: NavItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Owner Dashboard", href: "/admin/owner-dashboard" as Route, icon: BarChart3 },
   { title: "Leads", href: "/admin/leads" as Route, icon: UserRoundPlus },
-  { title: "Reservations", href: "/admin/reservations" as Route, icon: CalendarCheck },
-  { title: "Vacancy", href: "/admin/vacancy" as Route, icon: BedDouble },
   { title: "Residents", href: "/admin/residents", icon: Users },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
-  { title: "Rooms", href: "/admin/rooms", icon: Building2 },
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
   { title: "Website", href: "/admin/website", icon: Globe },
   { title: "Notifications", href: "/admin/notifications", icon: Bell },
   { title: "Alerts", href: "/admin/alerts" as Route, icon: LifeBuoy },
-  { title: "Launch Readiness", href: "/admin/launch-readiness" as Route, icon: ClipboardCheck },
+  ...(hostelModules.launchReadiness
+    ? [{ title: "Launch Readiness", href: "/admin/launch-readiness" as Route, icon: ClipboardCheck }]
+    : []),
   { title: "Automation", href: "/admin/operations/automation" as Route, icon: Bot },
   { title: "Staff & Access", href: "/admin/settings/staff-access" as Route, icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },

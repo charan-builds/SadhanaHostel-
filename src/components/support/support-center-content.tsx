@@ -145,15 +145,15 @@ export function SupportCenterContent() {
           />
           <Faq
             question="When do payments unlock?"
-            answer="Residents can submit payment proof before profile completion. Other dashboard actions unlock after required profile details and documents are complete."
+            answer="Residents can submit payment proof before profile completion. Other dashboard actions unlock after required profile details and hostel rules acceptance are complete."
           />
           <Faq
-            question="What if my room allocation looks wrong?"
-            answer="Raise a support request or message staff. Room and reservation conflicts must be resolved by hostel staff using live vacancy."
+            question="What if my hostel details look wrong?"
+            answer="Raise a support request or message staff so the hostel office can correct your resident record."
           />
           <Faq
             question="What should I include in a support request?"
-            answer="Mention the workflow, payment UTR, invite code, document type, or screenshot problem. Avoid sharing Aadhaar numbers in plain text."
+            answer="Mention the workflow, payment UTR, invite code, or screenshot problem. Avoid sharing sensitive identity numbers in plain text."
           />
         </div>
       </section>

@@ -4,6 +4,8 @@ import { fallbackGalleryItems } from "@/constants/public-content"
 import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
 const galleryCategoryLabels: Record<string, string> = {
+  "exterior-surroundings": "Exterior / Surroundings",
+  "open-space-terrace": "Open space / Terrace",
   "student-room": "Student rooms",
   "employee-room": "Employee rooms",
   room: "Rooms",
@@ -55,8 +57,8 @@ export function pickRoomGalleryImage(
   const roomAudience = getRoomAudience(room)
   const preferredCategories =
     roomAudience === "employee"
-      ? ["employee-room", "employee room", "employee", "working", "professional", "room"]
-      : ["student-room", "student room", "student", "college", "room"]
+      ? ["employee-room", "employee room", "employee rooms", "employee", "working", "professional"]
+      : ["student-room", "student room", "student rooms", "student", "college"]
 
   return pickGalleryImage(galleryItems, preferredCategories, fallbackIndex)
 }

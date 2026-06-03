@@ -103,7 +103,7 @@ export function AudienceHostelPageContent({
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="bg-white">
-                <Link href="/rooms">Compare fees</Link>
+                <Link href="/contact">Ask joining details</Link>
               </Button>
             </div>
           </div>

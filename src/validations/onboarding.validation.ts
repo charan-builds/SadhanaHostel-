@@ -27,16 +27,11 @@ export const onboardingProfileBaseSchema = z.object({
   dateOfBirth: dateOnlySchema,
   phone: phoneSchema,
   email: optionalEmailSchema,
-  parentName: z.string().trim().min(2).max(120),
   parentPhone: phoneSchema,
-  parentEmail: optionalEmailSchema,
-  emergencyContactName: z.string().trim().min(2).max(120),
   emergencyContactPhone: phoneSchema,
   permanentAddress: z.string().trim().min(10).max(500),
-  aadhaarLast4: z.string().trim().regex(/^[0-9]{4}$/).optional(),
   collegeName: z.string().trim().max(160).optional(),
   courseName: z.string().trim().max(160).optional(),
-  guardianRelation: z.string().trim().max(80).optional(),
 })
 
 function validateResidentAge(value: { dateOfBirth: string }, ctx: z.RefinementCtx) {

@@ -917,7 +917,7 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
         summary: "You can correct rejected details and finish onboarding again.",
         steps: [
           "Open resident onboarding and review missing or rejected sections.",
-          "Re-upload clearer Aadhaar, photo, or student ID documents if requested.",
+          "Update contact, father phone, mother phone, or address details if requested.",
           "Finish onboarding again after all required items are complete.",
         ],
       }

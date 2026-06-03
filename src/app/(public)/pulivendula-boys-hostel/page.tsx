@@ -21,6 +21,7 @@ export const metadata: Metadata = createPublicMetadata({
     "best hostel in Pulivendula",
     "student hostel Pulivendula",
     "employee hostel Pulivendula",
+    "hostel near Palem Street Pulivendula",
     "hostel near Royals Road Pulivendula",
     "hostel near Bakarapuram Pulivendula",
   ],

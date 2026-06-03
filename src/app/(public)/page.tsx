@@ -9,7 +9,6 @@ import { HomeHighlights } from "@/components/public/home-highlights"
 import { InquirySection } from "@/components/public/inquiry-section"
 import { LocationCta } from "@/components/public/location-cta"
 import { LocalSearchLinks } from "@/components/public/local-search-links"
-import { RoomsPreview } from "@/components/public/rooms-preview"
 import { SeoFaqSection } from "@/components/public/seo-faq-section"
 import { TestimonialsSection } from "@/components/public/testimonials-section"
 import { JsonLd } from "@/components/seo/json-ld"
@@ -60,7 +59,6 @@ export default async function HomePage() {
       />
       <HomeHighlights facilities={cms.facilities} />
       <AboutPreview />
-      <RoomsPreview roomTypes={cms.roomTypes} galleryItems={cms.galleryItems} />
       <LocalSearchLinks />
       <FacilitiesPreview facilities={cms.facilities} galleryItems={cms.galleryItems} />
       <GalleryPreview galleryItems={cms.galleryItems} />

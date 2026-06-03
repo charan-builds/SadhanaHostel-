@@ -48,7 +48,7 @@ import {
 import { useMounted } from "@/hooks/use-mounted"
 import { FrontendApiError, createRequestId } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
-import { formatCurrency, formatDateTime } from "@/lib/format"
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format"
 import { buildPaymentSupportMessage, buildWhatsappUrl } from "@/lib/operations/whatsapp"
 import {
   UPI_PAYMENT_APPS,
@@ -481,6 +481,29 @@ export function ResidentPaymentsClient() {
         </div>
       </motion.section>
 
+      <PaymentBreakdown
+        monthlyFee={monthlyFee}
+        primaryDueRecord={primaryDueRecord}
+        currentDue={currentDue}
+        payableDue={payableDue}
+        pendingVerification={pendingVerification}
+        verifiedPaid={verifiedPaid}
+        advancePaid={advancePaid}
+        suggestedAmount={suggestedAmount}
+        onUseSuggestedAmount={() => {
+          setValue("amount", suggestedAmount, { shouldDirty: true, shouldValidate: true })
+          setValue("isAdvance", payableDue <= 0, {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+        }}
+        onZeroAmount={() => {
+          setValue("amount", 0, { shouldDirty: true, shouldValidate: true })
+          setValue("isPartial", false, { shouldDirty: true, shouldValidate: true })
+          setValue("isAdvance", false, { shouldDirty: true, shouldValidate: true })
+        }}
+      />
+
       <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <form onSubmit={handleSubmit(submitPayment)} className="saas-surface rounded-xl p-5">
           <div className="flex items-start justify-between gap-4">
@@ -552,6 +575,18 @@ export function ResidentPaymentsClient() {
                     }}
                   >
                     Monthly fee
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setValue("amount", 0, { shouldDirty: true, shouldValidate: true })
+                      setValue("isPartial", false, { shouldDirty: true, shouldValidate: true })
+                      setValue("isAdvance", false, { shouldDirty: true, shouldValidate: true })
+                    }}
+                  >
+                    Set 0
                   </Button>
                 </div>
                 {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
@@ -673,6 +708,92 @@ export function ResidentPaymentsClient() {
         onOpenInvoice={openInvoice}
       />
     </motion.div>
+  )
+}
+
+function PaymentBreakdown({
+  monthlyFee,
+  primaryDueRecord,
+  currentDue,
+  payableDue,
+  pendingVerification,
+  verifiedPaid,
+  advancePaid,
+  suggestedAmount,
+  onUseSuggestedAmount,
+  onZeroAmount,
+}: {
+  monthlyFee: number
+  primaryDueRecord: Tables<"monthly_fee_records"> | null | undefined
+  currentDue: number
+  payableDue: number
+  pendingVerification: number
+  verifiedPaid: number
+  advancePaid: number
+  suggestedAmount: number
+  onUseSuggestedAmount: () => void
+  onZeroAmount: () => void
+}) {
+  const paidForDue = primaryDueRecord?.paid_amount ?? 0
+  const totalForDue = primaryDueRecord?.total_amount ?? monthlyFee
+  const balanceForDue = primaryDueRecord?.balance_amount ?? currentDue
+
+  return (
+    <motion.section variants={reveal} className="saas-surface rounded-xl p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Payment details before you pay</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review dues, paid fees, pending proof, and the exact amount before opening UPI.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onUseSuggestedAmount}>
+            Use {formatCurrency(suggestedAmount)}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={onZeroAmount}>
+            Set 0
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <BreakdownItem label="Fee total" value={formatCurrency(totalForDue)} />
+        <BreakdownItem label="Fees paid" value={formatCurrency(paidForDue)} />
+        <BreakdownItem label="Dues left" value={formatCurrency(balanceForDue)} />
+        <BreakdownItem label="Payable now" value={formatCurrency(payableDue)} />
+        <BreakdownItem label="Pending proof" value={formatCurrency(pendingVerification)} />
+        <BreakdownItem label="Verified paid" value={formatCurrency(verifiedPaid)} />
+        <BreakdownItem label="Advance balance" value={formatCurrency(advancePaid)} />
+        <BreakdownItem
+          label="Due date"
+          value={primaryDueRecord?.due_date ? formatDate(primaryDueRecord.due_date) : "No due record"}
+        />
+      </div>
+
+      {primaryDueRecord ? (
+        <div className="mt-4 rounded-lg border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
+          Current fee period: {formatDate(primaryDueRecord.period_month)} · Status:
+          {" "}
+          <span className="font-medium text-foreground">{primaryDueRecord.status}</span>.
+          Pending verification is shown separately because it reduces dues only after admin approval.
+        </div>
+      ) : (
+        <div className="mt-4 rounded-lg border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
+          No monthly due record is open. Use the zero button when the hostel is starting fresh or
+          enter an advance amount only after confirming with admin.
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
+function BreakdownItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-white/55 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
   )
 }
 

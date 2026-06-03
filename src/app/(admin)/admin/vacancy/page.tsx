@@ -1,5 +1,5 @@
-import { AdminVacancyClient } from "@/components/admin/admissions/admin-vacancy-client"
+import { redirect } from "next/navigation"
 
 export default function AdminVacancyPage() {
-  return <AdminVacancyClient />
+  redirect("/admin/dashboard")
 }

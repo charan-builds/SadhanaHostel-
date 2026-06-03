@@ -15,16 +15,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { usePublicVacancy, useSubmitPublicInquiry } from "@/hooks"
+import { useSubmitPublicInquiry } from "@/hooks"
 import { hostelConfig } from "@/constants/hostel"
 import type { ResidentType } from "@/types/admissions"
 
 export function ContactInquiryForm() {
   const [submitted, setSubmitted] = useState(false)
   const [residentType, setResidentType] = useState<ResidentType>("student")
-  const vacancy = usePublicVacancy()
   const submitInquiry = useSubmitPublicInquiry()
-  const availableVacancies = vacancy.data?.summary?.available_beds
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -68,13 +66,8 @@ export function ContactInquiryForm() {
       <div>
         <h2 className="text-2xl font-semibold text-foreground">Send an inquiry</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Submit your details so the hostel can check vacancy, follow up, and reserve a room if
-          suitable.
+          Submit your details so the hostel team can call back and explain the joining process.
         </p>
-        <VacancyNotice
-          isLoading={vacancy.isLoading}
-          availableVacancies={availableVacancies}
-        />
       </div>
 
       <div className="mt-6 grid gap-4">
@@ -167,7 +160,7 @@ export function ContactInquiryForm() {
           <Textarea
             id="message"
             name="message"
-            placeholder="Tell us what kind of room you are looking for"
+            placeholder="Tell us your joining date or any questions for the hostel office"
             className="min-h-28"
           />
         </div>
@@ -175,7 +168,7 @@ export function ContactInquiryForm() {
 
       {submitted ? (
         <div className="mt-4 rounded-lg border border-success/20 bg-success-surface px-3 py-2 text-sm text-success-foreground">
-          Inquiry saved. For urgent booking checks, you can also WhatsApp the hostel directly.
+          Inquiry saved. For urgent joining questions, you can also WhatsApp the hostel directly.
         </div>
       ) : null}
 
@@ -194,37 +187,5 @@ export function ContactInquiryForm() {
         </a>
       </Button>
     </form>
-  )
-}
-
-function VacancyNotice({
-  isLoading,
-  availableVacancies,
-}: {
-  isLoading: boolean
-  availableVacancies?: number
-}) {
-  if (isLoading) {
-    return (
-      <p className="mt-4 rounded-lg border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-        Checking live vacancy...
-      </p>
-    )
-  }
-
-  if (typeof availableVacancies !== "number") {
-    return (
-      <p className="mt-4 rounded-lg border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-        Vacancy will be confirmed after the hostel team reviews your inquiry.
-      </p>
-    )
-  }
-
-  return (
-    <p className="mt-4 rounded-lg border border-success/20 bg-success-surface px-3 py-2 text-sm font-medium text-success-foreground">
-      {availableVacancies > 0
-        ? `Student Vacancy: ${availableVacancies}`
-        : "Currently full. Join the waitlist."}
-    </p>
   )
 }

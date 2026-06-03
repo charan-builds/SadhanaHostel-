@@ -1,8 +1,8 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, UploadCloud, UserCheck } from "lucide-react"
-import { useEffect, useState, type ReactNode } from "react"
+import { Loader2, UserCheck } from "lucide-react"
+import { useEffect, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -16,21 +16,15 @@ import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import {
   useCurrentResident,
-  useDocumentUpload,
-  useProfilePhotoUpload,
   useUpdateCurrentResident,
 } from "@/hooks"
-import type { UploadProgress } from "@/sdk"
 
 const onboardingSchema = z.object({
   preferredName: z.string().trim().max(80).optional(),
   phone: z.string().trim().min(8, "Phone number is required.").max(20),
   email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
-  parentName: z.string().trim().max(120).optional(),
-  parentPhone: z.string().trim().max(20).optional(),
-  parentEmail: z.string().trim().email("Enter a valid parent email.").optional().or(z.literal("")),
-  emergencyContactName: z.string().trim().max(120).optional(),
-  emergencyContactPhone: z.string().trim().max(20).optional(),
+  parentPhone: z.string().trim().min(8, "Father phone is required.").max(20),
+  emergencyContactPhone: z.string().trim().min(8, "Mother phone is required.").max(20),
   permanentAddress: z.string().trim().max(500).optional(),
 })
 
@@ -40,10 +34,6 @@ export function OnboardingClient() {
   const { session, organizationId, isLoading } = useAuth()
   const residentQuery = useCurrentResident(organizationId ?? undefined)
   const updateResident = useUpdateCurrentResident()
-  const [aadhaarProgress, setAadhaarProgress] = useState<UploadProgress | null>(null)
-  const [photoProgress, setPhotoProgress] = useState<UploadProgress | null>(null)
-  const aadhaarUpload = useDocumentUpload({ onProgress: setAadhaarProgress })
-  const photoUpload = useProfilePhotoUpload({ onProgress: setPhotoProgress })
   const {
     register,
     reset,
@@ -56,10 +46,7 @@ export function OnboardingClient() {
       preferredName: "",
       phone: "",
       email: "",
-      parentName: "",
       parentPhone: "",
-      parentEmail: "",
-      emergencyContactName: "",
       emergencyContactPhone: "",
       permanentAddress: "",
     },
@@ -76,10 +63,7 @@ export function OnboardingClient() {
       preferredName: resident.preferred_name ?? "",
       phone: resident.phone ?? "",
       email: resident.email ?? "",
-      parentName: resident.parent_name ?? "",
       parentPhone: resident.parent_phone ?? "",
-      parentEmail: resident.parent_email ?? "",
-      emergencyContactName: resident.emergency_contact_name ?? "",
       emergencyContactPhone: resident.emergency_contact_phone ?? "",
       permanentAddress: resident.permanent_address ?? "",
     })
@@ -132,10 +116,7 @@ export function OnboardingClient() {
         preferredName: values.preferredName || undefined,
         phone: values.phone,
         email: values.email || undefined,
-        parentName: values.parentName || undefined,
         parentPhone: values.parentPhone || undefined,
-        parentEmail: values.parentEmail || undefined,
-        emergencyContactName: values.emergencyContactName || undefined,
         emergencyContactPhone: values.emergencyContactPhone || undefined,
         permanentAddress: values.permanentAddress || undefined,
       })
@@ -146,58 +127,6 @@ export function OnboardingClient() {
           error instanceof FrontendApiError
             ? error.message
             : "Unable to save onboarding details.",
-      })
-    }
-  }
-
-  async function uploadAadhaar(file: File | undefined) {
-    if (!file || !organizationId || !resident) {
-      return
-    }
-
-    try {
-      await aadhaarUpload.mutateAsync({
-        input: {
-          organizationId,
-          hostelId: resident.hostel_id,
-          residentId: resident.id,
-          documentType: "aadhaar",
-          isPublic: false,
-        },
-        file,
-      })
-      toast.success("Aadhaar document uploaded.")
-    } catch (error) {
-      setError("root", {
-        message:
-          error instanceof FrontendApiError
-            ? error.message
-            : "Aadhaar upload failed. Please retry.",
-      })
-    }
-  }
-
-  async function uploadPhoto(file: File | undefined) {
-    if (!file || !organizationId || !resident) {
-      return
-    }
-
-    try {
-      await photoUpload.mutateAsync({
-        input: {
-          organizationId,
-          hostelId: resident.hostel_id,
-          residentId: resident.id,
-        },
-        file,
-      })
-      toast.success("Profile photo uploaded.")
-    } catch (error) {
-      setError("root", {
-        message:
-          error instanceof FrontendApiError
-            ? error.message
-            : "Profile photo upload failed. Please retry.",
       })
     }
   }
@@ -229,27 +158,14 @@ export function OnboardingClient() {
           <Field label="Phone" id="phone" error={errors.phone?.message}>
             <Input id="phone" type="tel" autoComplete="tel" {...register("phone")} />
           </Field>
-          <Field label="Email" id="email" error={errors.email?.message}>
+          <Field label="Email (optional)" id="email" error={errors.email?.message}>
             <Input id="email" type="email" autoComplete="email" {...register("email")} />
           </Field>
-          <Field label="Parent name" id="parentName" error={errors.parentName?.message}>
-            <Input id="parentName" {...register("parentName")} />
-          </Field>
-          <Field label="Parent phone" id="parentPhone" error={errors.parentPhone?.message}>
+          <Field label="Father phone" id="parentPhone" error={errors.parentPhone?.message}>
             <Input id="parentPhone" type="tel" {...register("parentPhone")} />
           </Field>
-          <Field label="Parent email" id="parentEmail" error={errors.parentEmail?.message}>
-            <Input id="parentEmail" type="email" {...register("parentEmail")} />
-          </Field>
           <Field
-            label="Emergency contact name"
-            id="emergencyContactName"
-            error={errors.emergencyContactName?.message}
-          >
-            <Input id="emergencyContactName" {...register("emergencyContactName")} />
-          </Field>
-          <Field
-            label="Emergency contact phone"
+            label="Mother phone"
             id="emergencyContactPhone"
             error={errors.emergencyContactPhone?.message}
           >
@@ -275,23 +191,6 @@ export function OnboardingClient() {
         </Button>
       </form>
 
-      <section className="grid gap-4 sm:grid-cols-2">
-        <UploadCard
-          title="Aadhaar document"
-          description="PDF, JPG, PNG, or WebP up to 5 MB."
-          progress={aadhaarProgress?.percent}
-          isPending={aadhaarUpload.isPending}
-          onFileChange={(file) => void uploadAadhaar(file)}
-        />
-        <UploadCard
-          title="Profile photo"
-          description="JPG, PNG, or WebP up to 4 MB."
-          progress={photoProgress?.percent}
-          isPending={photoUpload.isPending}
-          accept="image/jpeg,image/png,image/webp"
-          onFileChange={(file) => void uploadPhoto(file)}
-        />
-      </section>
     </div>
   )
 }
@@ -314,45 +213,6 @@ function Field({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
-  )
-}
-
-function UploadCard({
-  title,
-  description,
-  progress,
-  isPending,
-  accept = "application/pdf,image/jpeg,image/png,image/webp",
-  onFileChange,
-}: {
-  title: string
-  description: string
-  progress?: number
-  isPending: boolean
-  accept?: string
-  onFileChange: (file?: File) => void
-}) {
-  return (
-    <div className="rounded-lg border p-4">
-      <UploadCloud className="size-6 text-primary" aria-hidden="true" />
-      <h3 className="mt-3 text-sm font-semibold">{title}</h3>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
-      <Input
-        type="file"
-        accept={accept}
-        className="mt-4"
-        disabled={isPending}
-        onChange={(event) => onFileChange(event.target.files?.[0])}
-      />
-      {isPending ? (
-        <div className="mt-3">
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${progress ?? 10}%` }} />
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">{progress ?? 0}% uploaded</p>
-        </div>
-      ) : null}
     </div>
   )
 }

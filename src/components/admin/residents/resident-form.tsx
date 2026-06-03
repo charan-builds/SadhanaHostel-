@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { hostelModules } from "@/config/hostel-modules"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
@@ -55,10 +56,7 @@ const residentFormSchema = z.object({
   dateOfBirth: optionalTextSchema,
   phone: optionalPhoneFormSchema,
   email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
-  parentName: optionalTextSchema.pipe(z.string().max(120).optional()),
   parentPhone: optionalPhoneFormSchema,
-  parentEmail: z.string().trim().email("Enter a valid parent email.").optional().or(z.literal("")),
-  emergencyContactName: optionalTextSchema.pipe(z.string().max(120).optional()),
   emergencyContactPhone: optionalPhoneFormSchema,
   permanentAddress: optionalTextSchema.pipe(z.string().max(500).optional()),
   monthlyFeeAmount: z.coerce.number().nonnegative(),
@@ -159,10 +157,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       dateOfBirth: resident?.date_of_birth ?? "",
       phone: resident?.phone ?? "",
       email: resident?.email ?? "",
-      parentName: resident?.parent_name ?? "",
       parentPhone: resident?.parent_phone ?? "",
-      parentEmail: resident?.parent_email ?? "",
-      emergencyContactName: resident?.emergency_contact_name ?? "",
       emergencyContactPhone: resident?.emergency_contact_phone ?? "",
       permanentAddress: resident?.permanent_address ?? "",
       monthlyFeeAmount: resident?.monthly_fee_amount ?? HOSTEL_FEES.student,
@@ -227,10 +222,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             dateOfBirth: values.dateOfBirth || undefined,
             phone: values.phone || undefined,
             email: values.email || undefined,
-            parentName: values.parentName || undefined,
             parentPhone: values.parentPhone || undefined,
-            parentEmail: values.parentEmail || undefined,
-            emergencyContactName: values.emergencyContactName || undefined,
             emergencyContactPhone: values.emergencyContactPhone || undefined,
             permanentAddress: values.permanentAddress || undefined,
             monthlyFeeAmount:
@@ -251,10 +243,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             dateOfBirth: undefined,
             phone: onboardingPhone ?? "",
             email: values.email || undefined,
-            parentName: undefined,
             parentPhone: undefined,
-            parentEmail: undefined,
-            emergencyContactName: undefined,
             emergencyContactPhone: undefined,
             permanentAddress: undefined,
             monthlyFeeAmount:
@@ -325,7 +314,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {isCreate
-            ? "Add the resident in seconds. They will complete Aadhaar, guardian details, address, photo, and documents through self-onboarding."
+            ? "Add the resident in seconds. They will complete contact, father phone, mother phone, address, and hostel rules through self-onboarding."
             : "Update resident profile data through the production API."}
         </p>
       </div>
@@ -436,19 +425,13 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         </Field>
         {!isCreate ? (
           <>
-            <Field id="email" label="Email" error={errors.email?.message}>
+            <Field id="email" label="Email (optional)" error={errors.email?.message}>
               <Input id="email" type="email" autoComplete="email" {...register("email")} />
             </Field>
-            <Field id="parentName" label="Parent name" error={errors.parentName?.message}>
-              <Input id="parentName" {...register("parentName")} />
-            </Field>
-            <Field id="parentPhone" label="Parent phone" error={errors.parentPhone?.message}>
+            <Field id="parentPhone" label="Father phone" error={errors.parentPhone?.message}>
               <Input id="parentPhone" type="tel" {...register("parentPhone")} />
             </Field>
-            <Field id="emergencyContactName" label="Emergency contact name" error={errors.emergencyContactName?.message}>
-              <Input id="emergencyContactName" {...register("emergencyContactName")} />
-            </Field>
-            <Field id="emergencyContactPhone" label="Emergency contact phone" error={errors.emergencyContactPhone?.message}>
+            <Field id="emergencyContactPhone" label="Mother phone" error={errors.emergencyContactPhone?.message}>
               <Input id="emergencyContactPhone" type="tel" {...register("emergencyContactPhone")} />
             </Field>
           </>
@@ -599,7 +582,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             ) : null}
           </div>
         ) : null}
-        {!resident ? (
+        {!resident && hostelModules.roomAllocation ? (
           <>
             <div className="md:col-span-2">
               <h3 className="text-sm font-semibold text-foreground">Room assignment</h3>
@@ -730,7 +713,7 @@ function CreatedResidentAccessPanel({
           <p className="font-semibold">Draft resident created</p>
           <p className="mt-1 text-emerald-900">
             {resident.full_name} can now access their portal and complete profile,
-            Aadhaar, guardian details, photo, and documents from their phone.
+            father phone, mother phone, address, and hostel rules from their phone.
           </p>
           <p className="mt-2 text-xs text-emerald-800">
             Admission: {resident.admission_number} · Status: draft

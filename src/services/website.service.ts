@@ -8,6 +8,7 @@ import {
 } from "@/lib/cache"
 import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+import { createSupabasePublicServerClient } from "@/lib/supabase/public-server"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -64,6 +65,10 @@ export class WebsiteService {
     const db = await createSupabaseServerClient()
 
     return new WebsiteService(db)
+  }
+
+  static createPublic() {
+    return new WebsiteService(createSupabasePublicServerClient())
   }
 
   async listSettings(input: unknown) {

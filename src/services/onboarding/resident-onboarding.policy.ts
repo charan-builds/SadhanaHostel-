@@ -5,12 +5,9 @@ export type OnboardingRequirementKey =
   | "full_name"
   | "date_of_birth"
   | "phone"
-  | "guardian"
-  | "emergency_contact"
+  | "father_phone"
+  | "mother_phone"
   | "permanent_address"
-  | "aadhaar_document"
-  | "profile_photo"
-  | "student_id"
   | "room_allocation"
   | "rules_acceptance"
 
@@ -31,20 +28,15 @@ export function getResidentOnboardingRequirements(
   if (!resident.full_name) missing.push("full_name")
   if (!resident.date_of_birth) missing.push("date_of_birth")
   if (!resident.phone) missing.push("phone")
-  if (!resident.parent_name || !resident.parent_phone) missing.push("guardian")
-  if (!resident.emergency_contact_name || !resident.emergency_contact_phone) {
-    missing.push("emergency_contact")
-  }
+  if (!resident.parent_phone) missing.push("father_phone")
+  if (!resident.emergency_contact_phone) missing.push("mother_phone")
   if (!resident.permanent_address) missing.push("permanent_address")
-  if (!resident.aadhaar_document_id) missing.push("aadhaar_document")
-  if (!resident.profile_image_document_id) missing.push("profile_photo")
-  if (!resident.student_id_document_id) missing.push("student_id")
   if (!resident.hostel_id) missing.push("room_allocation")
   if (!hasAcceptedCurrentHostelRules(resident) && !isResidentOperationallyVerified(resident)) {
     missing.push("rules_acceptance")
   }
 
-  const totalRequirements = 11
+  const totalRequirements = 8
   const completionPercent = Math.round(
     ((totalRequirements - missing.length) / totalRequirements) * 100
   )

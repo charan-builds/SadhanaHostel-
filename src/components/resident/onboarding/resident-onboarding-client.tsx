@@ -7,8 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import {
   AlertCircle,
   CheckCircle2,
-  FileUp,
-  IdCard,
   Loader2,
   Send,
   UserRound,
@@ -34,8 +32,6 @@ import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import { HOSTEL_RULES, HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
-  useDocumentUpload,
-  useProfilePhotoUpload,
   useResidentOnboarding,
   useSubmitResidentOnboarding,
   useUpdateResidentOnboardingProfile,
@@ -53,13 +49,9 @@ const missingLabels: Record<string, string> = {
   full_name: "Full name",
   date_of_birth: "Date of birth",
   phone: "Phone",
-  guardian: "Guardian details",
-  emergency_contact: "Emergency contact",
+  father_phone: "Father phone",
+  mother_phone: "Mother phone",
   permanent_address: "Permanent address",
-  aadhaar_document: "Aadhaar document",
-  profile_photo: "Profile photo",
-  student_id: "Student ID",
-  room_allocation: "Room allocation",
   rules_acceptance: "Hostel rules acceptance",
 }
 
@@ -68,14 +60,7 @@ export function ResidentOnboardingClient() {
   const onboarding = useResidentOnboarding(organizationId)
   const updateProfile = useUpdateResidentOnboardingProfile()
   const submitOnboarding = useSubmitResidentOnboarding()
-  const aadhaarUpload = useDocumentUpload()
-  const studentIdUpload = useDocumentUpload()
-  const photoUpload = useProfilePhotoUpload()
-  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null)
-  const [studentIdFile, setStudentIdFile] = useState<File | null>(null)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [rulesAcceptedOverride, setRulesAcceptedOverride] = useState(false)
-  const [uploadRecoveryMessage, setUploadRecoveryMessage] = useState<string | null>(null)
 
   const resident = onboarding.data?.resident
   const requirements = onboarding.data?.requirements
@@ -88,16 +73,11 @@ export function ResidentOnboardingClient() {
       dateOfBirth: "",
       phone: "",
       email: "",
-      parentName: "",
       parentPhone: "",
-      parentEmail: "",
-      emergencyContactName: "",
       emergencyContactPhone: "",
       permanentAddress: "",
-      aadhaarLast4: "",
       collegeName: "",
       courseName: "",
-      guardianRelation: "",
     },
   })
 
@@ -120,16 +100,11 @@ export function ResidentOnboardingClient() {
       dateOfBirth: resident.date_of_birth ?? "",
       phone: resident.phone ?? "",
       email: resident.email ?? "",
-      parentName: resident.parent_name ?? "",
       parentPhone: resident.parent_phone ?? "",
-      parentEmail: resident.parent_email ?? "",
-      emergencyContactName: resident.emergency_contact_name ?? "",
       emergencyContactPhone: resident.emergency_contact_phone ?? "",
       permanentAddress: resident.permanent_address ?? "",
-      aadhaarLast4: resident.aadhaar_last4 ?? "",
       collegeName: String(onboardingMeta?.collegeName ?? ""),
       courseName: String(onboardingMeta?.courseName ?? ""),
-      guardianRelation: String(onboardingMeta?.guardianRelation ?? ""),
     })
   }, [form, resident])
 
@@ -190,61 +165,6 @@ export function ResidentOnboardingClient() {
     }
   }
 
-  async function uploadFile(kind: "aadhaar" | "student_id" | "photo") {
-    if (!organizationId || !resident) {
-      return
-    }
-
-    try {
-      setUploadRecoveryMessage(null)
-
-      if (kind === "photo" && photoFile) {
-        await photoUpload.mutateAsync({
-          input: {
-            organizationId,
-            hostelId: resident.hostel_id,
-            residentId: resident.id,
-          },
-          file: photoFile,
-        })
-      }
-
-      if (kind === "aadhaar" && aadhaarFile) {
-        await aadhaarUpload.mutateAsync({
-          input: {
-            organizationId,
-            hostelId: resident.hostel_id,
-            residentId: resident.id,
-            documentType: "aadhaar",
-            isPublic: false,
-          },
-          file: aadhaarFile,
-        })
-      }
-
-      if (kind === "student_id" && studentIdFile) {
-        await studentIdUpload.mutateAsync({
-          input: {
-            organizationId,
-            hostelId: resident.hostel_id,
-            residentId: resident.id,
-            documentType: "student_id",
-            isPublic: false,
-          },
-          file: studentIdFile,
-        })
-      }
-
-      await onboarding.refetch()
-      toast.success("Document uploaded.")
-    } catch {
-      setUploadRecoveryMessage(
-        "Upload did not complete. Check your connection, use a supported file type, and retry. Staff can help from support if it keeps failing."
-      )
-      toast.error("Upload failed. Retry or open support.")
-    }
-  }
-
   async function submitForVerification() {
     if (!organizationId) {
       return
@@ -278,9 +198,9 @@ export function ResidentOnboardingClient() {
           <div>
             <CardTitle>Resident Onboarding</CardTitle>
             <CardDescription>
-              Complete your profile and upload required documents. Payments can be
-              submitted now; leave, notices, invoices, and dashboard actions unlock
-              when everything is complete.
+              Complete your profile and accept hostel rules. Payments can be submitted
+              now; leave, notices, invoices, and dashboard actions unlock when everything
+              is complete.
             </CardDescription>
           </div>
           <div className="rounded-lg border bg-slate-50 p-3 text-sm">
@@ -322,7 +242,7 @@ export function ResidentOnboardingClient() {
               Profile Details
             </CardTitle>
             <CardDescription>
-              Use official details that match your uploaded documents.
+              Use accurate details for hostel records and family contact.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -341,14 +261,9 @@ export function ResidentOnboardingClient() {
                 <Field form={form} name="dateOfBirth" label="Date of birth" type="date" />
                 <Field form={form} name="gender" label="Gender" />
                 <Field form={form} name="phone" label="Phone" type="tel" />
-                <Field form={form} name="email" label="Email" type="email" />
-                <Field form={form} name="parentName" label="Parent/guardian name" />
-                <Field form={form} name="parentPhone" label="Parent/guardian phone" type="tel" />
-                <Field form={form} name="parentEmail" label="Parent email" type="email" />
-                <Field form={form} name="guardianRelation" label="Guardian relation" />
-                <Field form={form} name="emergencyContactName" label="Emergency contact name" />
-                <Field form={form} name="emergencyContactPhone" label="Emergency phone" type="tel" />
-                <Field form={form} name="aadhaarLast4" label="Aadhaar last 4 digits" inputMode="numeric" />
+                <Field form={form} name="email" label="Email (optional)" type="email" />
+                <Field form={form} name="parentPhone" label="Father phone" type="tel" />
+                <Field form={form} name="emergencyContactPhone" label="Mother phone" type="tel" />
                 <Field form={form} name="collegeName" label="College / employer" />
                 <Field form={form} name="courseName" label="Course / department" />
               </div>
@@ -374,55 +289,6 @@ export function ResidentOnboardingClient() {
         </Card>
 
         <div className="grid content-start gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <IdCard className="size-4" aria-hidden="true" />
-                Required Documents
-              </CardTitle>
-              <CardDescription>Upload clear images or PDFs where allowed.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              {uploadRecoveryMessage ? (
-                <APIErrorState
-                  title="Upload recovery"
-                  message={uploadRecoveryMessage}
-                  action={
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={"/resident/support?category=upload" as Route}>
-                        Open support
-                      </Link>
-                    </Button>
-                  }
-                />
-              ) : null}
-              <DocumentUploader
-                label="Aadhaar"
-                uploaded={Boolean(resident.aadhaar_document_id)}
-                file={aadhaarFile}
-                onFile={setAadhaarFile}
-                onUpload={() => void uploadFile("aadhaar")}
-                disabled={aadhaarUpload.isPending}
-              />
-              <DocumentUploader
-                label="Profile photo"
-                uploaded={Boolean(resident.profile_image_document_id)}
-                file={photoFile}
-                onFile={setPhotoFile}
-                onUpload={() => void uploadFile("photo")}
-                disabled={photoUpload.isPending}
-              />
-              <DocumentUploader
-                label="Student ID"
-                uploaded={Boolean(resident.student_id_document_id)}
-                file={studentIdFile}
-                onFile={setStudentIdFile}
-                onUpload={() => void uploadFile("student_id")}
-                disabled={studentIdUpload.isPending}
-              />
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Rules and Regulations</CardTitle>
@@ -535,56 +401,6 @@ function Field({
         {...form.register(name)}
       />
       {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
-    </div>
-  )
-}
-
-function DocumentUploader({
-  label,
-  uploaded,
-  file,
-  onFile,
-  onUpload,
-  disabled,
-}: {
-  label: string
-  uploaded: boolean
-  file: File | null
-  onFile: (file: File | null) => void
-  onUpload: () => void
-  disabled: boolean
-}) {
-  return (
-    <div className="rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-xs text-muted-foreground">
-            {uploaded ? "Uploaded" : file?.name ?? "No file selected"}
-          </p>
-        </div>
-        {uploaded ? <CheckCircle2 className="size-4 text-emerald-600" /> : null}
-      </div>
-      <Input
-        type="file"
-        className="mt-3"
-        accept="image/png,image/jpeg,image/webp,application/pdf"
-        onChange={(event) => onFile(event.target.files?.[0] ?? null)}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-3 w-full gap-2"
-        disabled={!file || disabled}
-        onClick={onUpload}
-      >
-        {disabled ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <FileUp className="size-4" aria-hidden="true" />
-        )}
-        Upload {label}
-      </Button>
     </div>
   )
 }

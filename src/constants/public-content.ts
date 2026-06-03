@@ -15,7 +15,6 @@ import type {
 export const publicNavItems: PublicNavItem[] = [
   { title: "Home", href: "/" },
   { title: "About", href: "/about" },
-  { title: "Rooms", href: "/rooms" },
   { title: "Facilities", href: "/facilities" },
   { title: "Gallery", href: "/gallery" },
   { title: "Contact", href: "/contact" },
@@ -27,7 +26,7 @@ export const localSeoLandingLinks = [
   {
     title: "Hostel in Pulivendula",
     href: "/pulivendula-boys-hostel",
-    description: "Compare boys hostel stay options for students and employees near Royals Road.",
+    description: "Compare boys hostel stay options for students and employees near Palem Street and Royals Road.",
   },
   {
     title: "Student hostel in Pulivendula",
@@ -124,19 +123,19 @@ export const fallbackRoomTypes: RoomTypeCard[] = [
 export const fallbackGalleryItems: GalleryItem[] = [
   {
     title: "Exterior",
-    category: "Hostel",
+    category: "exterior-surroundings",
     alt: "Sadhana Boys Hostel exterior view in Pulivendula",
     imageUrl: hostelGalleryImages[0],
   },
   {
     title: "Courtyard",
-    category: "Common area",
+    category: "open-space-terrace",
     alt: "Sadhana Boys Hostel common courtyard area in Pulivendula",
     imageUrl: hostelGalleryImages[2],
   },
   {
     title: "Night view",
-    category: "Hostel",
+    category: "exterior-surroundings",
     alt: "Sadhana Boys Hostel night view in Pulivendula",
     imageUrl: hostelGalleryImages[1],
   },
@@ -154,19 +153,19 @@ export const fallbackGalleryItems: GalleryItem[] = [
   },
   {
     title: "Water facility",
-    category: "Facilities",
+    category: "open-space-terrace",
     alt: "Water facility and common amenities at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[4],
   },
   {
     title: "Dining area",
-    category: "Food",
+    category: "open-space-terrace",
     alt: "Dining area for residents at Sadhana Boys Hostel Pulivendula",
     imageUrl: hostelGalleryImages[3],
   },
   {
     title: "Terrace",
-    category: "Common area",
+    category: "open-space-terrace",
     alt: "Sadhana Boys Hostel terrace common area in Pulivendula",
     imageUrl: hostelGalleryImages[1],
   },

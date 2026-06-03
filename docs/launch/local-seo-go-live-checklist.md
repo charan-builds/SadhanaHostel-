@@ -57,7 +57,7 @@ Keep the business profile consistent with the website:
 
 - Name: `Sadhana Boys Hostel`
 - Category: hostel or lodging category closest to the actual listing options.
-- Address: `C67M+7W2, Royals Rd, Bakarapuram, Pulivendula, Andhra Pradesh 516390, India`
+- Address: `C67M+7W2, Palem Street, Royals Rd, Bakarapuram, Pulivendula, Andhra Pradesh 516390, India`
 - Phone: `7013762904`
 - Website: production domain home page.
 - Map/listing URL: keep aligned with the Google Maps CID used in the site.

@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { hostelModules } from "@/config/hostel-modules"
 import { Input } from "@/components/ui/input"
 import {
   useAutomationDashboard,
@@ -341,27 +342,29 @@ export function AdminAutomationClient() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold">Repair Occupancy</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Close invalid active allocations, repair duplicate room assignments, and recompute vacancy from active residents, reservations, and maintenance blocks.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={repairConsistency.isPending}
-          onClick={() => void runConsistencyRepair("release_stale_allocations")}
-        >
-          {repairConsistency.isPending ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <RotateCcw className="size-4" aria-hidden="true" />
-          )}
-          Repair Occupancy
-        </Button>
-      </section>
+      {hostelModules.roomAllocation ? (
+        <section className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Repair Occupancy</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Close invalid active allocations, repair duplicate room assignments, and recompute vacancy from active residents, reservations, and maintenance blocks.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={repairConsistency.isPending}
+            onClick={() => void runConsistencyRepair("release_stale_allocations")}
+          >
+            {repairConsistency.isPending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RotateCcw className="size-4" aria-hidden="true" />
+            )}
+            Repair Occupancy
+          </Button>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 rounded-lg border border-destructive/30 bg-background p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

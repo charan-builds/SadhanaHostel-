@@ -49,9 +49,8 @@ export function ResidentProfileCard({ resident }: ResidentProfileCardProps) {
         <DetailRow label="Phone" value={resident.phone} />
         <DetailRow label="WhatsApp" value={resident.whatsappNumber ?? resident.phone} />
         <DetailRow label="Aadhaar" value={maskAadhaar(resident.aadhaarNumber)} />
-        <DetailRow label="Parent Name" value={resident.parentName} />
-        <DetailRow label="Parent Phone" value={resident.parentPhone} />
-        <DetailRow label="Emergency Contact" value={resident.emergencyContact} />
+        <DetailRow label="Father Phone" value={resident.parentPhone} />
+        <DetailRow label="Mother Phone" value={resident.emergencyContact} />
         <DetailRow label="Joining Date" value={resident.joiningDate} />
       </div>
 

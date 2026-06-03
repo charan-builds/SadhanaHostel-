@@ -118,7 +118,7 @@ export function ResidentDashboardClient() {
           icon={User}
           label="Profile"
           value={resident.data.status}
-          detail={resident.data.aadhaar_document_id ? "Documents started" : "Aadhaar pending"}
+          detail="Contact and family phone details"
           showStatus
         />
         <ResidentMetric
@@ -159,7 +159,7 @@ export function ResidentDashboardClient() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <QuickAction href="/resident/profile" title="Complete profile" description="Update contacts and upload documents." />
+        <QuickAction href="/resident/profile" title="Complete profile" description="Update contact and family phone details." />
         <QuickAction href="/resident/payments" title="Submit UPI payment" description="Enter reference and upload proof." />
         <QuickAction href="/resident/leave" title="Apply leave" description="Submit dates, reason, destination, and travel mode." />
         <QuickAction

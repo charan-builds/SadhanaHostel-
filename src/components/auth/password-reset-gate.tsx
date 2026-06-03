@@ -39,6 +39,7 @@ import { formatDateTime } from "@/lib/format"
 import { authSdk, type SessionOverview } from "@/sdk"
 import {
   changePasswordSchema,
+  type ChangePasswordFormInput,
   type ChangePasswordInput,
 } from "@/validations/auth.validation"
 
@@ -79,6 +80,7 @@ export function PasswordUpdateCard({
   expiresAt,
   submitLabel = "Update password",
   recoveryMode = false,
+  requireCurrentPassword = false,
   onComplete,
 }: {
   title: string
@@ -86,14 +88,16 @@ export function PasswordUpdateCard({
   expiresAt?: string | null
   submitLabel?: string
   recoveryMode?: boolean
+  requireCurrentPassword?: boolean
   onComplete?: (session: SessionOverview) => void
 }) {
   const { setSession } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [completedSession, setCompletedSession] = useState<SessionOverview | null>(null)
-  const form = useForm<ChangePasswordInput>({
+  const form = useForm<ChangePasswordFormInput, unknown, ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: {
+      currentPassword: "",
       password: "",
       confirmPassword: "",
     },
@@ -193,6 +197,17 @@ export function PasswordUpdateCard({
           ) : null}
 
           <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)}>
+            {requireCurrentPassword ? (
+              <PasswordField
+                id="currentPassword"
+                label="Current password"
+                visible={showPassword}
+                autoComplete="current-password"
+                error={form.formState.errors.currentPassword?.message}
+                onToggle={() => setShowPassword((value) => !value)}
+                registration={form.register("currentPassword")}
+              />
+            ) : null}
             <PasswordField
               id="password"
               label="New password"

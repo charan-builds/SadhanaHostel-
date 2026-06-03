@@ -69,7 +69,7 @@ export function AdminTopbar() {
           />
           <Input
             type="search"
-            placeholder="Search residents, rooms, payments..."
+            placeholder="Search residents, payments, notices..."
             className="h-10 max-w-md bg-white/70 pl-8"
             aria-label="Search admin workspace"
             readOnly

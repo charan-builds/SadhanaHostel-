@@ -96,7 +96,7 @@ export function AdminOnboardingVerificationClient() {
         <CardHeader>
           <CardTitle>Onboarding Worklist</CardTitle>
           <CardDescription>
-            New residents activate when their profile and documents are complete. Use this only
+            New residents activate when their profile and hostel rules are complete. Use this only
             for rejected profiles or older records that were already waiting.
           </CardDescription>
         </CardHeader>
@@ -121,7 +121,7 @@ export function AdminOnboardingVerificationClient() {
           ) : residents.length === 0 && !queue.isLoading ? (
             <EmptyState
               title="No onboarding follow-up needed"
-              message="Residents disappear from this list after completing profile and document upload."
+              message="Residents disappear from this list after completing profile and hostel rules."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border">
@@ -130,7 +130,7 @@ export function AdminOnboardingVerificationClient() {
                   <TableRow>
                     <TableHead>Resident</TableHead>
                     <TableHead>Contact</TableHead>
-                    <TableHead>Documents</TableHead>
+                    <TableHead>Profile</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Actions</TableHead>
@@ -138,10 +138,14 @@ export function AdminOnboardingVerificationClient() {
                 </TableHeader>
                 <TableBody>
                   {residents.map((resident) => {
-                    const docsComplete = Boolean(
-                      resident.aadhaar_document_id &&
-                        resident.profile_image_document_id &&
-                        resident.student_id_document_id
+                    const profileComplete = Boolean(
+                      resident.full_name &&
+                        resident.date_of_birth &&
+                        resident.phone &&
+                        resident.parent_phone &&
+                        resident.emergency_contact_phone &&
+                        resident.permanent_address &&
+                        resident.hostel_id
                     )
                     const ready = resident.onboarding_status === "verification_pending"
 
@@ -160,8 +164,8 @@ export function AdminOnboardingVerificationClient() {
                           </p>
                         </TableCell>
                         <TableCell>
-                          <span className={docsComplete ? "text-emerald-700" : "text-amber-700"}>
-                            {docsComplete ? "All required docs" : "Missing docs"}
+                          <span className={profileComplete ? "text-emerald-700" : "text-amber-700"}>
+                            {profileComplete ? "Profile ready" : "Profile incomplete"}
                           </span>
                         </TableCell>
                         <TableCell>

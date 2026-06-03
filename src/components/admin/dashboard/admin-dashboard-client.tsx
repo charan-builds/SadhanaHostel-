@@ -7,8 +7,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   BarChart3,
-  BedDouble,
-  Building2,
   CalendarDays,
   CircleDollarSign,
   CreditCard,
@@ -51,7 +49,7 @@ import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 import { useRealtimeAdmissions, useRealtimeLeaves, useRealtimePayments } from "@/lib/realtime"
 import { cn } from "@/lib/utils"
-import { useDashboardAnalytics, useLeaves, usePayments, useResidents, useRooms } from "@/hooks"
+import { useDashboardAnalytics, useLeaves, usePayments, useResidents } from "@/hooks"
 
 const dashboardStagger: Variants = {
   hidden: { opacity: 0 },
@@ -87,12 +85,6 @@ export function AdminDashboardClient() {
     hostelId,
   })
   const residents = useResidents({
-    organizationId: organizationId ?? "",
-    hostelId,
-    page: 1,
-    pageSize: 5,
-  })
-  const rooms = useRooms({
     organizationId: organizationId ?? "",
     hostelId,
     page: 1,
@@ -137,10 +129,6 @@ export function AdminDashboardClient() {
   const metrics = analytics.data
   const lifecycle = metrics?.residentLifecycle
   const totalResidents = metrics?.totalResidents ?? residents.data?.meta.total ?? 0
-  const capacity = metrics?.occupancy.capacity ?? 0
-  const occupiedBeds = metrics?.occupancy.occupiedBeds ?? 0
-  const vacantBeds = metrics?.occupancy.vacantBeds ?? 0
-  const occupancyRate = Math.round(metrics?.occupancy.occupancyRate ?? 0)
   const monthlyRevenue = metrics?.finance.monthlyRevenue ?? 0
   const pendingDues = metrics?.finance.pendingDues ?? 0
   const pendingPayments = metrics?.finance.pendingPayments ?? 0
@@ -150,7 +138,6 @@ export function AdminDashboardClient() {
   const activeLeaves = metrics?.operations.activeLeaves ?? 0
   const newAdmissions = metrics?.operations.newAdmissions ?? 0
   const pendingInvites = metrics?.operations.pendingInvites ?? 0
-  const roomsConfigured = rooms.data?.meta.total ?? 0
 
   const operationalAlerts = buildOperationalAlerts({
     registeredResidents: totalResidents,
@@ -159,9 +146,6 @@ export function AdminDashboardClient() {
     pendingPayments,
     newAdmissions,
     pendingInvites,
-    vacantBeds,
-    capacity,
-    roomsConfigured,
   })
 
   const kpis = [
@@ -252,7 +236,7 @@ export function AdminDashboardClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Admin Dashboard"
-        description="Operational overview for student lifecycle, room occupancy, payments, admissions, and onboarding work."
+        description="Operational overview for residents, onboarding, payments, leaves, notices, and support work."
         badge="Live workspace"
         actions={
           <>
@@ -293,13 +277,13 @@ export function AdminDashboardClient() {
                 Hostel health at a glance.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-sidebar-foreground/68">
-                Track occupancy, collections, onboarding work, admissions, and finance review
-                pressure from one command surface.
+                Track residents, collections, onboarding work, payments, and support pressure
+                from one command surface.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <HeroSignal label="Occupancy" value={`${occupancyRate}%`} icon={BedDouble} />
-              <HeroSignal label="Vacant Beds" value={vacantBeds} icon={Building2} />
+              <HeroSignal label="Residents" value={totalResidents} icon={Users} />
+              <HeroSignal label="Payment Queue" value={pendingPayments} icon={CreditCard} />
               <HeroSignal label="Alerts" value={operationalAlerts.length} icon={AlertTriangle} />
             </div>
           </div>
@@ -311,16 +295,7 @@ export function AdminDashboardClient() {
           ))}
         </motion.section>
 
-        <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-          <motion.div variants={dashboardItem}>
-            <OccupancyPanel
-              occupiedBeds={occupiedBeds}
-              capacity={capacity}
-              vacantBeds={vacantBeds}
-              occupancyRate={occupancyRate}
-              roomsConfigured={roomsConfigured}
-            />
-          </motion.div>
+        <section className="grid gap-6">
           <motion.div variants={dashboardItem}>
             <RevenuePanel
               monthlyRevenue={monthlyRevenue}
@@ -450,100 +425,6 @@ function AnimatedKpiCard({
         </div>
       </Link>
     </motion.article>
-  )
-}
-
-function OccupancyPanel({
-  occupiedBeds,
-  capacity,
-  vacantBeds,
-  occupancyRate,
-  roomsConfigured,
-}: {
-  occupiedBeds: number
-  capacity: number
-  vacantBeds: number
-  occupancyRate: number
-  roomsConfigured: number
-}) {
-  const radius = 72
-  const circumference = 2 * Math.PI * radius
-  const progress = Math.min(Math.max(occupancyRate, 0), 100)
-  const dashOffset = circumference - (progress / 100) * circumference
-
-  return (
-    <Card className="h-full">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>Occupancy Visualization</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Live bed utilization across configured hostel rooms.
-            </p>
-          </div>
-          <Badge variant="secondary">{roomsConfigured} rooms</Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-6 md:grid-cols-[220px_1fr] md:items-center">
-          <div className="relative mx-auto size-52">
-            <svg viewBox="0 0 180 180" className="size-full -rotate-90">
-              <circle
-                cx="90"
-                cy="90"
-                r={radius}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="14"
-                className="text-muted"
-              />
-              <motion.circle
-                cx="90"
-                cy="90"
-                r={radius}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="14"
-                strokeLinecap="round"
-                className="text-primary drop-shadow-sm"
-                strokeDasharray={circumference}
-                initial={{ strokeDashoffset: circumference }}
-                animate={{ strokeDashoffset: dashOffset }}
-                transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-4xl font-semibold tracking-tight">{occupancyRate}%</span>
-              <span className="mt-1 text-xs text-muted-foreground">occupied</span>
-            </div>
-          </div>
-          <div className="grid gap-3">
-            <OccupancyStat label="Occupied beds" value={occupiedBeds} tone="success" />
-            <OccupancyStat label="Vacant beds" value={vacantBeds} tone="info" />
-            <OccupancyStat label="Total capacity" value={capacity} tone="neutral" />
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-              />
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function OccupancyStat({ label, value, tone }: { label: string; value: number; tone: Tone }) {
-  return (
-    <div className="flex items-center justify-between rounded-xl border bg-white/55 px-3 py-2">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={cn("rounded-full px-2 py-1 text-sm font-semibold", tonePills[tone])}>
-        {value}
-      </span>
-    </div>
   )
 }
 
@@ -889,19 +770,8 @@ function buildOperationalAlerts(input: {
   pendingPayments: number
   newAdmissions: number
   pendingInvites: number
-  vacantBeds: number
-  capacity: number
-  roomsConfigured: number
 }) {
   const alerts: Array<{ title: string; description: string; href: string }> = []
-
-  if (input.roomsConfigured === 0 || input.capacity === 0) {
-    alerts.push({
-      title: "Room inventory is not configured",
-      description: "Create rooms and student capacity before admitting residents.",
-      href: "/admin/rooms",
-    })
-  }
 
   if (input.onboardingResidents > 0) {
     alerts.push({
@@ -943,18 +813,10 @@ function buildOperationalAlerts(input: {
     })
   }
 
-  if (input.capacity > 0 && input.vacantBeds <= 2) {
-    alerts.push({
-      title: "Low vacancy",
-      description: `${input.vacantBeds} student vacanc${input.vacantBeds === 1 ? "y" : "ies"} remain. Review reservations before confirming more joins.`,
-      href: "/admin/vacancy",
-    })
-  }
-
-  if (input.registeredResidents === 0 && input.roomsConfigured > 0) {
+  if (input.registeredResidents === 0) {
     alerts.push({
       title: "No residents registered yet",
-      description: "Add a resident after admission approval or convert a confirmed reservation.",
+      description: "Add the first resident after admission approval.",
       href: "/admin/residents/new",
     })
   }

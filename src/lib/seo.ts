@@ -19,6 +19,7 @@ export const localSeoKeywords = [
   "employee hostel Pulivendula",
   "working professionals hostel Pulivendula",
   "hostel near Bakarapuram",
+  "hostel near Palem Street Pulivendula",
   "hostel near Royals Road Pulivendula",
   "Pulivendula rooms for students",
   "affordable hostel Pulivendula",
@@ -305,7 +306,7 @@ export function createPublicSiteJsonLd() {
         description: `${hostelConfig.name} is a boys hostel in ${hostelConfig.location.city}, ${hostelConfig.location.state}, with student rooms, employee accommodation, food, WiFi, CCTV, water facilities, and parking support.`,
         address: {
           "@type": "PostalAddress",
-          streetAddress: "Royals Road, Bakarapuram",
+          streetAddress: "Palem Street, Royals Road, Bakarapuram",
           addressLocality: hostelConfig.location.city,
           addressRegion: hostelConfig.location.state,
           postalCode: "516390",
@@ -314,6 +315,7 @@ export function createPublicSiteJsonLd() {
         areaServed: [
           hostelConfig.location.city,
           "Bakarapuram",
+          "Palem Street",
           "Royals Road",
           "Pulivendula Andhra Pradesh",
         ],
@@ -321,9 +323,9 @@ export function createPublicSiteJsonLd() {
         sameAs: [hostelConfig.links.mapSearchHref],
         potentialAction: [
           {
-            "@type": "ReserveAction",
+            "@type": "CommunicateAction",
             target: absoluteUrl("/contact"),
-            name: "Check hostel vacancy",
+            name: "Ask Sadhana Boys Hostel joining details",
           },
           {
             "@type": "CommunicateAction",
@@ -351,7 +353,7 @@ export function createPublicSiteJsonLd() {
             price: hostelConfig.fees.student,
             priceCurrency: "INR",
             availability: "https://schema.org/InStock",
-            url: absoluteUrl("/rooms"),
+            url: absoluteUrl("/contact"),
           },
           {
             "@type": "Offer",
@@ -359,7 +361,7 @@ export function createPublicSiteJsonLd() {
             price: hostelConfig.fees.employee,
             priceCurrency: "INR",
             availability: "https://schema.org/InStock",
-            url: absoluteUrl("/rooms"),
+            url: absoluteUrl("/contact"),
           },
         ],
       },
@@ -476,7 +478,7 @@ export function createAccommodationOfferJsonLd(input: {
       accommodationCategory: "Hostel accommodation",
       address: {
         "@type": "PostalAddress",
-        streetAddress: "Royals Road, Bakarapuram",
+        streetAddress: "Palem Street, Royals Road, Bakarapuram",
         addressLocality: hostelConfig.location.city,
         addressRegion: hostelConfig.location.state,
         postalCode: "516390",

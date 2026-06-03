@@ -21,9 +21,9 @@ const baseResident = {
   emergency_contact_name: "Ramesh Kumar",
   emergency_contact_phone: "9876543211",
   permanent_address: "Hyderabad, Telangana",
-  aadhaar_document_id: "doc-aadhaar",
-  profile_image_document_id: "doc-photo",
-  student_id_document_id: "doc-student",
+  aadhaar_document_id: null,
+  profile_image_document_id: null,
+  student_id_document_id: null,
   status: "active",
   is_active: true,
   user_id: "auth-user-1",
@@ -54,19 +54,23 @@ describe("resident onboarding policy", () => {
     ).toBe(false)
   })
 
-  it("reports missing required identity and document fields", () => {
+  it("reports missing required profile fields without requiring document uploads", () => {
     const requirements = getResidentOnboardingRequirements({
       ...baseResident,
       date_of_birth: null,
+      parent_phone: null,
+      emergency_contact_phone: null,
       aadhaar_document_id: null,
       student_id_document_id: null,
-      onboarding_status: "documents_pending",
+      onboarding_status: "profile_incomplete",
     })
 
     expect(requirements.canSubmitForVerification).toBe(false)
-    expect(requirements.missing).toEqual(
-      expect.arrayContaining(["date_of_birth", "aadhaar_document", "student_id"])
-    )
+    expect(requirements.missing).toContain("date_of_birth")
+    expect(requirements.missing).toContain("father_phone")
+    expect(requirements.missing).toContain("mother_phone")
+    expect(requirements.missing as string[]).not.toContain("aadhaar_document")
+    expect(requirements.missing as string[]).not.toContain("student_id")
     expect(requirements.completionPercent).toBeLessThan(100)
   })
 
@@ -74,7 +78,7 @@ describe("resident onboarding policy", () => {
     const draftResident: ResidentWithOnboarding = {
       ...baseResident,
       status: "draft",
-      onboarding_status: "documents_pending",
+      onboarding_status: "profile_incomplete",
       metadata: {},
     }
 

@@ -8,7 +8,6 @@ import { metadata as facilitiesMetadata } from "@/app/(public)/facilities/page"
 import { metadata as galleryMetadata } from "@/app/(public)/gallery/page"
 import { metadata as homeMetadata } from "@/app/(public)/page"
 import { metadata as pulivendulaHostelMetadata } from "@/app/(public)/pulivendula-boys-hostel/page"
-import { metadata as roomsMetadata } from "@/app/(public)/rooms/page"
 import { metadata as studentHostelMetadata } from "@/app/(public)/student-hostel-pulivendula/page"
 import { metadata as supportMetadata } from "@/app/(public)/support/page"
 import { metadata as termsMetadata } from "@/app/(public)/terms/page"
@@ -16,7 +15,6 @@ import { metadata as termsMetadata } from "@/app/(public)/terms/page"
 const publicPages = [
   { path: "/", metadata: homeMetadata },
   { path: "/about", metadata: aboutMetadata },
-  { path: "/rooms", metadata: roomsMetadata },
   { path: "/facilities", metadata: facilitiesMetadata },
   { path: "/gallery", metadata: galleryMetadata },
   { path: "/contact", metadata: contactMetadata },

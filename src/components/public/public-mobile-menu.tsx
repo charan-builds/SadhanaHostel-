@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { Route } from "next"
-import { BedDouble, Menu, MessageCircle, Navigation, Phone } from "lucide-react"
+import { Menu, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -88,12 +88,6 @@ export function PublicMobileMenu({ currentPathname, logoUrl }: PublicMobileMenuP
 
           <div className="grid gap-2">
             <PublicAuthActions mode="mobile" onNavigate={() => setOpen(false)} />
-            <Button asChild variant="outline" className="justify-start">
-              <Link href={"/contact" as Route} onClick={() => setOpen(false)}>
-                <BedDouble className="size-4" aria-hidden="true" />
-                Check vacancy
-              </Link>
-            </Button>
             <Button asChild className="justify-start">
               <a href={callHref} onClick={() => setOpen(false)}>
                 <Phone className="size-4" aria-hidden="true" />

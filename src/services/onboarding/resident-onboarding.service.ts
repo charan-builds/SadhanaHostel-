@@ -95,19 +95,6 @@ export class ResidentOnboardingService {
       throw conflict("This phone number is already linked to another resident.")
     }
 
-    if (values.aadhaarLast4) {
-      const duplicateAadhaar = await this.residentsRepository.findDuplicateIdentity({
-        organizationId: values.organizationId,
-        residentId: resident.id,
-        aadhaarLast4: values.aadhaarLast4,
-        fullName: values.fullName,
-      })
-
-      if (duplicateAadhaar) {
-        throw conflict("A resident with matching name and Aadhaar details already exists.")
-      }
-    }
-
     const residentMetadata = jsonObjectOrEmpty(resident.metadata)
     const onboardingMetadata = jsonObjectOrEmpty(residentMetadata.onboarding)
     const metadata = {
@@ -116,7 +103,6 @@ export class ResidentOnboardingService {
         ...onboardingMetadata,
         collegeName: values.collegeName,
         courseName: values.courseName,
-        guardianRelation: values.guardianRelation,
         profileUpdatedAt: new Date().toISOString(),
       },
     }
@@ -130,19 +116,14 @@ export class ResidentOnboardingService {
         date_of_birth: values.dateOfBirth,
         phone: values.phone,
         email: values.email ?? null,
-        parent_name: values.parentName,
+        parent_name: "Father",
         parent_phone: values.parentPhone,
-        parent_email: values.parentEmail ?? null,
-        emergency_contact_name: values.emergencyContactName,
+        parent_email: null,
+        emergency_contact_name: "Mother",
         emergency_contact_phone: values.emergencyContactPhone,
         permanent_address: values.permanentAddress,
-        aadhaar_last4: values.aadhaarLast4 ?? null,
         metadata: metadata as Json,
-        onboarding_status: resident.aadhaar_document_id &&
-          resident.profile_image_document_id &&
-          resident.student_id_document_id
-          ? "documents_pending"
-          : "profile_incomplete",
+        onboarding_status: "profile_incomplete",
         updated_by: context.authUser.id,
       }
     )
@@ -173,7 +154,7 @@ export class ResidentOnboardingService {
     const requirements = getResidentOnboardingRequirements(residentWithRulesAcceptance)
 
     if (!requirements.canSubmitForVerification) {
-      throw conflict("Complete all required profile and document items first.", {
+      throw conflict("Complete all required profile and hostel rules items first.", {
         missing: requirements.missing,
       })
     }

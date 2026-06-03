@@ -189,7 +189,7 @@ export function ResidentLeaveClient() {
         <form onSubmit={handleSubmit(submitLeave)} className="rounded-xl border bg-background p-5 shadow-sm">
           <h2 className="text-base font-semibold">Apply Leave</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Submit accurate dates and travel details so admins can notify guardians when needed.
+            Submit accurate dates and travel details so admins can notify your family when needed.
           </p>
 
           {errors.root?.message ? (
@@ -290,7 +290,6 @@ export function ResidentLeaveClient() {
 
 type LeaveResident = Tables<"residents"> & {
   onboarding_status?: string | null
-  student_id_document_id?: string | null
 }
 
 function getLeaveVerificationState(resident: LeaveResident) {
@@ -299,15 +298,9 @@ function getLeaveVerificationState(resident: LeaveResident) {
   if (!resident.full_name) missing.push("Full name")
   if (!resident.date_of_birth) missing.push("Date of birth")
   if (!resident.phone) missing.push("Phone number")
-  if (!resident.parent_name || !resident.parent_phone) missing.push("Guardian details")
-  if (!resident.emergency_contact_name || !resident.emergency_contact_phone) {
-    missing.push("Emergency contact")
-  }
+  if (!resident.parent_phone) missing.push("Father phone")
+  if (!resident.emergency_contact_phone) missing.push("Mother phone")
   if (!resident.permanent_address) missing.push("Permanent address")
-  if (!resident.aadhaar_document_id) missing.push("Aadhaar document")
-  if (!resident.profile_image_document_id) missing.push("Profile photo")
-  if (!resident.student_id_document_id) missing.push("Student ID document")
-  if (!resident.hostel_id) missing.push("Room allocation")
 
   const canApplyLeave =
     resident.onboarding_status === "verified" &&

@@ -14,13 +14,10 @@ const missingLabels: Record<string, string> = {
   full_name: "full name",
   date_of_birth: "date of birth",
   phone: "phone",
-  guardian: "guardian details",
-  emergency_contact: "emergency contact",
+  father_phone: "father phone",
+  mother_phone: "mother phone",
   permanent_address: "permanent address",
-  aadhaar_document: "Aadhaar document",
-  profile_photo: "profile photo",
-  student_id: "student ID",
-  room_allocation: "room allocation",
+  rules_acceptance: "hostel rules acceptance",
 }
 
 export function ResidentProfileReminder() {

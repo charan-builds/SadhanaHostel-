@@ -646,12 +646,19 @@ export class AuthService {
     const values = changePasswordSchema.parse(input)
     const context = await this.getCurrentContext()
     const changedAt = new Date().toISOString()
+    const previousProfileMetadata = recordFromUnknown(context.profile.metadata)
+    const previousAuthMetadata = recordFromUnknown(context.authUser.user_metadata)
+
+    if (!isTemporaryPasswordResetRequired(previousProfileMetadata, previousAuthMetadata)) {
+      await this.verifyCurrentPassword(context, values.currentPassword)
+    }
+
     const profileMetadata = markPasswordResetComplete(
-      recordFromUnknown(context.profile.metadata),
+      previousProfileMetadata,
       changedAt
     )
     const authMetadata = markPasswordResetComplete(
-      recordFromUnknown(context.authUser.user_metadata),
+      previousAuthMetadata,
       changedAt
     )
 
@@ -1270,6 +1277,33 @@ export class AuthService {
 
     return redirectUrl.toString()
   }
+
+  private async verifyCurrentPassword(
+    context: AuthContext,
+    currentPassword: string | undefined
+  ) {
+    if (!currentPassword) {
+      throw badRequest("Current password is required.")
+    }
+
+    const email = context.authUser.email?.trim()
+    const phone = context.authUser.phone?.trim()
+    const credentials = email
+      ? { email, password: currentPassword }
+      : phone
+        ? { phone, password: currentPassword }
+        : null
+
+    if (!credentials) {
+      throw badRequest("Current password cannot be verified for this account.")
+    }
+
+    const { data, error } = await this.db.auth.signInWithPassword(credentials)
+
+    if (error || data.user?.id !== context.authUser.id) {
+      throw forbidden("Current password is incorrect.")
+    }
+  }
 }
 
 async function getBearerTokenFromRequest() {
@@ -1299,6 +1333,18 @@ function getPasswordSecurityState(metadata: unknown): SessionOverview["security"
     temporaryPasswordExpiresAt:
       typeof expiresAt === "string" && expiresAt.trim() ? expiresAt : null,
   }
+}
+
+function isTemporaryPasswordResetRequired(
+  profileMetadata: Record<string, unknown>,
+  authMetadata: Record<string, unknown>
+) {
+  return (
+    profileMetadata.force_password_reset === true ||
+    profileMetadata.temporary_password_active === true ||
+    authMetadata.force_password_reset === true ||
+    authMetadata.temporary_password_active === true
+  )
 }
 
 function markPasswordResetComplete(

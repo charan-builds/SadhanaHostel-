@@ -5,7 +5,6 @@ import Link from "next/link"
 import {
   Bell,
   Bot,
-  Building2,
   CreditCard,
   Edit3,
   Globe,
@@ -114,12 +113,6 @@ const operationLinks: Array<{
     description: "Create, invite, verify, suspend, transfer, mark left, and repair residents.",
     href: "/admin/residents",
     icon: Users,
-  },
-  {
-    title: "Rooms and vacancy",
-    description: "Manage rooms, maintenance, allocation diagnostics, and live vacancy.",
-    href: "/admin/rooms",
-    icon: Building2,
   },
   {
     title: "Payments",
@@ -675,7 +668,7 @@ export function AdminSettingsClient() {
           ) : hostelsQuery.data?.length === 0 ? (
             <EmptyState
               title="No hostel branches yet"
-              message="Create your first hostel branch to unlock room, vacancy, CMS, and payment configuration."
+              message="Create your first hostel branch to unlock CMS, staff access, and payment configuration."
               action={<Button onClick={() => setShowHostelForm(true)}>Create hostel</Button>}
             />
           ) : (
@@ -692,7 +685,6 @@ export function AdminSettingsClient() {
                     <StatusBadge status={hostel.is_active ? "active" : "inactive"} />
                   </div>
                   <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Building2 className="size-4" />
                     {hostel.city || hostel.phone || hostel.email || "Add branch contact and address details."}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">

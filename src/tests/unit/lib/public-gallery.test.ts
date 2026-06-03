@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { fallbackGalleryItems } from "@/constants/public-content"
 import { galleryItems as legacyPublicGalleryItems } from "@/data/public"
-import { pickGalleryImage, pickRoomGalleryImage } from "@/lib/public-gallery"
+import { formatGalleryCategory, pickGalleryImage, pickRoomGalleryImage } from "@/lib/public-gallery"
 import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
 const studentRoom: GalleryItem = {
@@ -56,10 +56,18 @@ describe("public gallery image selection", () => {
     expect(pickGalleryImage([studentRoom, genericRoom], ["room"])).toBe("/generic-room.jpg")
   })
 
-  it("falls back to the generic room only when the employee room slot is missing", () => {
-    expect(pickRoomGalleryImage([studentRoom, genericRoom], employeePlan)).toBe(
+  it("does not use the old generic room category for employee room slots", () => {
+    expect(pickRoomGalleryImage([studentRoom, genericRoom], employeePlan)).not.toBe(
       "/generic-room.jpg"
     )
+  })
+
+  it("formats the five public gallery categories requested by the hostel", () => {
+    expect(formatGalleryCategory("logo")).toBe("Logo")
+    expect(formatGalleryCategory("student-room")).toBe("Student rooms")
+    expect(formatGalleryCategory("employee-room")).toBe("Employee rooms")
+    expect(formatGalleryCategory("open-space-terrace")).toBe("Open space / Terrace")
+    expect(formatGalleryCategory("exterior-surroundings")).toBe("Exterior / Surroundings")
   })
 
   it("keeps fallback gallery copy aligned with actual shared hostel facilities", () => {

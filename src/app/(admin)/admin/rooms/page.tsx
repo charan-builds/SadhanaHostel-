@@ -1,5 +1,5 @@
-import { AdminRoomsClient } from "@/components/admin/rooms/admin-rooms-client"
+import { redirect } from "next/navigation"
 
 export default function AdminRoomsPage() {
-  return <AdminRoomsClient />
+  redirect("/admin/dashboard")
 }

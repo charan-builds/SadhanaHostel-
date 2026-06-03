@@ -5,16 +5,16 @@ export const HOSTEL_TOTAL_CAPACITY = 70
 export const HOSTEL_CONTACT = {
   phone: "7013762904",
   whatsapp: "9346131788",
-  defaultWhatsAppMessage: "Hello, is vacancy there? Are rooms available?",
+  defaultWhatsAppMessage: "Hello, I want to know the joining details for Sadhana Boys Hostel.",
 } as const
 
 export const HOSTEL_LOCATION = {
-  address: "C67M+7W2, Royals Rd, Bakarapuram, Pulivendula, Andhra Pradesh 516390, India",
-  note: "Royals Road, Bakarapuram, Pulivendula",
+  address: "C67M+7W2, Palem Street, Royals Rd, Bakarapuram, Pulivendula, Andhra Pradesh 516390, India",
+  note: "Palem Street, Royals Road, Bakarapuram, Pulivendula",
   city: "Pulivendula",
   state: "Andhra Pradesh",
   country: "India",
-  mapQuery: "Sadhana Boys hostel, C67M+7W2, Royals Rd, Bakarapuram, Andhra Pradesh 516390, India",
+  mapQuery: "Sadhana Boys hostel, C67M+7W2, Palem Street, Royals Rd, Bakarapuram, Andhra Pradesh 516390, India",
   googleMapsCid: "5249046540388198698",
 } as const
 

@@ -27,7 +27,7 @@ export type PublicCmsContent = {
   source: "cms" | "fallback"
 }
 
-export const PUBLIC_CMS_CACHE_TAG = "public-cms-content"
+export const PUBLIC_CMS_CACHE_TAG = "public-cms-content-v2"
 const publicCmsCacheRevalidateSeconds = 60
 
 export const getPublicCmsContent = cache(async (): Promise<PublicCmsContent> => {
@@ -52,7 +52,7 @@ async function loadPublicCmsContent(
   hostelId: string
 ): Promise<PublicCmsContent> {
   try {
-    const service = await WebsiteService.create()
+    const service = WebsiteService.createPublic()
     const [settingsResult, facilitiesResult, galleryResult] = await Promise.allSettled([
       service.listSettings({
         organizationId: organizationId || undefined,

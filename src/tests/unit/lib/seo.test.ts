@@ -161,7 +161,8 @@ describe("SEO URL helpers", () => {
         expect(localBusiness?.potentialAction).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              "@type": "ReserveAction",
+              "@type": "CommunicateAction",
+              name: "Ask Sadhana Boys Hostel joining details",
               target: "https://sadhanaboyshostel.in/contact",
             }),
           ])

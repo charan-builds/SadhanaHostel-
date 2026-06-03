@@ -63,7 +63,7 @@ export function LaunchReadinessClient() {
     <div className="grid gap-6">
       <PageHeader
         title="Launch Readiness"
-        description="Soft-launch safeguards, diagnostics, metrics, rollback readiness, and support controls for the first real hostel rollout."
+        description="Maintenance-mode status, environment checks, payment safety, support alerts, and rollback controls for keeping the website stable."
         badge={data?.launchConfig.mode ? humanizeEnum(data.launchConfig.mode) : "Checking"}
         actions={
           <Button
@@ -96,7 +96,7 @@ export function LaunchReadinessClient() {
         <StatCard
           title="Feature Flags"
           value={data?.launchConfig.featureFlags.enabled.length ?? 0}
-          description="Enabled launch modules"
+          description="Enabled safety modules"
           icon={ShieldCheck}
           tone="info"
         />
@@ -181,7 +181,7 @@ export function LaunchReadinessClient() {
         <CardHeader>
           <CardTitle>Launch Metrics</CardTitle>
           <CardDescription>
-            Daily pilot metrics for activation, onboarding, payments, occupancy, and dues.
+            Daily operating metrics for resident activation, onboarding, payments, and dues.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -225,7 +225,7 @@ export function LaunchReadinessClient() {
             <GuideItem label="Soft-launch checklist" file="docs/launch/soft-launch-checklist.md" />
             <GuideItem label="Support handbook" file="docs/operations/support-handbook.md" />
             <GuideItem label="Incident response guide" file="docs/operations/incident-response-guide.md" />
-            <GuideItem label="First 30 days operations guide" file="docs/operations/first-30-days-operations-guide.md" />
+            <GuideItem label="Maintenance and incident guide" file="docs/operations/incident-response-guide.md" />
             <GuideItem label="Final hardening runbook" file="docs/launch/final-production-hardening-runbook.md" />
             <p className="pt-2 text-xs text-muted-foreground">
               Last checked {data?.generatedAt ? formatDateTime(data.generatedAt) : "-"}

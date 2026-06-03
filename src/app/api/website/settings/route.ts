@@ -1,12 +1,10 @@
-import { revalidateTag } from "next/cache"
-
 import {
   errorResponse,
   getQueryParams,
   parseJsonBody,
   successResponse,
 } from "@/lib/api"
-import { PUBLIC_CMS_CACHE_TAG } from "@/lib/cms/public-cms"
+import { revalidatePublicCmsContent } from "@/lib/cms/revalidate-public-cms"
 import { WebsiteService } from "@/services/website.service"
 
 export const dynamic = "force-dynamic"
@@ -27,7 +25,7 @@ export async function PATCH(request: Request) {
     const service = await WebsiteService.create()
     const setting = await service.updateSetting(await parseJsonBody(request))
 
-    revalidateTag(PUBLIC_CMS_CACHE_TAG, { expire: 0 })
+    revalidatePublicCmsContent()
 
     return successResponse(setting, "Website setting updated successfully.")
   } catch (error) {

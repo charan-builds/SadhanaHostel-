@@ -20,13 +20,6 @@ const publicRoutes: Array<{
     images: [hostelImages.hero, hostelImages.exterior, hostelImages.gate],
   },
   {
-    path: "/rooms",
-    changeFrequency: "weekly",
-    priority: 0.95,
-    lastModified: publicSiteContentLastModified,
-    images: [hostelImages.uploadedRooms, hostelImages.building],
-  },
-  {
     path: "/pulivendula-boys-hostel",
     changeFrequency: "weekly",
     priority: 0.98,

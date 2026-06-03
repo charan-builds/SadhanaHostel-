@@ -19,8 +19,6 @@ describe("ResidentOnboardingService", () => {
       ...residentFixture({
       date_of_birth: "2000-01-01",
       permanent_address: "Sadhana Boys Hostel, Pulivendula, Andhra Pradesh",
-      aadhaar_document_id: "doc-aadhaar",
-      profile_image_document_id: "doc-photo",
       status: "draft",
       metadata: {
         onboarding: {
@@ -28,8 +26,7 @@ describe("ResidentOnboardingService", () => {
         },
       },
       }),
-      student_id_document_id: "doc-student",
-      onboarding_status: "documents_pending",
+      onboarding_status: "profile_incomplete",
     }
     const completedResident: ResidentWithOnboarding = {
       ...resident,

@@ -1,11 +1,11 @@
 -- Allow owner-controlled demo resets to clean already-corrupted tenant-linkage rows.
 --
 -- Some staging/demo records can be inconsistent before the reset starts. Deleting
--- a payment can set document.payment_id to null, and deleting a document can set
--- invoice.pdf_document_id to null; both are implemented by FK-triggered updates.
--- Tenant validation triggers then re-check the old corrupted links and block the
--- reset. The wrapper below keeps the original owner/service-role checks in the
--- core reset function, but suspends only tenant-linkage validation triggers while
+-- a payment can set document.payment_id to null, and deleting an invoice can set
+-- document.invoice_id to null before the selected documents are removed. FK
+-- updates can therefore trip tenant-validation triggers or receipt/PDF document
+-- scope checks. The wrapper below keeps the original owner/service-role checks in
+-- the core reset function, but suspends only those reset-time validations while
 -- the selected reset rows are removed.
 
 begin;
@@ -47,6 +47,9 @@ begin
     );
   end if;
 
+  execute 'alter table public.documents drop constraint if exists documents_payment_receipt_scope_chk';
+  execute 'alter table public.documents drop constraint if exists documents_invoice_pdf_scope_chk';
+
   execute 'alter table public.room_allocations disable trigger validate_room_allocations_tenant_scope';
   execute 'alter table public.monthly_fee_records disable trigger validate_monthly_fee_records_tenant_scope';
   execute 'alter table public.invoices disable trigger validate_invoices_tenant_scope';
@@ -64,6 +67,33 @@ begin
     p_confirmation
   );
 
+  execute $sql$
+    alter table public.documents
+      add constraint documents_payment_receipt_scope_chk
+      check (
+        document_type <> 'payment_receipt'::public.document_type_enum
+        or (
+          bucket_name = 'payment-screenshots'
+          and resident_id is not null
+          and payment_id is not null
+          and is_public is false
+        )
+      ) not valid
+  $sql$;
+  execute $sql$
+    alter table public.documents
+      add constraint documents_invoice_pdf_scope_chk
+      check (
+        document_type <> 'invoice_pdf'::public.document_type_enum
+        or (
+          bucket_name = 'invoices'
+          and resident_id is not null
+          and invoice_id is not null
+          and is_public is false
+        )
+      ) not valid
+  $sql$;
+
   execute 'alter table public.reservation_payments enable trigger validate_reservation_payments_tenant_scope';
   execute 'alter table public.resident_invites enable trigger validate_resident_invites_tenant_scope';
   execute 'alter table public.documents enable trigger validate_documents_tenant_scope';
@@ -76,6 +106,35 @@ begin
   return v_result;
 exception
   when others then
+    execute 'alter table public.documents drop constraint if exists documents_payment_receipt_scope_chk';
+    execute 'alter table public.documents drop constraint if exists documents_invoice_pdf_scope_chk';
+    execute $sql$
+      alter table public.documents
+        add constraint documents_payment_receipt_scope_chk
+        check (
+          document_type <> 'payment_receipt'::public.document_type_enum
+          or (
+            bucket_name = 'payment-screenshots'
+            and resident_id is not null
+            and payment_id is not null
+            and is_public is false
+          )
+        ) not valid
+    $sql$;
+    execute $sql$
+      alter table public.documents
+        add constraint documents_invoice_pdf_scope_chk
+        check (
+          document_type <> 'invoice_pdf'::public.document_type_enum
+          or (
+            bucket_name = 'invoices'
+            and resident_id is not null
+            and invoice_id is not null
+            and is_public is false
+          )
+        ) not valid
+    $sql$;
+
     execute 'alter table public.reservation_payments enable trigger validate_reservation_payments_tenant_scope';
     execute 'alter table public.resident_invites enable trigger validate_resident_invites_tenant_scope';
     execute 'alter table public.documents enable trigger validate_documents_tenant_scope';
@@ -89,7 +148,7 @@ end;
 $$;
 
 comment on function public.reset_resident_operational_data_for_staging(uuid, uuid, uuid, boolean, text) is
-  'Owner/service-role staging reset wrapper. Temporarily suspends tenant-linkage validation triggers so already-corrupted demo rows can be removed, then re-enables them.';
+  'Owner/service-role staging reset wrapper. Temporarily suspends tenant-linkage validation triggers and reset-time document receipt/PDF scope checks so already-corrupted demo rows can be removed, then restores them.';
 
 revoke execute on function public.reset_resident_operational_data_for_staging_core(uuid, uuid, uuid, boolean, text)
 from public, anon, authenticated;
