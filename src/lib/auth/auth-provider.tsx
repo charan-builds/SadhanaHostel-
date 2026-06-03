@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -17,6 +18,7 @@ import type { SessionOverview } from "@/sdk"
 
 import {
   anonymousSessionOverview,
+  hasBrowserSupabaseSessionCookie,
   loadSessionOverview,
   subscribeToSessionChanges,
 } from "./session-manager"
@@ -32,24 +34,34 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  loadSessionOnMount = true,
+}: {
+  children: ReactNode
+  loadSessionOnMount?: boolean
+}) {
   const queryClient = useQueryClient()
   const previousOrganizationId = useRef<string | null>(null)
+  const [shouldLoadSession, setShouldLoadSession] = useState(loadSessionOnMount)
   const sessionQuery = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: loadSessionOverview,
     staleTime: 30_000,
     retry: false,
+    enabled: shouldLoadSession,
   })
 
   const setSession = useCallback(
     (session: SessionOverview) => {
+      setShouldLoadSession(true)
       queryClient.setQueryData(queryKeys.auth.session, session)
     },
     [queryClient]
   )
 
   const refreshSession = useCallback(async () => {
+    setShouldLoadSession(true)
     const session = await queryClient.fetchQuery({
       queryKey: queryKeys.auth.session,
       queryFn: loadSessionOverview,
@@ -81,9 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearTenantQueries()
         }
 
+        if (!loadSessionOnMount && !hasBrowserSupabaseSessionCookie()) {
+          return
+        }
+
+        setShouldLoadSession(true)
         refreshSessionSafely()
       }),
-    [clearTenantQueries, queryClient, refreshSessionSafely]
+    [clearTenantQueries, loadSessionOnMount, queryClient, refreshSessionSafely]
   )
 
   useEffect(
@@ -91,21 +108,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscribeToApiAuthFailures(() => {
         queryClient.setQueryData(queryKeys.auth.session, anonymousSessionOverview())
         clearTenantQueries()
+
+        if (!loadSessionOnMount && !hasBrowserSupabaseSessionCookie()) {
+          return
+        }
+
+        setShouldLoadSession(true)
         refreshSessionSafely()
       }),
-    [clearTenantQueries, queryClient, refreshSessionSafely]
+    [clearTenantQueries, loadSessionOnMount, queryClient, refreshSessionSafely]
   )
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session: sessionQuery.data ?? null,
-      isLoading: sessionQuery.isLoading,
+      isLoading: shouldLoadSession && sessionQuery.isLoading,
       isAuthenticated: Boolean(sessionQuery.data?.authenticated),
       organizationId: sessionQuery.data?.organizationId ?? null,
       setSession,
       refreshSession,
     }),
-    [refreshSession, sessionQuery.data, sessionQuery.isLoading, setSession]
+    [refreshSession, sessionQuery.data, sessionQuery.isLoading, setSession, shouldLoadSession]
   )
 
   useEffect(() => {

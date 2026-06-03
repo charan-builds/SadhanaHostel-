@@ -1,4 +1,5 @@
 import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
+import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 
 export type OnboardingRequirementKey =
   | "full_name"
@@ -11,6 +12,7 @@ export type OnboardingRequirementKey =
   | "profile_photo"
   | "student_id"
   | "room_allocation"
+  | "rules_acceptance"
 
 export type ResidentOnboardingRequirements = {
   status: string
@@ -38,8 +40,11 @@ export function getResidentOnboardingRequirements(
   if (!resident.profile_image_document_id) missing.push("profile_photo")
   if (!resident.student_id_document_id) missing.push("student_id")
   if (!resident.hostel_id) missing.push("room_allocation")
+  if (!hasAcceptedCurrentHostelRules(resident) && !isResidentOperationallyVerified(resident)) {
+    missing.push("rules_acceptance")
+  }
 
-  const totalRequirements = 10
+  const totalRequirements = 11
   const completionPercent = Math.round(
     ((totalRequirements - missing.length) / totalRequirements) * 100
   )
@@ -82,4 +87,22 @@ export function isResidentSelfOnboardingComplete(resident: ResidentWithOnboardin
     Boolean(resident.user_id) &&
     !resident.checkout_on
   )
+}
+
+export function hasAcceptedCurrentHostelRules(resident: ResidentWithOnboarding) {
+  const metadata = recordFromUnknown(resident.metadata)
+  const onboarding = recordFromUnknown(metadata.onboarding)
+  const acceptance = recordFromUnknown(onboarding.hostelRulesAcceptance)
+
+  return (
+    acceptance.accepted === true &&
+    acceptance.version === HOSTEL_RULES_VERSION &&
+    typeof acceptance.acceptedAt === "string"
+  )
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 }

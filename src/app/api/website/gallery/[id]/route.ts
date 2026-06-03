@@ -1,8 +1,11 @@
+import { revalidateTag } from "next/cache"
+
 import {
   errorResponse,
   getQueryParams,
   successResponse,
 } from "@/lib/api"
+import { PUBLIC_CMS_CACHE_TAG } from "@/lib/cms/public-cms"
 import { WebsiteService } from "@/services/website.service"
 
 export const dynamic = "force-dynamic"
@@ -20,6 +23,8 @@ export async function DELETE(request: Request, context: GalleryRouteContext) {
       galleryItemId: id,
       organizationId: String(organizationId),
     })
+
+    revalidateTag(PUBLIC_CMS_CACHE_TAG, { expire: 0 })
 
     return successResponse(item, "Gallery image removed successfully.")
   } catch (error) {

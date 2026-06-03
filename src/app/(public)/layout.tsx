@@ -7,7 +7,7 @@ import { createPublicSiteJsonLd } from "@/lib/seo"
 
 export default function PublicLayout({ children }: { children: ReactNode }) {
   return (
-    <SessionProviders>
+    <SessionProviders loadSessionOnMount={false}>
       <JsonLd data={createPublicSiteJsonLd()} />
       <PublicShell>{children}</PublicShell>
     </SessionProviders>

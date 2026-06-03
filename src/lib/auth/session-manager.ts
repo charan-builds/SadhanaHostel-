@@ -4,16 +4,29 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { FrontendApiError } from "@/lib/api-client"
 import { authSdk, type SessionOverview } from "@/sdk"
 
+const SUPABASE_AUTH_COOKIE_PATTERN = /^sb-[^=;\s]+-auth-token(?:\.\d+)?$/
+
 export async function loadSessionOverview() {
   try {
     return await authSdk.session()
   } catch (error) {
-    if (error instanceof FrontendApiError && error.status === 401) {
+    if (error instanceof FrontendApiError && isAnonymousSessionStatus(error.status)) {
       return anonymousSessionOverview()
     }
 
     throw error
   }
+}
+
+export function hasBrowserSupabaseSessionCookie() {
+  if (typeof document === "undefined") {
+    return false
+  }
+
+  return document.cookie
+    .split(";")
+    .map((cookie) => cookie.trim().split("=")[0])
+    .some((cookieName) => SUPABASE_AUTH_COOKIE_PATTERN.test(cookieName))
 }
 
 export function subscribeToSessionChanges(callback: (event: string) => void) {
@@ -55,6 +68,10 @@ export function anonymousSessionOverview(): SessionOverview {
       temporaryPasswordExpiresAt: null,
     },
   }
+}
+
+function isAnonymousSessionStatus(status: number) {
+  return status === 401 || status === 404
 }
 
 export function resolveHomeRoute(session: SessionOverview | null) {

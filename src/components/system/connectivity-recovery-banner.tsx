@@ -31,7 +31,9 @@ export function ConnectivityRecoveryBanner() {
 
   useEffect(() => {
     function refreshTenantState() {
-      void refreshSession()
+      if (isAuthenticated || hadAuthenticatedSession || organizationId) {
+        void refreshSession()
+      }
 
       if (organizationId) {
         void queryClient.invalidateQueries({
@@ -65,7 +67,7 @@ export function ConnectivityRecoveryBanner() {
       window.removeEventListener("offline", syncOnlineState)
       window.removeEventListener("focus", refreshOnFocus)
     }
-  }, [hadAuthenticatedSession, organizationId, queryClient, refreshSession])
+  }, [hadAuthenticatedSession, isAuthenticated, organizationId, queryClient, refreshSession])
 
   if (!isOffline && !sessionExpired) {
     return null

@@ -4,6 +4,7 @@ import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent, logger } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
   ResidentsRepository,
   type ResidentWithOnboarding,
@@ -22,6 +23,7 @@ import {
 import { assertFound, AuthService } from "../auth.service"
 import {
   getResidentOnboardingRequirements,
+  hasAcceptedCurrentHostelRules,
   isResidentOperationallyVerified,
 } from "./resident-onboarding.policy"
 
@@ -106,9 +108,12 @@ export class ResidentOnboardingService {
       }
     }
 
+    const residentMetadata = jsonObjectOrEmpty(resident.metadata)
+    const onboardingMetadata = jsonObjectOrEmpty(residentMetadata.onboarding)
     const metadata = {
-      ...jsonObjectOrEmpty(resident.metadata),
+      ...residentMetadata,
       onboarding: {
+        ...onboardingMetadata,
         collegeName: values.collegeName,
         courseName: values.courseName,
         guardianRelation: values.guardianRelation,
@@ -161,7 +166,11 @@ export class ResidentOnboardingService {
       )) as ResidentWithOnboarding | null,
       "Resident profile is not linked to this account yet."
     )
-    const requirements = getResidentOnboardingRequirements(resident)
+    const residentWithRulesAcceptance = withHostelRulesAcceptance(
+      resident,
+      context.authUser.id
+    )
+    const requirements = getResidentOnboardingRequirements(residentWithRulesAcceptance)
 
     if (!requirements.canSubmitForVerification) {
       throw conflict("Complete all required profile and document items first.", {
@@ -170,7 +179,7 @@ export class ResidentOnboardingService {
     }
 
     const updated = await this.completeOnboardingWithoutAdminReview(
-      resident,
+      residentWithRulesAcceptance,
       values.organizationId,
       context.authUser.id
     )
@@ -185,6 +194,8 @@ export class ResidentOnboardingService {
       details: {
         completionMode: "resident_self_completion",
         adminReviewRequired: false,
+        hostelRulesAccepted: true,
+        hostelRulesVersion: HOSTEL_RULES_VERSION,
       },
     })
 
@@ -206,6 +217,7 @@ export class ResidentOnboardingService {
       resident.id,
       organizationId,
       {
+        metadata: resident.metadata as Json,
         onboarding_status: "verified",
         onboarding_rejection_reason: null,
         onboarding_completed_at: resident.onboarding_completed_at ?? now,
@@ -339,12 +351,40 @@ export class ResidentOnboardingService {
   }
 }
 
-function jsonObjectOrEmpty(value: Json): Record<string, unknown> {
+function jsonObjectOrEmpty(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {}
   }
 
-  return value
+  return value as Record<string, unknown>
+}
+
+function withHostelRulesAcceptance(
+  resident: ResidentWithOnboarding,
+  actorUserId: string
+): ResidentWithOnboarding {
+  if (hasAcceptedCurrentHostelRules(resident)) {
+    return resident
+  }
+
+  const metadata = jsonObjectOrEmpty(resident.metadata)
+  const onboarding = jsonObjectOrEmpty(metadata.onboarding)
+
+  return {
+    ...resident,
+    metadata: {
+      ...metadata,
+      onboarding: {
+        ...onboarding,
+        hostelRulesAcceptance: {
+          accepted: true,
+          version: HOSTEL_RULES_VERSION,
+          acceptedAt: new Date().toISOString(),
+          acceptedByUserId: actorUserId,
+        },
+      },
+    } as Json,
+  }
 }
 
 function getRequestedRoomAssignment(resident: ResidentWithOnboarding) {

@@ -4,6 +4,7 @@ import {
   onboardingProfileBaseSchema,
   onboardingProfileFormSchema,
   onboardingProfileSchema,
+  onboardingSubmitSchema,
 } from "@/validations/onboarding.validation"
 import { TEST_ORGANIZATION_ID } from "@/tests/fixtures"
 
@@ -64,5 +65,23 @@ describe("onboarding validation schemas", () => {
     await expect(
       import("@/components/resident/onboarding/resident-onboarding-client")
     ).resolves.toHaveProperty("ResidentOnboardingClient")
+  })
+
+  it("requires residents to accept hostel rules before submitting onboarding", () => {
+    expect(() =>
+      onboardingSubmitSchema.parse({
+        organizationId: TEST_ORGANIZATION_ID,
+      })
+    ).toThrow(/Accept hostel rules/)
+
+    expect(
+      onboardingSubmitSchema.parse({
+        organizationId: TEST_ORGANIZATION_ID,
+        rulesAccepted: true,
+      })
+    ).toEqual({
+      organizationId: TEST_ORGANIZATION_ID,
+      rulesAccepted: true,
+    })
   })
 })

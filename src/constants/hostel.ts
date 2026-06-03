@@ -23,6 +23,8 @@ export const HOSTEL_FEES = {
   employee: 5000,
 } as const
 
+export const HOSTEL_RULES_VERSION = "2026-06-02"
+
 export const HOSTEL_RULES = [
   "Electronic devices such as iron boxes and heaters are not allowed.",
   "If residents get 3 days or more holidays, they must go home. They are not allowed to stay in the hostel if holidays are 3 days or above.",

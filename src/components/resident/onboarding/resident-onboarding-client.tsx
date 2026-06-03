@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
+import { HOSTEL_RULES, HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
   useDocumentUpload,
   useProfilePhotoUpload,
@@ -59,6 +60,7 @@ const missingLabels: Record<string, string> = {
   profile_photo: "Profile photo",
   student_id: "Student ID",
   room_allocation: "Room allocation",
+  rules_acceptance: "Hostel rules acceptance",
 }
 
 export function ResidentOnboardingClient() {
@@ -72,6 +74,7 @@ export function ResidentOnboardingClient() {
   const [aadhaarFile, setAadhaarFile] = useState<File | null>(null)
   const [studentIdFile, setStudentIdFile] = useState<File | null>(null)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [rulesAcceptedOverride, setRulesAcceptedOverride] = useState(false)
   const [uploadRecoveryMessage, setUploadRecoveryMessage] = useState<string | null>(null)
 
   const resident = onboarding.data?.resident
@@ -158,6 +161,12 @@ export function ResidentOnboardingClient() {
   }
 
   const onboardingComplete = requirements.canAccessResidentOperations
+  const rulesAccepted =
+    rulesAcceptedOverride || hasAcceptedCurrentHostelRules(resident)
+  const effectiveMissing = requirements.missing.filter(
+    (item) => item !== "rules_acceptance" || !rulesAccepted
+  )
+  const canFinishOnboarding = effectiveMissing.length === 0
 
   async function saveProfile(values: FormValues) {
     if (!organizationId) {
@@ -241,8 +250,15 @@ export function ResidentOnboardingClient() {
       return
     }
 
+    if (!rulesAccepted) {
+      form.setError("root", {
+        message: "Accept hostel rules and regulations before continuing.",
+      })
+      return
+    }
+
     try {
-      await submitOnboarding.mutateAsync({ organizationId })
+      await submitOnboarding.mutateAsync({ organizationId, rulesAccepted: true })
       await onboarding.refetch()
       toast.success("Onboarding complete. Your dashboard is ready.")
     } catch (error) {
@@ -409,17 +425,55 @@ export function ResidentOnboardingClient() {
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Rules and Regulations</CardTitle>
+              <CardDescription>
+                Read and accept these hostel rules before continuing.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <ol className="grid gap-3 text-sm leading-6 text-muted-foreground">
+                {HOSTEL_RULES.map((rule, index) => (
+                  <li key={rule} className="grid grid-cols-[1.75rem_1fr] gap-2">
+                    <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <span className="pt-0.5">{rule}</span>
+                  </li>
+                ))}
+              </ol>
+              <label className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 shrink-0 accent-primary"
+                  checked={rulesAccepted}
+                  disabled={onboardingComplete}
+                  onChange={(event) => setRulesAcceptedOverride(event.target.checked)}
+                />
+                <span>
+                  I have read and accept the hostel rules and regulations, including the
+                  no-refund rule after joining.
+                </span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Rules version {HOSTEL_RULES_VERSION}. Acceptance is saved with your onboarding
+                record.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">Missing Items</CardTitle>
               <CardDescription>Complete these to activate your dashboard.</CardDescription>
             </CardHeader>
             <CardContent>
-              {requirements.missing.length === 0 ? (
+              {effectiveMissing.length === 0 ? (
                 <div className="rounded-lg border bg-emerald-50 p-3 text-sm text-emerald-700">
                   All requirements are complete.
                 </div>
               ) : (
                 <ul className="grid gap-2 text-sm">
-                  {requirements.missing.map((item) => (
+                  {effectiveMissing.map((item) => (
                     <li key={item} className="rounded-lg border p-2">
                       {missingLabels[item] ?? item}
                     </li>
@@ -430,7 +484,7 @@ export function ResidentOnboardingClient() {
                 className="mt-4 w-full gap-2"
                 disabled={
                   onboardingComplete ||
-                  !requirements.canCompleteOnboarding ||
+                  !canFinishOnboarding ||
                   submitOnboarding.isPending
                 }
                 onClick={() => void submitForVerification()}
@@ -533,4 +587,30 @@ function DocumentUploader({
       </Button>
     </div>
   )
+}
+
+function hasAcceptedCurrentHostelRules(resident: NonNullable<ReturnType<typeof useResidentOnboarding>["data"]>["resident"]) {
+  if (
+    resident.onboarding_status === "verified" &&
+    resident.status === "active" &&
+    resident.is_active !== false
+  ) {
+    return true
+  }
+
+  const metadata = objectFromUnknown(resident.metadata)
+  const onboarding = objectFromUnknown(metadata.onboarding)
+  const acceptance = objectFromUnknown(onboarding.hostelRulesAcceptance)
+
+  return (
+    acceptance.accepted === true &&
+    acceptance.version === HOSTEL_RULES_VERSION &&
+    typeof acceptance.acceptedAt === "string"
+  )
+}
+
+function objectFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 }

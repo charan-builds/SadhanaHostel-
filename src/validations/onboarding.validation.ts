@@ -82,6 +82,9 @@ export const onboardingStatusQuerySchema = z.object({
 
 export const onboardingSubmitSchema = z.object({
   organizationId: uuidSchema,
+  rulesAccepted: z.literal(true, {
+    message: "Accept hostel rules and regulations before continuing.",
+  }),
 })
 
 export const onboardingQueueSchema = paginationSchema.extend({

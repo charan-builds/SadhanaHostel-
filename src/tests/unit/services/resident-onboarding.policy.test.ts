@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
+import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
   getResidentOnboardingRequirements,
+  hasAcceptedCurrentHostelRules,
   isResidentOperationallyVerified,
 } from "@/services/onboarding/resident-onboarding.policy"
 
@@ -66,5 +68,36 @@ describe("resident onboarding policy", () => {
       expect.arrayContaining(["date_of_birth", "aadhaar_document", "student_id"])
     )
     expect(requirements.completionPercent).toBeLessThan(100)
+  })
+
+  it("requires hostel rules acceptance before self-onboarding completion", () => {
+    const draftResident: ResidentWithOnboarding = {
+      ...baseResident,
+      status: "draft",
+      onboarding_status: "documents_pending",
+      metadata: {},
+    }
+
+    expect(getResidentOnboardingRequirements(draftResident).missing).toContain(
+      "rules_acceptance"
+    )
+
+    const acceptedResident: ResidentWithOnboarding = {
+      ...draftResident,
+      metadata: {
+        onboarding: {
+          hostelRulesAcceptance: {
+            accepted: true,
+            version: HOSTEL_RULES_VERSION,
+            acceptedAt: "2026-06-02T00:00:00.000Z",
+          },
+        },
+      },
+    }
+
+    expect(hasAcceptedCurrentHostelRules(acceptedResident)).toBe(true)
+    expect(getResidentOnboardingRequirements(acceptedResident).missing).not.toContain(
+      "rules_acceptance"
+    )
   })
 })

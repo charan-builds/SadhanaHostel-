@@ -1,5 +1,8 @@
 import "server-only"
 
+import { cache } from "react"
+import { unstable_cache } from "next/cache"
+
 import {
   fallbackFacilities,
   fallbackGalleryItems,
@@ -24,10 +27,30 @@ export type PublicCmsContent = {
   source: "cms" | "fallback"
 }
 
-export async function getPublicCmsContent(): Promise<PublicCmsContent> {
+export const PUBLIC_CMS_CACHE_TAG = "public-cms-content"
+const publicCmsCacheRevalidateSeconds = 60
+
+export const getPublicCmsContent = cache(async (): Promise<PublicCmsContent> => {
   const organizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
   const hostelId = process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID
 
+  return getCachedPublicCmsContent(organizationId || "", hostelId || "")
+})
+
+const getCachedPublicCmsContent = unstable_cache(
+  async (organizationId: string, hostelId: string): Promise<PublicCmsContent> =>
+    loadPublicCmsContent(organizationId, hostelId),
+  [PUBLIC_CMS_CACHE_TAG],
+  {
+    revalidate: publicCmsCacheRevalidateSeconds,
+    tags: [PUBLIC_CMS_CACHE_TAG],
+  }
+)
+
+async function loadPublicCmsContent(
+  organizationId: string,
+  hostelId: string
+): Promise<PublicCmsContent> {
   try {
     const service = await WebsiteService.create()
     const [settingsResult, facilitiesResult, galleryResult] = await Promise.allSettled([

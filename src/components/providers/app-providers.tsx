@@ -22,9 +22,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
   )
 }
 
-export function SessionProviders({ children }: { children: ReactNode }) {
+export function SessionProviders({
+  children,
+  loadSessionOnMount = true,
+}: {
+  children: ReactNode
+  loadSessionOnMount?: boolean
+}) {
   return (
-    <AuthProvider>
+    <AuthProvider loadSessionOnMount={loadSessionOnMount}>
       <SentryContextSync />
       <ConnectivityRecoveryBanner />
       <RealtimeProvider>{children}</RealtimeProvider>
