@@ -38,7 +38,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { hostelConfig } from "@/constants/hostel"
-import { useSupportRequests } from "@/hooks"
+import { useOperationalAlerts, useSupportRequests } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { humanizeEnum } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -103,7 +103,19 @@ export function AdminSidebar() {
     page: 1,
     pageSize: 1,
   })
+  const operationalAlerts = useOperationalAlerts({
+    organizationId: organizationId ?? undefined,
+    hostelId,
+  })
   const passwordResetCount = passwordResetRequests.data?.meta.total ?? 0
+  const operationalAlertCount = operationalAlerts.data?.length ?? 0
+  const operationalAlertTone = operationalAlerts.data?.some(
+    (alert) => alert.severity === "critical"
+  )
+    ? "bg-destructive"
+    : operationalAlertCount > 0
+      ? "bg-warning"
+      : "bg-success"
   const sidebarNotifications = [
     {
       title: "Password resets",
@@ -111,7 +123,12 @@ export function AdminSidebar() {
       count: passwordResetRequests.isLoading ? "..." : String(passwordResetCount),
       tone: passwordResetCount > 0 ? "bg-destructive" : "bg-success",
     },
-    { title: "Operational alerts", href: "/admin/alerts", count: "3", tone: "bg-warning" },
+    {
+      title: "Operational alerts",
+      href: "/admin/alerts",
+      count: operationalAlerts.isLoading ? "..." : String(operationalAlertCount),
+      tone: operationalAlertTone,
+    },
     { title: "Launch readiness", href: "/admin/launch-readiness", count: "New", tone: "bg-info" },
   ] as const
   const initials = useMemo(

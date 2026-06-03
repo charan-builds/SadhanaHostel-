@@ -619,10 +619,22 @@ export class SupportService {
     if (consistency.summaries.critical > 0 || consistency.summaries.high > 0) {
       const priorityFindings = consistency.findings
         .filter((finding) => finding.severity === "critical" || finding.severity === "high")
-        .slice(0, 3)
+      const affectedRecordCount = priorityFindings.reduce(
+        (total, finding) => total + Math.max(0, finding.count),
+        0
+      )
+      const summarizedFindings = priorityFindings.slice(0, 3)
+      const remainingAffectedRecordCount = priorityFindings
+        .slice(3)
+        .reduce((total, finding) => total + Math.max(0, finding.count), 0)
       const findingSummary = priorityFindings.length
-        ? priorityFindings
+        ? summarizedFindings
             .map((finding) => `${finding.title} (${finding.count})`)
+            .concat(
+              remainingAffectedRecordCount > 0
+                ? [`${remainingAffectedRecordCount} more affected records`]
+                : []
+            )
             .join("; ")
         : "Review the latest consistency findings."
 
@@ -631,7 +643,7 @@ export class SupportService {
         severity: consistency.summaries.critical > 0 ? "critical" : "high",
         title: priorityFindings[0]?.title ?? "Operational consistency needs repair",
         description: findingSummary,
-        count: consistency.summaries.critical + consistency.summaries.high,
+        count: affectedRecordCount || consistency.summaries.critical + consistency.summaries.high,
         href: "/admin/operations/automation",
         ctaLabel: "Open automation",
       })
@@ -650,7 +662,7 @@ export class SupportService {
       })
     }
 
-    return alerts
+    return alerts.sort(compareOperationalAlerts)
   }
 
   private async resolveSupportScope(
@@ -1056,6 +1068,23 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>
+}
+
+function compareOperationalAlerts(a: OperationalAlert, b: OperationalAlert) {
+  const severityRank: Record<OperationalAlert["severity"], number> = {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+  }
+
+  const severityDelta = severityRank[a.severity] - severityRank[b.severity]
+
+  if (severityDelta !== 0) {
+    return severityDelta
+  }
+
+  return b.count - a.count
 }
 
 function maskLast4(value: string) {
