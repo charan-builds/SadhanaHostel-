@@ -463,7 +463,7 @@ describe("PaymentsService", () => {
       })
     )
     expect(ledger.billing.generatedCurrentDue).toBe(true)
-    expect(ledger.billing.nextDueDate).toBe("2026-06-01")
+    expect(ledger.billing.nextDueDate).toBe("2026-07-01")
     expect(ledger.totals.currentDue).toBe(5000)
   })
 
@@ -551,7 +551,7 @@ describe("PaymentsService", () => {
       })
     )
     expect(ledger.primaryDueRecord?.id).toBe(mayDue.id)
-    expect(ledger.billing.nextDueDate).toBe("2026-05-01")
+    expect(ledger.billing.nextDueDate).toBe("2026-07-01")
     expect(ledger.totals.currentDue).toBe(10000)
   })
 

@@ -948,8 +948,6 @@ export class PaymentsService {
         currentDueDate: billing.currentDueDate,
         nextDueDate: resolveNextDueDate({
           billing,
-          unpaidFeeRecords,
-          feeRecords: feeRecords.data,
         }),
         generatedCurrentDue,
       },
@@ -1890,24 +1888,17 @@ function jsonObject(value: Json): Record<string, Json> {
 
 function resolveNextDueDate(input: {
   billing: BillingContext
-  unpaidFeeRecords: Array<Tables<"monthly_fee_records">>
-  feeRecords: Array<Tables<"monthly_fee_records">>
 }) {
-  const currentRecord = input.feeRecords.find(
-    (record) => record.period_month === input.billing.currentPeriodMonth
-  )
-  const currentRecordIsClosed =
-    currentRecord && !["pending", "partial", "overdue"].includes(currentRecord.status)
+  const today = todayDateOnly()
 
-  if (currentRecordIsClosed) {
-    return input.billing.nextPeriodDueDate
+  if (
+    input.billing.currentDueDate &&
+    !isDateBefore(input.billing.currentDueDate, today)
+  ) {
+    return input.billing.currentDueDate
   }
 
-  if (input.unpaidFeeRecords.length > 0) {
-    return input.unpaidFeeRecords[0]?.due_date ?? input.billing.currentDueDate
-  }
-
-  return input.billing.currentDueDate
+  return input.billing.nextPeriodDueDate
 }
 
 function buildDuePeriodsThroughCurrent(input: {
@@ -1982,6 +1973,10 @@ function buildDueDateForMonth(year: number, monthIndex: number, billingDay: numb
 
 function isDateOnOrBefore(left: string, right: string) {
   return left <= right
+}
+
+function isDateBefore(left: string, right: string) {
+  return left < right
 }
 
 function pad2(value: number) {
