@@ -41,10 +41,26 @@ const createResidentBaseSchema = z.object({
   advancePaymentMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
   advanceManualReference: z.string().trim().max(120).optional(),
   advanceNotes: z.string().trim().max(1000).optional(),
+  firstMonthFeeStatus: z.enum(["not_paid", "paid"]).optional(),
   firstMonthFeeAmount: moneySchema.optional(),
   firstMonthFeeMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
   firstMonthFeeManualReference: z.string().trim().max(120).optional(),
   firstMonthFeeNotes: z.string().trim().max(1000).optional(),
+  openingMonthlyFees: z
+    .array(
+      z.object({
+        periodMonth: z
+          .string()
+          .regex(/^\d{4}-\d{2}-01$/, "Use the first day of the billing month."),
+        status: z.enum(["not_paid", "paid"]),
+        amount: moneySchema,
+        method: z.enum(["cash", "bank_transfer"]).default("cash"),
+        manualReference: z.string().trim().max(120).optional(),
+        notes: z.string().trim().max(1000).optional(),
+      })
+    )
+    .max(12, "Record at most 12 previous monthly fees during quick admission.")
+    .default([]),
   roomId: uuidSchema.optional(),
   bedLabel: z.string().trim().max(40).optional(),
   allocatedFrom: dateOnlySchema.optional(),
@@ -65,6 +81,14 @@ export const createResidentSchema = createResidentBaseSchema.superRefine(
       })
     }
 
+    if (value.firstMonthFeeStatus === "paid" && value.firstMonthFeeAmount === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["firstMonthFeeAmount"],
+        message: "First month fee amount is required when marked as paid.",
+      })
+    }
+
     if (value.firstMonthFeeAmount !== undefined && value.firstMonthFeeAmount <= 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -72,6 +96,27 @@ export const createResidentSchema = createResidentBaseSchema.superRefine(
         message: "First month fee amount must be greater than 0 when marked as paid.",
       })
     }
+
+    const months = new Set<string>()
+
+    value.openingMonthlyFees.forEach((fee, index) => {
+      if (months.has(fee.periodMonth)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["openingMonthlyFees", index, "periodMonth"],
+          message: "Each previous month can only be recorded once.",
+        })
+      }
+      months.add(fee.periodMonth)
+
+      if (fee.status === "paid" && fee.amount <= 0) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["openingMonthlyFees", index, "amount"],
+          message: "Enter the paid amount for this month.",
+        })
+      }
+    })
   }
 )
 
@@ -91,6 +136,8 @@ export const updateResidentSchema = createResidentBaseSchema
     firstMonthFeeMethod: true,
     firstMonthFeeManualReference: true,
     firstMonthFeeNotes: true,
+    firstMonthFeeStatus: true,
+    openingMonthlyFees: true,
     joinedOn: true,
     inviteDeliveryChannel: true,
     inviteExpiresInHours: true,

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { HOSTEL_FEES } from "@/constants/hostel"
 import { ResidentsService } from "@/services/residents.service"
 import {
+  FEE_RECORD_ID,
+  paymentFixture,
   residentFixture,
   RESIDENT_ID,
   ROOM_ID,
@@ -73,11 +76,31 @@ function createServiceHarness() {
       ],
     }),
   }
+  const paymentsRepository = {
+    create: vi.fn(),
+    createFeeRecord: vi.fn(),
+    findByIdempotencyKey: vi.fn().mockResolvedValue(null),
+    findFeeRecordByResidentPeriod: vi.fn().mockResolvedValue(null),
+    getById: vi.fn(),
+    updateInvoiceLink: vi.fn(),
+    updateFeeRecord: vi.fn(),
+  }
+  const realtimeService = {
+    paymentStatusChanged: vi.fn(),
+    dashboardRefresh: vi.fn(),
+  }
+  const invoicesService = {
+    generatePaymentReceiptInvoice: vi.fn().mockResolvedValue({ id: "invoice-receipt-1" }),
+    generateVerifiedMonthlyFeePaymentInvoice: vi.fn().mockResolvedValue({ id: "invoice-fee-1" }),
+  }
   const service = new ResidentsService({} as never, {
     authService: authService as never,
     residentsRepository: residentsRepository as never,
     residentInviteService: residentInviteService as never,
     operationsRepository: operationsRepository as never,
+    paymentsRepository: paymentsRepository as never,
+    realtimeService: realtimeService as never,
+    invoicesService: invoicesService as never,
   })
   const roomsRepository = {
     allocateRoomAtomic: vi.fn(),
@@ -94,6 +117,41 @@ function createServiceHarness() {
     residentInviteService,
     operationsRepository,
     roomsRepository,
+    paymentsRepository,
+    realtimeService,
+    invoicesService,
+  }
+}
+
+function monthlyFeeRecordFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: FEE_RECORD_ID,
+    organization_id: TEST_ORGANIZATION_ID,
+    hostel_id: TEST_HOSTEL_ID,
+    resident_id: RESIDENT_ID,
+    period_month: "2026-05-01",
+    due_date: "2026-05-01",
+    base_amount: 6500,
+    total_amount: 6500,
+    paid_amount: 0,
+    balance_amount: 6500,
+    status: "pending",
+    notes: null,
+    metadata: {},
+    is_active: true,
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    created_by: null,
+    updated_by: null,
+    deleted_at: null,
+    deleted_by: null,
+    adjustment_amount: 0,
+    advance_adjustment_amount: 0,
+    discount_amount: 0,
+    penalty_amount: 0,
+    generated_at: "2026-05-01T00:00:00.000Z",
+    room_allocation_id: null,
+    ...overrides,
   }
 }
 
@@ -204,6 +262,114 @@ describe("ResidentsService", () => {
       })
     )
     expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
+  })
+
+  it("records previous monthly paid and unpaid status during quick admission", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({
+      status: "draft",
+      joined_on: "2026-04-01",
+    })
+    const mayRecord = monthlyFeeRecordFixture({
+      id: "fee-record-may",
+      period_month: "2026-05-01",
+      base_amount: HOSTEL_FEES.student,
+      total_amount: HOSTEL_FEES.student,
+      balance_amount: HOSTEL_FEES.student,
+    })
+    const juneRecord = monthlyFeeRecordFixture({
+      id: "fee-record-june",
+      period_month: "2026-06-01",
+      base_amount: HOSTEL_FEES.student,
+      total_amount: HOSTEL_FEES.student,
+      balance_amount: HOSTEL_FEES.student,
+    })
+    const mayPayment = paymentFixture({
+      id: "payment-may",
+      monthly_fee_record_id: "fee-record-may",
+      amount: HOSTEL_FEES.student,
+      method: "cash",
+      status: "verified",
+      invoice_id: null,
+    })
+    const mayPaymentWithInvoice = paymentFixture({
+      ...mayPayment,
+      invoice_id: "invoice-fee-1",
+    })
+
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.paymentsRepository.createFeeRecord
+      .mockResolvedValueOnce(mayRecord)
+      .mockResolvedValueOnce(juneRecord)
+    harness.paymentsRepository.create.mockResolvedValue(mayPayment)
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(mayPaymentWithInvoice)
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Existing Resident",
+        phone: "+91 90000 01014",
+        residentType: "student",
+        monthlyFeeAmount: 6500,
+        securityDepositAmount: 0,
+        joinedOn: "2026-04-01",
+        openingMonthlyFees: [
+          {
+            periodMonth: "2026-05-01",
+            status: "paid",
+            amount: HOSTEL_FEES.student,
+            method: "cash",
+          },
+          {
+            periodMonth: "2026-06-01",
+            status: "not_paid",
+            amount: HOSTEL_FEES.student,
+            method: "cash",
+          },
+        ],
+      })
+    ).resolves.toMatchObject({
+      resident: draftResident,
+      openingMonthFeePayments: [mayPaymentWithInvoice],
+    })
+
+    expect(harness.paymentsRepository.createFeeRecord).toHaveBeenCalledTimes(2)
+    expect(harness.paymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        period_month: "2026-05-01",
+        balance_amount: HOSTEL_FEES.student,
+        status: "pending",
+      })
+    )
+    expect(harness.paymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        period_month: "2026-06-01",
+        balance_amount: HOSTEL_FEES.student,
+        status: "pending",
+      })
+    )
+    expect(harness.paymentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        monthly_fee_record_id: "fee-record-may",
+        amount: HOSTEL_FEES.student,
+        method: "cash",
+        status: "verified",
+        idempotency_key: `resident-admission-opening-month-${draftResident.id}-2026-05-01`,
+      })
+    )
+    expect(harness.paymentsRepository.updateFeeRecord).toHaveBeenCalledWith(
+      "fee-record-may",
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        paid_amount: HOSTEL_FEES.student,
+        balance_amount: 0,
+        status: "paid",
+      })
+    )
   })
 
   it("returns operational duplicate guidance before insert", async () => {

@@ -42,9 +42,9 @@ export function useCreateResident() {
 
   return useMutation({
     mutationFn: (input: CreateResidentInput) => residentsSdk.create(input),
-    onSuccess: ({ resident, advancePayment, firstMonthFeePayment }) => {
+    onSuccess: ({ resident, advancePayment, firstMonthFeePayment, openingMonthFeePayments }) => {
       invalidateResidentOperationalState(queryClient, resident.organization_id, resident.hostel_id)
-      const recordedPayment = firstMonthFeePayment ?? advancePayment
+      const recordedPayment = firstMonthFeePayment ?? advancePayment ?? openingMonthFeePayments[0]
 
       if (recordedPayment) {
         void queryClient.invalidateQueries({

@@ -5,7 +5,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import { Banknote, Copy, ExternalLink, KeyRound, Loader2, MessageCircle, Save, UserPlus } from "lucide-react"
 import type { ReactNode } from "react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -72,6 +72,14 @@ const residentFormSchema = z.object({
   firstMonthFeeMethod: z.enum(["cash", "bank_transfer"]).default("cash"),
   firstMonthFeeManualReference: optionalTextSchema.pipe(z.string().max(120).optional()),
   firstMonthFeeNotes: optionalTextSchema.pipe(z.string().max(1000).optional()),
+  openingMonthlyFees: z.array(z.object({
+    periodMonth: z.string(),
+    status: z.enum(["not_paid", "paid"]),
+    amount: z.coerce.number().nonnegative(),
+    method: z.enum(["cash", "bank_transfer"]).default("cash"),
+    manualReference: optionalTextSchema.pipe(z.string().max(120).optional()),
+    notes: optionalTextSchema.pipe(z.string().max(1000).optional()),
+  })).default([]),
   roomId: z.string().uuid("Choose an available room.").optional().or(z.literal("")),
   bedLabel: optionalTextSchema.pipe(z.string().max(40).optional()),
   allocatedFrom: optionalTextSchema,
@@ -146,6 +154,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
     handleSubmit,
     setValue,
     setError,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<ResidentFormInput, unknown, ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
@@ -174,6 +183,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       firstMonthFeeMethod: "cash",
       firstMonthFeeManualReference: "",
       firstMonthFeeNotes: "",
+      openingMonthlyFees: [],
       roomId: "",
       bedLabel: "",
       allocatedFrom: new Date().toISOString().slice(0, 10),
@@ -185,6 +195,36 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   const advancePaymentStatus = useWatch({ control, name: "advancePaymentStatus" })
   const firstMonthFeeStatus = useWatch({ control, name: "firstMonthFeeStatus" })
   const currentMonthlyFee = useWatch({ control, name: "monthlyFeeAmount" })
+  const joinedOnValue = useWatch({ control, name: "joinedOn" })
+  const openingMonthlyFees = useWatch({ control, name: "openingMonthlyFees" }) ?? []
+  const openingMonthOptions = useMemo(
+    () => (isCreate ? buildOpeningMonthOptions(joinedOnValue) : []),
+    [isCreate, joinedOnValue]
+  )
+
+  useEffect(() => {
+    if (!isCreate) {
+      return
+    }
+
+    const existingByMonth = new Map(
+      (getValues("openingMonthlyFees") ?? []).map((fee) => [fee.periodMonth, fee])
+    )
+    const nextFees = openingMonthOptions.map((month) => {
+      const existing = existingByMonth.get(month.periodMonth)
+
+      return {
+        periodMonth: month.periodMonth,
+        status: existing?.status ?? "not_paid",
+        amount: existing?.amount ?? currentMonthlyFee,
+        method: existing?.method ?? "cash",
+        manualReference: existing?.manualReference ?? "",
+        notes: existing?.notes ?? "",
+      }
+    })
+
+    setValue("openingMonthlyFees", nextFees, { shouldValidate: true })
+  }, [currentMonthlyFee, getValues, isCreate, openingMonthOptions, setValue])
 
   async function onSubmit(values: ResidentFormValues) {
     if (!organizationId || !hostelId) {
@@ -259,9 +299,11 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             advanceNotes: values.advanceNotes || undefined,
             firstMonthFeeAmount:
               values.firstMonthFeeStatus === "paid" ? values.firstMonthFeeAmount : undefined,
+            firstMonthFeeStatus: values.firstMonthFeeStatus,
             firstMonthFeeMethod: values.firstMonthFeeMethod,
             firstMonthFeeManualReference: values.firstMonthFeeManualReference || undefined,
             firstMonthFeeNotes: values.firstMonthFeeNotes || undefined,
+            openingMonthlyFees: values.openingMonthlyFees,
             roomId: values.roomId || undefined,
             bedLabel: undefined,
             allocatedFrom: values.allocatedFrom || undefined,
@@ -588,6 +630,126 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                 </Field>
               </div>
             ) : null}
+            {openingMonthlyFees.length > 0 ? (
+              <div className="mt-5 border-t pt-4">
+                <div className="text-sm">
+                  <p className="font-medium text-foreground">Previous monthly fee status</p>
+                  <p className="mt-1 text-muted-foreground">
+                    For residents joining from an earlier month, mark each monthly fee as
+                    paid or not paid so dues start correctly.
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-4">
+                  {openingMonthlyFees.map((fee, index) => {
+                    const month = openingMonthOptions[index]
+                    const status = fee.status
+                    const feeErrors = errors.openingMonthlyFees?.[index]
+
+                    return (
+                      <div key={fee.periodMonth} className="rounded-lg border bg-background p-3">
+                        <input
+                          type="hidden"
+                          {...register(`openingMonthlyFees.${index}.periodMonth`)}
+                        />
+                        <div className="grid gap-4 md:grid-cols-[1fr_160px_180px] md:items-start">
+                          <div className="text-sm">
+                            <p className="font-medium text-foreground">
+                              {month?.label ?? formatPeriodMonth(fee.periodMonth)}
+                            </p>
+                            <p className="mt-1 text-muted-foreground">
+                              Billing month {formatPeriodMonth(fee.periodMonth)}
+                            </p>
+                          </div>
+                          <Field
+                            id={`openingMonthlyFees.${index}.amount`}
+                            label="Fee amount"
+                            error={feeErrors?.amount?.message}
+                          >
+                            <Input
+                              id={`openingMonthlyFees.${index}.amount`}
+                              type="number"
+                              {...register(`openingMonthlyFees.${index}.amount`)}
+                            />
+                          </Field>
+                          <Field
+                            id={`openingMonthlyFees.${index}.status`}
+                            label="Status"
+                            error={feeErrors?.status?.message}
+                          >
+                            <Controller
+                              control={control}
+                              name={`openingMonthlyFees.${index}.status`}
+                              render={({ field }) => (
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <SelectTrigger
+                                    id={`openingMonthlyFees.${index}.status`}
+                                    className="h-9 w-full"
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="not_paid">Not paid</SelectItem>
+                                    <SelectItem value="paid">Paid</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            />
+                          </Field>
+                        </div>
+                        {status === "paid" ? (
+                          <div className="mt-4 grid gap-4 md:grid-cols-3">
+                            <Field
+                              id={`openingMonthlyFees.${index}.method`}
+                              label="Payment method"
+                              error={feeErrors?.method?.message}
+                            >
+                              <Controller
+                                control={control}
+                                name={`openingMonthlyFees.${index}.method`}
+                                render={({ field }) => (
+                                  <Select value={field.value} onValueChange={field.onChange}>
+                                    <SelectTrigger
+                                      id={`openingMonthlyFees.${index}.method`}
+                                      className="h-9 w-full"
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="cash">Cash</SelectItem>
+                                      <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              />
+                            </Field>
+                            <Field
+                              id={`openingMonthlyFees.${index}.manualReference`}
+                              label="Reference"
+                              error={feeErrors?.manualReference?.message}
+                            >
+                              <Input
+                                id={`openingMonthlyFees.${index}.manualReference`}
+                                {...register(`openingMonthlyFees.${index}.manualReference`)}
+                              />
+                            </Field>
+                            <Field
+                              id={`openingMonthlyFees.${index}.notes`}
+                              label="Notes"
+                              error={feeErrors?.notes?.message}
+                            >
+                              <Input
+                                id={`openingMonthlyFees.${index}.notes`}
+                                {...register(`openingMonthlyFees.${index}.notes`)}
+                              />
+                            </Field>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {!resident && hostelModules.roomAllocation ? (
@@ -888,6 +1050,42 @@ function parseDuplicateDetails(details: unknown): DuplicateResidentDetails | nul
   }
 
   return null
+}
+
+function buildOpeningMonthOptions(joinedOn?: string) {
+  if (!joinedOn || !/^\d{4}-\d{2}-\d{2}$/.test(joinedOn)) {
+    return []
+  }
+
+  const [year, month] = joinedOn.split("-").map(Number)
+  const current = new Date()
+  const cursor = new Date(Date.UTC(year, month, 1))
+  const currentMonth = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1))
+  const months: Array<{ periodMonth: string; label: string }> = []
+  let monthNumber = 2
+
+  while (cursor <= currentMonth && months.length < 12) {
+    const periodMonth = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-01`
+
+    months.push({
+      periodMonth,
+      label: `Month ${monthNumber} · ${formatPeriodMonth(periodMonth)}`,
+    })
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+    monthNumber += 1
+  }
+
+  return months
+}
+
+function formatPeriodMonth(periodMonth: string) {
+  const date = new Date(`${periodMonth.slice(0, 7)}-01T00:00:00.000Z`)
+
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
 }
 
 function Field({

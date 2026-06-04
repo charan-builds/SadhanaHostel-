@@ -13,6 +13,7 @@ import { OperationsRepository } from "@/repositories/operations.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository, type ResidentWithOnboarding } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import type { Json } from "@/types/database"
 import { UsersRepository } from "@/repositories/users.repository"
 import type { ResidentInviteCreated } from "@/types/invites"
 import type { ResidentCreateResult, ResidentPasswordResetResult } from "@/types/residents"
@@ -239,7 +240,8 @@ export class ResidentsService {
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     if (
       ((values.advancePaymentAmount && values.advancePaymentAmount > 0) ||
-        (values.firstMonthFeeAmount && values.firstMonthFeeAmount > 0)) &&
+        (values.firstMonthFeeAmount && values.firstMonthFeeAmount > 0) ||
+        values.openingMonthlyFees.some((fee) => fee.status === "paid")) &&
       !anyRoleHasPermission(context.roles, "finance.manage")
     ) {
       throw forbidden("Finance permission is required to record admission payments.")
@@ -270,6 +272,11 @@ export class ResidentsService {
       currentResident,
       context.authUser.id
     )
+    const openingMonthFeePayments = await this.recordAdmissionOpeningMonthlyFees(
+      values,
+      currentResident,
+      context.authUser.id
+    )
     const advancePayment = await this.recordAdmissionAdvancePayment(
       values,
       currentResident,
@@ -278,7 +285,7 @@ export class ResidentsService {
 
     await this.publishResidentEvent("resident.created", currentResident, context.authUser.id)
     await this.publishAdmissionPaymentEvents(
-      [firstMonthFeePayment, advancePayment],
+      [firstMonthFeePayment, advancePayment, ...openingMonthFeePayments],
       context.authUser.id
     )
 
@@ -287,6 +294,7 @@ export class ResidentsService {
       invite,
       advancePayment,
       firstMonthFeePayment,
+      openingMonthFeePayments,
     }
   }
 
@@ -295,7 +303,7 @@ export class ResidentsService {
     resident: { id: string; organization_id: string; hostel_id: string | null },
     actorUserId: string
   ): Promise<PaymentRow | null> {
-    if (!values.firstMonthFeeAmount || values.firstMonthFeeAmount <= 0) {
+    if (!values.firstMonthFeeStatus) {
       return null
     }
 
@@ -306,6 +314,36 @@ export class ResidentsService {
     const joinedOn = values.joinedOn ?? new Date().toISOString().slice(0, 10)
     const periodMonth = periodMonthForDate(joinedOn)
     const idempotencyKey = `resident-admission-first-month-${resident.id}-${periodMonth}`
+    const monthlyFee = resolveResidentMonthlyFee(
+      values.residentType,
+      values.monthlyFeeAmount
+    )
+    const paidAmount = values.firstMonthFeeStatus === "paid"
+      ? values.firstMonthFeeAmount ?? monthlyFee
+      : 0
+
+    if (paidAmount <= 0) {
+      await this.ensureAdmissionMonthlyFeeRecord({
+        organizationId: values.organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+        periodMonth,
+        dueDate: joinedOn,
+        monthlyFee,
+        paidAmount: 0,
+        notes: "First month fee marked not paid during quick admission.",
+        metadata: {
+          source: "resident_quick_admission",
+          generated_for_initial_collection: true,
+          billing_cycle_start: joinedOn,
+          opening_status: "not_paid",
+        },
+        actorUserId,
+      })
+
+      return null
+    }
+
     const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
       values.organizationId,
       idempotencyKey
@@ -315,48 +353,34 @@ export class ResidentsService {
       return this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId)
     }
 
-    const monthlyFee = resolveResidentMonthlyFee(
-      values.residentType,
-      values.monthlyFeeAmount
-    )
-    const existingFeeRecord = await this.paymentsRepository.findFeeRecordByResidentPeriod(
-      values.organizationId,
-      resident.id,
-      periodMonth
-    )
-    const feeRecord =
-      existingFeeRecord ??
-      (await this.paymentsRepository.createFeeRecord({
-        organization_id: values.organizationId,
-        hostel_id: resident.hostel_id,
-        resident_id: resident.id,
-        period_month: periodMonth,
-        due_date: joinedOn,
-        base_amount: monthlyFee,
-        total_amount: monthlyFee,
-        balance_amount: monthlyFee,
-        status: monthlyFee === 0 ? "paid" : "pending",
-        notes: "First month fee generated from quick admission.",
-        metadata: {
-          source: "resident_quick_admission",
-          generated_for_initial_collection: true,
-          billing_cycle_start: joinedOn,
-        },
-        created_by: actorUserId,
-        updated_by: actorUserId,
-      }))
+    const feeRecord = await this.ensureAdmissionMonthlyFeeRecord({
+      organizationId: values.organizationId,
+      hostelId: resident.hostel_id,
+      residentId: resident.id,
+      periodMonth,
+      dueDate: joinedOn,
+      monthlyFee,
+      paidAmount: 0,
+      notes: "First month fee generated from quick admission.",
+      metadata: {
+        source: "resident_quick_admission",
+        generated_for_initial_collection: true,
+        billing_cycle_start: joinedOn,
+      },
+      actorUserId,
+    })
     const now = new Date().toISOString()
-    const paidAmount = Math.min(
+    const newPaidAmount = Math.min(
       feeRecord.total_amount,
-      feeRecord.paid_amount + values.firstMonthFeeAmount
+      feeRecord.paid_amount + paidAmount
     )
-    const balanceAmount = Math.max(0, feeRecord.total_amount - paidAmount)
+    const balanceAmount = Math.max(0, feeRecord.total_amount - newPaidAmount)
     const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: resident.hostel_id,
       resident_id: resident.id,
       monthly_fee_record_id: feeRecord.id,
-      amount: values.firstMonthFeeAmount,
+      amount: paidAmount,
       method: values.firstMonthFeeMethod,
       status: "verified",
       idempotency_key: idempotencyKey,
@@ -386,14 +410,160 @@ export class ResidentsService {
       feeRecord.id,
       values.organizationId,
       {
-        paid_amount: paidAmount,
+        paid_amount: newPaidAmount,
         balance_amount: balanceAmount,
-        status: balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "pending",
+        status: balanceAmount === 0 ? "paid" : newPaidAmount > 0 ? "partial" : "pending",
         updated_by: actorUserId,
       }
     )
 
     return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
+  }
+
+  private async recordAdmissionOpeningMonthlyFees(
+    values: ReturnType<typeof createResidentSchema.parse>,
+    resident: { id: string; organization_id: string; hostel_id: string | null },
+    actorUserId: string
+  ): Promise<PaymentRow[]> {
+    if (values.openingMonthlyFees.length === 0) {
+      return []
+    }
+
+    if (!resident.hostel_id) {
+      throw conflict("Resident hostel is required before recording previous monthly fees.")
+    }
+
+    const monthlyFee = resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount)
+    const payments: PaymentRow[] = []
+
+    for (const fee of values.openingMonthlyFees) {
+      const dueDate = fee.periodMonth
+      const existingRecord = await this.ensureAdmissionMonthlyFeeRecord({
+        organizationId: values.organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+        periodMonth: fee.periodMonth,
+        dueDate,
+        monthlyFee,
+        paidAmount: 0,
+        notes:
+          fee.status === "paid"
+            ? "Previous monthly fee marked paid during quick admission."
+            : "Previous monthly fee marked not paid during quick admission.",
+        metadata: {
+          source: "resident_quick_admission",
+          opening_month_fee: true,
+          opening_status: fee.status,
+        },
+        actorUserId,
+      })
+
+      if (fee.status !== "paid") {
+        continue
+      }
+
+      const idempotencyKey = `resident-admission-opening-month-${resident.id}-${fee.periodMonth}`
+      const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
+        values.organizationId,
+        idempotencyKey
+      )
+
+      if (existingPayment) {
+        payments.push(await this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId))
+        continue
+      }
+
+      const now = new Date().toISOString()
+      const paidAmount = Math.min(existingRecord.total_amount, existingRecord.paid_amount + fee.amount)
+      const balanceAmount = Math.max(0, existingRecord.total_amount - paidAmount)
+      const payment = await this.paymentsRepository.create({
+        organization_id: values.organizationId,
+        hostel_id: resident.hostel_id,
+        resident_id: resident.id,
+        monthly_fee_record_id: existingRecord.id,
+        amount: fee.amount,
+        method: fee.method,
+        status: "verified",
+        idempotency_key: idempotencyKey,
+        manual_reference: normalizeOptionalText(fee.manualReference) ?? null,
+        notes:
+          normalizeOptionalText(fee.notes) ??
+          `Previous monthly fee collected for ${fee.periodMonth}.`,
+        is_advance: false,
+        is_partial: balanceAmount > 0,
+        provider: "admin_quick_admission",
+        paid_at: now,
+        verified_at: now,
+        verified_by: actorUserId,
+        received_by: actorUserId,
+        metadata: {
+          idempotency_key: idempotencyKey,
+          source: "resident_quick_admission",
+          opening_month_fee: true,
+          period_month: fee.periodMonth,
+        },
+        created_by: actorUserId,
+        updated_by: actorUserId,
+      })
+
+      await this.paymentsRepository.updateFeeRecord(
+        existingRecord.id,
+        values.organizationId,
+        {
+          paid_amount: paidAmount,
+          balance_amount: balanceAmount,
+          status: balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "pending",
+          updated_by: actorUserId,
+        }
+      )
+
+      payments.push(await this.ensureAdmissionPaymentInvoice(payment, actorUserId))
+    }
+
+    return payments
+  }
+
+  private async ensureAdmissionMonthlyFeeRecord(input: {
+    organizationId: string
+    hostelId: string
+    residentId: string
+    periodMonth: string
+    dueDate: string
+    monthlyFee: number
+    paidAmount: number
+    notes: string
+    metadata: { [key: string]: Json | undefined }
+    actorUserId: string
+  }) {
+    const existingFeeRecord = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+      input.organizationId,
+      input.residentId,
+      input.periodMonth
+    )
+
+    if (existingFeeRecord) {
+      return existingFeeRecord
+    }
+
+    const paidAmount = Math.min(input.monthlyFee, input.paidAmount)
+    const balanceAmount = Math.max(0, input.monthlyFee - paidAmount)
+
+    return this.paymentsRepository.createFeeRecord({
+      organization_id: input.organizationId,
+      hostel_id: input.hostelId,
+      resident_id: input.residentId,
+      period_month: input.periodMonth,
+      due_date: input.dueDate,
+      base_amount: input.monthlyFee,
+      total_amount: input.monthlyFee,
+      paid_amount: paidAmount,
+      balance_amount: balanceAmount,
+      status: balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "pending",
+      notes: input.notes,
+      metadata: input.metadata,
+      created_by: input.actorUserId,
+      updated_by: input.actorUserId,
+    })
   }
 
   private async recordAdmissionAdvancePayment(

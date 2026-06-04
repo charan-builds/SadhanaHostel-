@@ -6,6 +6,7 @@ export type ResidentCreateResult = {
   invite: ResidentInviteCreated | null
   advancePayment: Tables<"payments"> | null
   firstMonthFeePayment: Tables<"payments"> | null
+  openingMonthFeePayments: Tables<"payments">[]
 }
 
 export type ResidentPasswordResetResult = {
