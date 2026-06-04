@@ -16,7 +16,7 @@ export default async function ResidentPasswordResetPage() {
   return (
     <AuthShell
       title="Request password reset"
-      description="Enter your registered resident details. Admin will verify the request before issuing temporary access."
+      description="Enter your registered phone number. Admin will verify the request before issuing temporary access."
       logoUrl={pickBrandLogo(cms.galleryItems)}
     >
       <ResidentPasswordResetRequestForm />

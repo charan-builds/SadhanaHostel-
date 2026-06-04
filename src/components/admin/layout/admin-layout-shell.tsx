@@ -8,14 +8,15 @@ import { RouteTransition } from "@/components/shared/route-transition"
 
 type AdminLayoutShellProps = {
   children: ReactNode
+  logoUrl?: string | null
 }
 
-export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
+export function AdminLayoutShell({ children, logoUrl }: AdminLayoutShellProps) {
   return (
     <div className="saas-grid-bg min-h-svh bg-background">
-      <AdminSidebar />
+      <AdminSidebar logoUrl={logoUrl} />
       <div className="flex min-h-svh min-w-0 flex-col transition-[padding] duration-300 ease-out lg:pl-72 peer-data-[collapsed=true]/admin-sidebar:lg:pl-[88px]">
-        <AdminTopbar />
+        <AdminTopbar logoUrl={logoUrl} />
         <main className="flex flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           <AdminBreadcrumbs />
           <AdminOperationalBanner />

@@ -74,6 +74,15 @@ const dashboardItem: Variants = {
 
 type Tone = "success" | "warning" | "info" | "danger" | "neutral"
 
+type DashboardPaymentRow = {
+  id: string
+  amount: number
+  method: string
+  status: string
+  paid_at: string | null
+  created_at: string
+}
+
 export function AdminDashboardClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
@@ -187,17 +196,17 @@ export function AdminDashboardClient() {
 
   const healthCards = [
     {
-      title: "Onboarding Follow-up",
+      title: "Resident Follow-up",
       value: pendingVerification,
       detail: "Older or rejected profiles need staff action",
       icon: FileCheck2,
       tone: pendingVerification ? "warning" : "success",
-      href: "/admin/residents/verification",
+      href: "/admin/residents",
     },
     {
-      title: "Draft / Onboarding",
+      title: "Draft Residents",
       value: onboardingResidents,
-      detail: "Need invite, profile, or document action",
+      detail: "Need access, profile, or document action",
       icon: UserRoundPlus,
       tone: onboardingResidents ? "warning" : "success",
       href: "/admin/residents",
@@ -227,8 +236,9 @@ export function AdminDashboardClient() {
     href: string
   }>
 
+  const visiblePaymentRows = payments.data?.data ?? []
   const timeline = buildActivityTimeline({
-    payments: payments.data?.data ?? [],
+    payments: visiblePaymentRows,
     leaves: leaves.data?.data ?? [],
   })
 
@@ -236,7 +246,7 @@ export function AdminDashboardClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Admin Dashboard"
-        description="Operational overview for residents, onboarding, payments, leaves, notices, and support work."
+        description="Operational overview for residents, profile access, payments, leaves, notices, and support work."
         badge="Live workspace"
         actions={
           <>
@@ -277,7 +287,7 @@ export function AdminDashboardClient() {
                 Hostel health at a glance.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-sidebar-foreground/68">
-                Track residents, collections, onboarding work, payments, and support pressure
+                Track residents, collections, profile access, payments, and support pressure
                 from one command surface.
               </p>
             </div>
@@ -347,7 +357,10 @@ export function AdminDashboardClient() {
 
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <motion.div variants={dashboardItem}>
-            <RecentPaymentsTable payments={payments} />
+            <RecentPaymentsTable
+              payments={payments}
+              rows={visiblePaymentRows}
+            />
           </motion.div>
           <motion.div variants={dashboardItem}>
             <ActivityTimeline timeline={timeline} isLoading={payments.isLoading || leaves.isLoading} />
@@ -530,7 +543,13 @@ function HealthCard({
   )
 }
 
-function RecentPaymentsTable({ payments }: { payments: ReturnType<typeof usePayments> }) {
+function RecentPaymentsTable({
+  payments,
+  rows,
+}: {
+  payments: ReturnType<typeof usePayments>
+  rows: DashboardPaymentRow[]
+}) {
   return (
     <Card>
       <CardHeader>
@@ -549,7 +568,7 @@ function RecentPaymentsTable({ payments }: { payments: ReturnType<typeof usePaym
       <CardContent>
         {payments.isLoading ? (
           <LoadingState variant="table" />
-        ) : payments.data?.data.length === 0 ? (
+        ) : rows.length === 0 ? (
           <EmptyState
             title="No payments yet"
             message="Payments will appear here after residents submit or admins record them."
@@ -566,7 +585,7 @@ function RecentPaymentsTable({ payments }: { payments: ReturnType<typeof usePaym
               </TableRow>
             </TableHeader>
             <TableBody>
-              {payments.data?.data.map((payment) => (
+              {rows.map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell className="font-medium">{payment.id.slice(0, 8)}</TableCell>
                   <TableCell>{formatCurrency(payment.amount)}</TableCell>
@@ -775,7 +794,7 @@ function buildOperationalAlerts(input: {
 
   if (input.onboardingResidents > 0) {
     alerts.push({
-      title: `${input.onboardingResidents} resident${input.onboardingResidents === 1 ? "" : "s"} in onboarding`,
+      title: `${input.onboardingResidents} draft resident${input.onboardingResidents === 1 ? "" : "s"}`,
       description: "Draft or invited residents are registered but do not count as occupied students yet.",
       href: "/admin/residents",
     })
@@ -783,9 +802,9 @@ function buildOperationalAlerts(input: {
 
   if (input.pendingVerification > 0) {
     alerts.push({
-      title: `${input.pendingVerification} onboarding follow-up${input.pendingVerification === 1 ? "" : "s"} pending`,
+      title: `${input.pendingVerification} resident follow-up${input.pendingVerification === 1 ? "" : "s"} pending`,
       description: "Check older profiles that were already waiting before automatic completion was enabled.",
-      href: "/admin/residents/verification",
+      href: "/admin/residents",
     })
   }
 
@@ -830,12 +849,4 @@ const toneClasses = {
   info: "border-info/20 bg-info-surface text-info-foreground",
   danger: "border-destructive/20 bg-destructive/10 text-destructive",
   neutral: "border-border bg-muted text-muted-foreground",
-} as const
-
-const tonePills = {
-  success: "bg-success-surface text-success-foreground",
-  warning: "bg-warning-surface text-warning-foreground",
-  info: "bg-info-surface text-info-foreground",
-  danger: "bg-destructive/10 text-destructive",
-  neutral: "bg-muted text-muted-foreground",
 } as const

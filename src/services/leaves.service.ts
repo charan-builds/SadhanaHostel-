@@ -189,12 +189,12 @@ function getLeaveVerificationMessage(
   const requirements = getResidentOnboardingRequirements(resident)
 
   if (requirements.missing.length > 0) {
-    return "Complete all onboarding requirements before applying leave."
+    return "Complete all required resident profile details before applying leave."
   }
 
   if (resident.onboarding_status === "verification_pending") {
-    return "Your onboarding is complete but not active yet. Open onboarding to finish activation."
+    return "Your resident profile is complete but not active yet. Ask the hostel office to activate access."
   }
 
-  return "Complete resident onboarding before applying leave."
+  return "Complete resident profile activation before applying leave."
 }

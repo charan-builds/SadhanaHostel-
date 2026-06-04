@@ -22,7 +22,7 @@ export default async function ResidentLoginPage() {
   return (
     <AuthShell
       title="Resident portal"
-      description="Use your phone number and temporary password, or an invite link, to access onboarding and resident services."
+      description="Use your phone number and temporary password, or an invite link, to access resident services."
       logoUrl={pickBrandLogo(cms.galleryItems)}
     >
       <Suspense fallback={<GlobalLoader label="Loading resident login..." />}>
@@ -33,7 +33,7 @@ export default async function ResidentLoginPage() {
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           Resident accounts are created by hostel administration. If you were admitted recently,
           use the WhatsApp activation link, invite code, or temporary password shared by the office.
-          Email can be added later during onboarding.
+          Email can be added later from your resident profile.
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <Button asChild variant="outline" size="sm">

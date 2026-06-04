@@ -1,8 +1,10 @@
 import "server-only"
 
 import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
+import { hostelModules } from "@/config/hostel-modules"
 import { areCronJobsEnabled, areOperationalRepairsEnabled } from "@/config/launch"
 import { badRequest, forbidden } from "@/lib/api/api-error"
+import { phoneDigits } from "@/lib/identity"
 import { logError } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -21,6 +23,7 @@ import {
 } from "@/repositories/support.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
+import type { ConsistencyFinding } from "@/types/operations"
 import type {
   OperationalAlert,
   RecoveryGuidance,
@@ -29,6 +32,7 @@ import type {
   SupportPublishNoticeResult,
   SupportRequestResult,
 } from "@/types/support"
+import type { ResidentPasswordResetResult } from "@/types/residents"
 import {
   operationalAlertsQuerySchema,
   residentPasswordResetRequestSchema,
@@ -224,8 +228,10 @@ export class SupportService {
   ): Promise<SupportPasswordResetApprovalResult> {
     const values = supportPasswordResetApprovalSchema.parse(input)
     const context = await this.authService.requirePermission("residents.manage")
+    const adminDb = createSupabaseAdminClient()
+    const supportRepository = new SupportRepository(adminDb)
     const previous = assertFound(
-      await this.supportRepository.getById(values.requestId, values.organizationId),
+      await supportRepository.getById(values.requestId, values.organizationId),
       "Password reset request not found."
     )
 
@@ -240,20 +246,23 @@ export class SupportService {
       residentId: previous.resident_id,
     })
     const approvedAt = new Date().toISOString()
-    const request = await this.supportRepository.update(
+    const whatsappMessage = buildResidentPasswordResetWhatsAppMessage(reset)
+    const request = await supportRepository.update(
       previous.id,
       previous.organization_id,
       {
         status: "waiting_on_resident",
         resolution_notes:
-          `Temporary password generated. Share it only after identity verification. ` +
-          `It expires ${reset.expiresAt}.`,
+          "Temporary password generated. Share the WhatsApp-ready message only after identity verification. " +
+          `It expires ${formatPasswordResetExpiry(reset.expiresAt)}.`,
         metadata: {
           ...recordFromUnknown(previous.metadata),
           passwordReset: {
             approvedAt,
             approvedBy: context.authUser.id,
             expiresAt: reset.expiresAt,
+            previousStatus: previous.status,
+            whatsappMessagePrepared: true,
           },
         } satisfies Json,
         updated_by: context.authUser.id,
@@ -265,6 +274,8 @@ export class SupportService {
     return {
       request,
       reset,
+      whatsappMessage,
+      whatsappShareUrl: buildWhatsAppShareUrl(whatsappMessage, reset.residentPhone),
     }
   }
 
@@ -409,6 +420,8 @@ export class SupportService {
     this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     const alerts: OperationalAlert[] = []
+    const financeAlertsEnabled = !hostelModules.startupFinanceZero
+    const vacancyAlertsEnabled = hostelModules.vacancy
     const [
       passwordResetCount,
       residentReportCount,
@@ -451,10 +464,18 @@ export class SupportService {
         "verification_pending",
       ]),
       this.countOnboardingQueue(organizationId, hostelId ?? undefined, ["rejected"]),
-      this.countPayments(organizationId, hostelId ?? undefined, "pending"),
-      this.countPayments(organizationId, hostelId ?? undefined, "failed"),
-      this.loadVacancy(organizationId, hostelId ?? undefined),
-      this.hasActivePaymentSettings(organizationId, hostelId ?? undefined),
+      financeAlertsEnabled
+        ? this.countPayments(organizationId, hostelId ?? undefined, "pending")
+        : Promise.resolve(0),
+      financeAlertsEnabled
+        ? this.countPayments(organizationId, hostelId ?? undefined, "failed")
+        : Promise.resolve(0),
+      vacancyAlertsEnabled
+        ? this.loadVacancy(organizationId, hostelId ?? undefined)
+        : Promise.resolve(null),
+      financeAlertsEnabled
+        ? this.hasActivePaymentSettings(organizationId, hostelId ?? undefined)
+        : Promise.resolve(true),
       scanConsistency(this.operationsRepository, {
         organizationId,
         hostelId,
@@ -542,7 +563,7 @@ export class SupportService {
       })
     }
 
-    if (pendingPayments > 0) {
+    if (financeAlertsEnabled && pendingPayments > 0) {
       alerts.push({
         id: "payments.pending",
         severity: "medium",
@@ -554,7 +575,7 @@ export class SupportService {
       })
     }
 
-    if (failedPayments > 0) {
+    if (financeAlertsEnabled && failedPayments > 0) {
       alerts.push({
         id: "payments.rejected",
         severity: "high",
@@ -566,7 +587,7 @@ export class SupportService {
       })
     }
 
-    if (vacancy && vacancy.available_beds <= 5) {
+    if (vacancyAlertsEnabled && vacancy && vacancy.available_beds <= 5) {
       alerts.push({
         id: "capacity.low",
         severity: vacancy.available_beds <= 0 ? "critical" : "high",
@@ -578,7 +599,7 @@ export class SupportService {
       })
     }
 
-    if (hostelId && !hasActivePaymentSettings) {
+    if (financeAlertsEnabled && hostelId && !hasActivePaymentSettings) {
       alerts.push({
         id: "payments.config_missing",
         severity: "critical",
@@ -616,9 +637,11 @@ export class SupportService {
       })
     }
 
-    if (consistency.summaries.critical > 0 || consistency.summaries.high > 0) {
-      const priorityFindings = consistency.findings
-        .filter((finding) => finding.severity === "critical" || finding.severity === "high")
+    const priorityFindings = consistency.findings
+      .filter((finding) => finding.severity === "critical" || finding.severity === "high")
+      .filter(isOperationalConsistencyFindingVisible)
+
+    if (priorityFindings.length > 0) {
       const affectedRecordCount = priorityFindings.reduce(
         (total, finding) => total + Math.max(0, finding.count),
         0
@@ -640,10 +663,12 @@ export class SupportService {
 
       alerts.push({
         id: "operations.consistency",
-        severity: consistency.summaries.critical > 0 ? "critical" : "high",
+        severity: priorityFindings.some((finding) => finding.severity === "critical")
+          ? "critical"
+          : "high",
         title: priorityFindings[0]?.title ?? "Operational consistency needs repair",
         description: findingSummary,
-        count: affectedRecordCount || consistency.summaries.critical + consistency.summaries.high,
+        count: affectedRecordCount || priorityFindings.length,
         href: "/admin/operations/automation",
         ctaLabel: "Open automation",
       })
@@ -1028,6 +1053,47 @@ function isResidentPasswordResetRequest(request: SupportRequestRow) {
   return recordFromUnknown(request.metadata).workflow === "resident_password_reset"
 }
 
+function buildResidentPasswordResetWhatsAppMessage(reset: ResidentPasswordResetResult) {
+  return [
+    "Sadhana Boys Hostel password reset",
+    "",
+    "You requested help to reset your resident portal password.",
+    reset.residentName ? `Resident: ${reset.residentName}` : null,
+    "",
+    "Login link:",
+    reset.loginLink,
+    `Temporary password: ${reset.temporaryPassword}`,
+    "",
+    `This temporary password expires on ${formatPasswordResetExpiry(reset.expiresAt)}.`,
+    "After login, set your own private password immediately from the Change Password screen.",
+    "Do not share this password with anyone.",
+  ]
+    .filter((line) => line !== null)
+    .join("\n")
+}
+
+function buildWhatsAppShareUrl(message: string, phone?: string | null) {
+  const target = phoneDigits(phone) ?? ""
+  const url = new URL(`https://wa.me/${target}`)
+  url.searchParams.set("text", message)
+
+  return url.toString()
+}
+
+function formatPasswordResetExpiry(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(date)
+}
+
 function buildNoticeTitleFromSupportRequest(request: SupportRequestRow) {
   const label = publicReportLabel(request.category)
   const subject = request.subject.trim()
@@ -1060,6 +1126,28 @@ function truncateText(value: string, maxLength: number) {
   const trimmed = value.trim()
 
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
+}
+
+function isOperationalConsistencyFindingVisible(finding: ConsistencyFinding) {
+  if (hostelModules.startupFinanceZero) {
+    if (
+      finding.category === "payment" ||
+      finding.category === "invoice" ||
+      finding.id === "security.upload_ownership"
+    ) {
+      return false
+    }
+  }
+
+  if (!hostelModules.reservations && finding.category === "reservation") {
+    return false
+  }
+
+  if (!hostelModules.roomAllocation && finding.category === "occupancy") {
+    return false
+  }
+
+  return true
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {

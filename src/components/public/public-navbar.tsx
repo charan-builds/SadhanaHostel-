@@ -80,6 +80,7 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
           </Button>
           <LanguageSwitcher className="hidden xl:flex" />
           <PublicAuthActions className="hidden md:inline-flex" />
+          <LanguageSwitcher compact className="lg:hidden" />
           <PublicMobileMenu currentPathname={pathname} logoUrl={logoUrl} />
         </div>
       </div>

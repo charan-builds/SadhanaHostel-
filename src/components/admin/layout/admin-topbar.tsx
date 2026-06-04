@@ -24,7 +24,7 @@ import { useAuth } from "@/lib/auth"
 import { humanizeEnum } from "@/lib/format"
 import { authSdk } from "@/sdk"
 
-export function AdminTopbar() {
+export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
   const router = useRouter()
   const { session, refreshSession } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -60,7 +60,7 @@ export function AdminTopbar() {
   return (
     <header className="sticky top-0 z-20 border-b border-white/70 bg-white/78 shadow-sm shadow-slate-950/5 backdrop-blur-2xl">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <AdminMobileSidebar />
+        <AdminMobileSidebar logoUrl={logoUrl} />
 
         <div className="relative hidden min-w-0 flex-1 md:block">
           <Search

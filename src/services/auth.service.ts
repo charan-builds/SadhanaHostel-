@@ -671,10 +671,13 @@ export class AuthService {
       throw forbidden(error.message)
     }
 
-    const profile = await this.usersRepository.updateProfile(context.authUser.id, {
-      metadata: profileMetadata,
-      updated_by: context.authUser.id,
-    })
+    const profile = await new UsersRepository(createSupabaseAdminClient()).updateProfile(
+      context.authUser.id,
+      {
+        metadata: profileMetadata,
+        updated_by: context.authUser.id,
+      }
+    )
 
     logAuditEvent({
       action: "auth.password_changed",

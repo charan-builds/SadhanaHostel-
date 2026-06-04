@@ -39,7 +39,7 @@ const recoveryTopics = [
     title: "Upload failed",
     description: "Reconnect, use PNG/JPG/WebP/PDF where allowed, and retry from the same screen.",
     icon: FileWarning,
-    actionHref: "/resident/onboarding",
+    actionHref: "/resident/profile",
     actionLabel: "Retry upload",
   },
   {
@@ -56,7 +56,7 @@ export function SupportCenterContent() {
     <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       <PageHeader
         title={`${hostelConfig.name} Support Center`}
-        description="Recovery guidance for residents, parents, and hostel staff in Pulivendula. Use this when onboarding, payments, uploads, or access gets stuck."
+        description="Recovery guidance for residents, parents, and hostel staff in Pulivendula. Use this when profile, payments, uploads, or access gets stuck."
         actions={
           <>
             <Button asChild>

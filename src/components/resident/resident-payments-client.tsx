@@ -137,6 +137,8 @@ export function ResidentPaymentsClient() {
   const currentDueTotal = ledger.data?.totals.currentDue ?? 0
   const pendingVerificationTotal = ledger.data?.totals.pendingVerification ?? 0
   const primaryDueRecord = ledger.data?.primaryDueRecord
+  const billing = ledger.data?.billing
+  const nextDueDate = billing?.nextDueDate ?? null
   const primaryPendingVerification =
     ledger.data?.payments
       .filter(
@@ -369,7 +371,13 @@ export function ResidentPaymentsClient() {
       <PageHeader
         title="Payments"
         description="Enter the exact amount, open UPI with that amount pre-filled, then upload proof. Dues reduce only after admin verification."
-        badge={payableDue > 0 ? `${formatCurrency(payableDue)} payable now` : "No payable due"}
+        badge={
+          payableDue > 0
+            ? `${formatCurrency(payableDue)} payable now`
+            : nextDueDate
+              ? `Next due ${formatDate(nextDueDate)}`
+              : "No payable due"
+        }
       />
 
       <motion.div
@@ -391,14 +399,16 @@ export function ResidentPaymentsClient() {
         </div>
       </motion.div>
 
-      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <FeeCard
           label="Current due"
           value={formatCurrency(currentDue)}
           detail={
             payableDue > 0
               ? `${formatCurrency(payableDue)} payable after pending payments.`
-              : "You are clear or already waiting on verification."
+              : nextDueDate
+                ? `Next payment is due on ${formatDate(nextDueDate)}.`
+                : "You are clear or already waiting on verification."
           }
           icon={CreditCard}
           tone="primary"
@@ -427,6 +437,17 @@ export function ResidentPaymentsClient() {
           }
           icon={IndianRupee}
           tone="success"
+        />
+        <FeeCard
+          label="Next due"
+          value={nextDueDate ? formatDate(nextDueDate) : "Not scheduled"}
+          detail={
+            billing?.joinedOn
+              ? `Monthly billing follows joined date ${formatDate(billing.joinedOn)}.`
+              : "Monthly billing date is not set."
+          }
+          icon={AlertTriangle}
+          tone={payableDue > 0 ? "warning" : "info"}
         />
         <FeeCard
           label="Verified paid"
@@ -484,6 +505,7 @@ export function ResidentPaymentsClient() {
       <PaymentBreakdown
         monthlyFee={monthlyFee}
         primaryDueRecord={primaryDueRecord}
+        billing={billing}
         currentDue={currentDue}
         payableDue={payableDue}
         pendingVerification={pendingVerification}
@@ -714,6 +736,7 @@ export function ResidentPaymentsClient() {
 function PaymentBreakdown({
   monthlyFee,
   primaryDueRecord,
+  billing,
   currentDue,
   payableDue,
   pendingVerification,
@@ -725,6 +748,15 @@ function PaymentBreakdown({
 }: {
   monthlyFee: number
   primaryDueRecord: Tables<"monthly_fee_records"> | null | undefined
+  billing:
+    | {
+        joinedOn: string | null
+        currentPeriodMonth: string
+        currentDueDate: string | null
+        nextDueDate: string | null
+        generatedCurrentDue: boolean
+      }
+    | undefined
   currentDue: number
   payableDue: number
   pendingVerification: number
@@ -767,7 +799,13 @@ function PaymentBreakdown({
         <BreakdownItem label="Advance balance" value={formatCurrency(advancePaid)} />
         <BreakdownItem
           label="Due date"
-          value={primaryDueRecord?.due_date ? formatDate(primaryDueRecord.due_date) : "No due record"}
+          value={
+            primaryDueRecord?.due_date
+              ? formatDate(primaryDueRecord.due_date)
+              : billing?.nextDueDate
+                ? formatDate(billing.nextDueDate)
+                : "No due record"
+          }
         />
       </div>
 
@@ -777,11 +815,14 @@ function PaymentBreakdown({
           {" "}
           <span className="font-medium text-foreground">{primaryDueRecord.status}</span>.
           Pending verification is shown separately because it reduces dues only after admin approval.
+          {billing?.generatedCurrentDue ? " This due was opened from your monthly joined-date cycle." : null}
         </div>
       ) : (
         <div className="mt-4 rounded-lg border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
-          No monthly due record is open. Use the zero button when the hostel is starting fresh or
-          enter an advance amount only after confirming with admin.
+          No monthly due is open.
+          {billing?.nextDueDate
+            ? ` Your next payment is due on ${formatDate(billing.nextDueDate)}.`
+            : " Use the zero button when the hostel is starting fresh or enter an advance amount only after confirming with admin."}
         </div>
       )}
     </motion.section>

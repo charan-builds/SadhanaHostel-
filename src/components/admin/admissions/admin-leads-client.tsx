@@ -13,12 +13,14 @@ import {
   Plus,
   Search,
   Sparkles,
+  Trash2,
   UserRoundPlus,
   type LucideIcon,
 } from "lucide-react"
 import { motion, type Variants } from "framer-motion"
 import { toast } from "sonner"
 
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
@@ -57,7 +59,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useCreateLead, useLeads, useUpdateLead } from "@/hooks"
+import { useCreateLead, useLeads, useRemoveLead, useUpdateLead } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatDate, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
@@ -100,6 +102,7 @@ export function AdminLeadsClient() {
   const [status, setStatus] = useState<LeadStatus | "all">("all")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingLead, setEditingLead] = useState<LeadRow | null>(null)
+  const [removingLead, setRemovingLead] = useState<LeadRow | null>(null)
   const leads = useLeads({
     organizationId: organizationId ?? "",
     hostelId,
@@ -112,6 +115,7 @@ export function AdminLeadsClient() {
   const meta = leads.data?.meta
   const pipeline = buildLeadPipeline(rows)
   const timeline = buildLeadTimeline(rows)
+  const removeLead = useRemoveLead()
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
 
   if (!organizationId) {
@@ -274,6 +278,7 @@ export function AdminLeadsClient() {
                     setEditingLead(lead)
                     setDialogOpen(true)
                   }}
+                  onRemove={() => setRemovingLead(lead)}
                 />
               ))}
             </motion.div>
@@ -316,6 +321,35 @@ export function AdminLeadsClient() {
         lead={editingLead}
         organizationId={organizationId}
         hostelId={hostelId}
+      />
+
+      <ConfirmDialog
+        open={Boolean(removingLead)}
+        onOpenChange={(open) => !open && setRemovingLead(null)}
+        title="Remove lead?"
+        description={
+          removingLead
+            ? `${removingLead.full_name} will be removed from the active inquiry workspace.`
+            : undefined
+        }
+        confirmLabel="Remove lead"
+        variant="danger"
+        onConfirm={async () => {
+          if (!removingLead) {
+            return
+          }
+
+          await removeLead.mutateAsync({
+            organizationId,
+            leadId: removingLead.id,
+          })
+
+          if (rows.length === 1 && page > 1) {
+            setPage((current) => Math.max(1, current - 1))
+          }
+
+          toast.success("Lead removed.")
+        }}
       />
     </motion.div>
   )
@@ -362,7 +396,15 @@ function PipelineCard({
   )
 }
 
-function LeadCard({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
+function LeadCard({
+  lead,
+  onUpdate,
+  onRemove,
+}: {
+  lead: LeadRow
+  onUpdate: () => void
+  onRemove: () => void
+}) {
   return (
     <motion.article variants={itemReveal} layout>
       <Card className="group h-full overflow-visible">
@@ -381,7 +423,7 @@ function LeadCard({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
                 </div>
               </div>
             </div>
-            <LeadQuickMenu lead={lead} onUpdate={onUpdate} />
+            <LeadQuickMenu lead={lead} onUpdate={onUpdate} onRemove={onRemove} />
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -429,7 +471,15 @@ function LeadCard({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
   )
 }
 
-function LeadQuickMenu({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void }) {
+function LeadQuickMenu({
+  lead,
+  onUpdate,
+  onRemove,
+}: {
+  lead: LeadRow
+  onUpdate: () => void
+  onRemove: () => void
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -456,6 +506,14 @@ function LeadQuickMenu({ lead, onUpdate }: { lead: LeadRow; onUpdate: () => void
             <a href={`mailto:${lead.email}`}>Email lead</a>
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+          Remove lead
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { areOperationalRepairsEnabled } from "@/config/launch"
+import { hostelModules } from "@/config/hostel-modules"
 import {
   formatResidentIdentityMode,
   getResidentIdentityMode,
@@ -376,7 +377,7 @@ export async function scanConsistency(
     repository.count("payments", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      equals: { status: "verified" },
+      equals: { status: "verified", method: "upi", is_advance: false },
       isNull: ["invoice_id"],
       deletedAtNull: true,
     }),
@@ -393,13 +394,15 @@ export async function scanConsistency(
       isNull: ["pdf_document_id"],
       deletedAtNull: true,
     }),
-    repository.count("room_allocations", {
-      organizationId: input.organizationId,
-      hostelId: input.hostelId,
-      equals: { status: "active" },
-      lte: { allocated_to: now.toISOString().slice(0, 10) },
-      deletedAtNull: true,
-    }),
+    hostelModules.roomAllocation
+      ? repository.count("room_allocations", {
+          organizationId: input.organizationId,
+          hostelId: input.hostelId,
+          equals: { status: "active" },
+          lte: { allocated_to: now.toISOString().slice(0, 10) },
+          deletedAtNull: true,
+        })
+      : Promise.resolve(0),
     repository.list("reservations", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
@@ -446,7 +449,7 @@ export async function scanConsistency(
     repository.list("payments", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      select: "id,organization_id,hostel_id,resident_id,status,method,invoice_id,transaction_id",
+      select: "id,organization_id,hostel_id,resident_id,status,method,is_advance,invoice_id,transaction_id",
       equals: { status: "verified" },
       deletedAtNull: true,
       limit: 40,
@@ -459,15 +462,17 @@ export async function scanConsistency(
       deletedAtNull: true,
       limit: 20,
     }),
-    repository.list("room_allocations", {
-      organizationId: input.organizationId,
-      hostelId: input.hostelId,
-      select: "id,organization_id,hostel_id,resident_id,room_id,status,allocated_to",
-      equals: { status: "active" },
-      lte: { allocated_to: now.toISOString().slice(0, 10) },
-      deletedAtNull: true,
-      limit: 20,
-    }),
+    hostelModules.roomAllocation
+      ? repository.list("room_allocations", {
+          organizationId: input.organizationId,
+          hostelId: input.hostelId,
+          select: "id,organization_id,hostel_id,resident_id,room_id,status,allocated_to",
+          equals: { status: "active" },
+          lte: { allocated_to: now.toISOString().slice(0, 10) },
+          deletedAtNull: true,
+          limit: 20,
+        })
+      : Promise.resolve([]),
   ])
 
   if (staleReservations > 0) {
@@ -575,15 +580,15 @@ export async function scanConsistency(
 
             return (
               status === "verified" &&
-              (!stringValue(payment, "invoice_id") ||
-                (method === "upi" && !stringValue(payment, "transaction_id")))
+              method === "upi" &&
+              (!stringValue(payment, "invoice_id") || !stringValue(payment, "transaction_id"))
             )
           }),
           {
             tableName: "payments",
             anomalyType: "verified_payment_reconciliation_mismatch",
-            expectedState: "verified payment has invoice and UPI transaction reference",
-            actualState: "verified payment missing invoice_id or transaction_id",
+            expectedState: "verified UPI payment has invoice and transaction reference",
+            actualState: "verified UPI payment missing invoice_id or transaction_id",
             repairAction: "reconcile_dues",
             recommendation: "Reconcile the ledger and manually review verified payments missing audit references.",
           }
@@ -641,9 +646,14 @@ export async function scanConsistency(
   findings.push(...await detectOnboardingAuthDeadlocks(repository, input))
   findings.push(...await detectPhoneIdentityAnomalies(repository, input))
   findings.push(...await detectResidentTenantIdentityAnomalies(repository, input))
-  findings.push(...await detectResidentAllocationAnomalies(repository, input))
-  findings.push(...await detectOverCapacityRooms(repository, input))
-  findings.push(...await detectCapacitySnapshotAnomalies(repository, input))
+  if (hostelModules.roomAllocation) {
+    findings.push(...await detectResidentAllocationAnomalies(repository, input))
+    findings.push(...await detectOverCapacityRooms(repository, input))
+  }
+
+  if (hostelModules.vacancy || hostelModules.roomAllocation || hostelModules.reservations) {
+    findings.push(...await detectCapacitySnapshotAnomalies(repository, input))
+  }
   findings.push(...await detectInvalidDuesAnomalies(repository, input))
   findings.push(...await detectBusinessTenantLinkageAnomalies(repository, input))
   findings.push(...await detectSecurityAnomalies(repository, input))
@@ -804,7 +814,7 @@ async function detectOnboardingAuthDeadlocks(
     repository.list("residents", {
       organizationId: input.organizationId,
       hostelId: input.hostelId,
-      select: "id,organization_id,hostel_id,user_id,status,onboarding_status,full_name,phone,email,deleted_at",
+      select: "id,organization_id,hostel_id,user_id,status,onboarding_status,full_name,phone,email,metadata,deleted_at",
       deletedAtNull: true,
       limit: 5000,
     }),
@@ -883,8 +893,9 @@ async function detectOnboardingAuthDeadlocks(
     const userId = stringValue(resident, "user_id")
     const user = userId ? userById.get(userId) : null
     const actualMode = authMetadataIdentityMode(user)
+    const expectedMode = getExpectedAuthIdentityMode(resident, user)
 
-    return Boolean(actualMode && actualMode !== getRowIdentityMode(resident))
+    return Boolean(actualMode && actualMode !== expectedMode)
   })
   const findings: ConsistencyFinding[] = []
 
@@ -976,7 +987,7 @@ async function detectOnboardingAuthDeadlocks(
         "dedupe_invites",
         inviteIdentityModeMismatches.slice(0, 20).map((invite) => {
           const resident = residentById.get(stringValue(invite, "resident_id") ?? "")
-          const expectedMode = resident ? getRowIdentityMode(resident) : null
+          const expectedMode = resident ? getExpectedAuthIdentityMode(resident) : null
           const actualMode = getRowIdentityMode(invite)
 
           return {
@@ -1014,7 +1025,7 @@ async function detectOnboardingAuthDeadlocks(
         "resync_auth_linkage",
         authIdentityModeMismatches.slice(0, 20).map((resident) => {
           const user = userById.get(stringValue(resident, "user_id") ?? "")
-          const expectedMode = getRowIdentityMode(resident)
+          const expectedMode = getExpectedAuthIdentityMode(resident, user)
           const actualMode = authMetadataIdentityMode(user)
 
           return {
@@ -2420,8 +2431,42 @@ function getRowIdentityMode(row: Record<string, unknown>) {
   })
 }
 
+function getExpectedAuthIdentityMode(
+  resident: Record<string, unknown>,
+  user?: Record<string, unknown> | null
+): ResidentIdentityMode {
+  const residentMode = metadataIdentityMode(recordFromUnknown(resident.metadata))
+
+  if (residentMode) {
+    return residentMode
+  }
+
+  const residentMetadata = recordFromUnknown(resident.metadata)
+
+  if (
+    residentMetadata.whatsapp_onboarding_ready === true &&
+    stringValue(resident, "phone")
+  ) {
+    return "phone_only"
+  }
+
+  const userMetadata = recordFromUnknown(user?.metadata)
+
+  if (
+    userMetadata.phone_password_login_strategy === "internal_email_alias" &&
+    stringValue(resident, "phone")
+  ) {
+    return "phone_only"
+  }
+
+  return getRowIdentityMode(resident)
+}
+
 function authMetadataIdentityMode(row?: Record<string, unknown> | null): ResidentIdentityMode | null {
-  const metadata = recordFromUnknown(row?.metadata)
+  return metadataIdentityMode(recordFromUnknown(row?.metadata))
+}
+
+function metadataIdentityMode(metadata: Record<string, unknown>): ResidentIdentityMode | null {
   const mode = metadata.resident_identity_mode
 
   if (mode === "phone" || mode === "phone_only") {

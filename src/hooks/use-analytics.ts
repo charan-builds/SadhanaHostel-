@@ -15,7 +15,9 @@ export function useDashboardAnalytics(params: DashboardAnalyticsInput) {
     queryKey: queryKeys.analytics.dashboard(params),
     queryFn: () => analyticsSdk.dashboard(params),
     enabled: Boolean(params.organizationId),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   })
 }
 
@@ -33,7 +35,9 @@ export function useOwnerAnalytics(params: OwnerAnalyticsInput) {
     queryKey: queryKeys.analytics.owner(params, params),
     queryFn: () => analyticsSdk.owner(params),
     enabled: Boolean(params.organizationId),
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
     refetchInterval: 60_000,
   })
 }

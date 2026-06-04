@@ -123,6 +123,11 @@ export const addLeadNoteSchema = z.object({
   isPinned: z.boolean().default(false),
 })
 
+export const leadIdMutationSchema = z.object({
+  organizationId: uuidSchema,
+  leadId: uuidSchema,
+})
+
 export const reservationListSchema = paginationSchema.extend({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
@@ -183,6 +188,7 @@ export type CreateLeadInput = z.infer<typeof createLeadSchema>
 export type PublicInquiryInput = z.infer<typeof publicInquirySchema>
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>
 export type AddLeadNoteInput = z.infer<typeof addLeadNoteSchema>
+export type LeadIdMutationInput = z.infer<typeof leadIdMutationSchema>
 export type ReservationListInput = z.infer<typeof reservationListSchema>
 export type CreateReservationInput = z.infer<typeof createReservationSchema>
 export type ReservationIdInput = z.infer<typeof reservationIdSchema>

@@ -49,27 +49,45 @@ export const paymentReminderJob: JobDefinition<PaymentReminderPayload> = {
         continue
       }
 
+      const reminderMessage = {
+        title: "Hostel fee payment reminder",
+        body: `Your hostel fee for ${feeRecord.period_month} is due on ${feeRecord.due_date} with a pending balance of INR ${feeRecord.balance_amount}.`,
+        templateKey: "payment_reminder",
+        payload: {
+          fee_record_id: feeRecord.id,
+          period_month: feeRecord.period_month,
+          due_date: feeRecord.due_date,
+          balance_amount: feeRecord.balance_amount,
+        },
+      }
+
       await notificationService.queue({
         organizationId: payload.organizationId,
         hostelId: feeRecord.hostel_id,
-        channel: resident.email ? "email" : "in_app",
+        channel: "in_app",
         recipient: {
           residentId: resident.id,
           userId: resident.user_id,
           email: resident.email,
           phone: resident.phone,
         },
-        message: {
-          title: "Hostel fee payment reminder",
-          body: `Your hostel fee for ${feeRecord.period_month} has a pending balance of INR ${feeRecord.balance_amount}.`,
-          templateKey: "payment_reminder",
-          payload: {
-            fee_record_id: feeRecord.id,
-            period_month: feeRecord.period_month,
-            balance_amount: feeRecord.balance_amount,
-          },
-        },
+        message: reminderMessage,
       })
+
+      if (resident.phone) {
+        await notificationService.queue({
+          organizationId: payload.organizationId,
+          hostelId: feeRecord.hostel_id,
+          channel: "whatsapp",
+          recipient: {
+            residentId: resident.id,
+            userId: resident.user_id,
+            email: resident.email,
+            phone: resident.phone,
+          },
+          message: reminderMessage,
+        })
+      }
       processed += 1
     }
 

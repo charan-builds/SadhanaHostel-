@@ -16,6 +16,7 @@ import type {
   CreateLeadInput,
   CreateReservationInput,
   CreateReservationPaymentInput,
+  LeadIdMutationInput,
   LeadListInput,
   PublicInquiryInput,
   ReservationIdInput,
@@ -64,6 +65,12 @@ export const admissionsSdk = {
       `/api/admissions/leads/${leadId}`,
       body
     )
+  },
+
+  removeLead(input: LeadIdMutationInput) {
+    const { leadId, ...query } = input
+
+    return apiClient.delete<LeadRow>(`/api/admissions/leads/${leadId}`, query)
   },
 
   addLeadNote(input: AddLeadNoteInput) {

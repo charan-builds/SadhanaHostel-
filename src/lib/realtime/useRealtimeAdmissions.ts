@@ -15,6 +15,7 @@ const ADMISSIONS_REALTIME_EVENTS = [
   "dashboard.refresh",
   "lead.created",
   "lead.updated",
+  "lead.removed",
   "reservation.created",
   "reservation.confirmed",
   "reservation.expired",
@@ -71,6 +72,7 @@ function getAdmissionsInvalidationKeys(input: {
   switch (input.event) {
     case "lead.created":
     case "lead.updated":
+    case "lead.removed":
       return [queryKeys.admissions.all(scope)]
     case "reservation.created":
     case "reservation.confirmed":

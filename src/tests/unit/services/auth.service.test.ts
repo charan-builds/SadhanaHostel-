@@ -262,6 +262,7 @@ describe("AuthService permission guards", () => {
       error: null,
     })
     const updateUser = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const adminDb = {} as never
     const service = new AuthService({
       auth: {
         signInWithPassword,
@@ -269,6 +270,7 @@ describe("AuthService permission guards", () => {
       },
     } as never)
     vi.spyOn(service, "getCurrentContext").mockResolvedValue(residentAuthContext())
+    vi.spyOn(supabaseAdmin, "createSupabaseAdminClient").mockReturnValue(adminDb)
     vi.spyOn(UsersRepository.prototype, "updateProfile").mockResolvedValue(
       userFixture({
         id: RESIDENT_USER_ID,
@@ -306,6 +308,7 @@ describe("AuthService permission guards", () => {
 
   it("does not require current password while clearing temporary password access", async () => {
     const updateUser = vi.fn().mockResolvedValue({ data: {}, error: null })
+    const adminDb = {} as never
     const service = new AuthService({
       auth: {
         signInWithPassword: vi.fn(),
@@ -322,6 +325,7 @@ describe("AuthService permission guards", () => {
         }),
       })
     )
+    vi.spyOn(supabaseAdmin, "createSupabaseAdminClient").mockReturnValue(adminDb)
     vi.spyOn(UsersRepository.prototype, "updateProfile").mockResolvedValue(
       userFixture({
         id: RESIDENT_USER_ID,

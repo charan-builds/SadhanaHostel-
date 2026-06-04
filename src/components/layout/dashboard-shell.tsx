@@ -2,10 +2,10 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import { Menu } from "lucide-react"
 
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DashboardUserActions } from "@/components/layout/dashboard-user-actions"
-import { ResidentProfileReminder } from "@/components/resident/resident-profile-reminder"
 import { Separator } from "@/components/ui/separator"
 import { RouteTransition } from "@/components/shared/route-transition"
 import {
@@ -24,6 +24,7 @@ type DashboardShellProps = {
   title: string
   description: string
   navigation: NavItem[]
+  logoUrl?: string | null
   children: ReactNode
 }
 
@@ -32,6 +33,7 @@ export function DashboardShell({
   title,
   description,
   navigation,
+  logoUrl,
   children,
 }: DashboardShellProps) {
   const areaLabel = area === "admin" ? "Admin" : "Resident"
@@ -41,9 +43,7 @@ export function DashboardShell({
       <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl lg:block">
         <div className="flex h-full flex-col gap-6 p-5">
           <Link href="/" className="flex items-center gap-3 font-semibold">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sm text-sidebar-primary-foreground shadow-lg">
-              SB
-            </span>
+            <BrandMark logoUrl={logoUrl} className="size-9 bg-sidebar-primary text-sidebar-primary-foreground shadow-lg" />
             <span>{hostelConfig.shortName}</span>
           </Link>
 
@@ -85,9 +85,7 @@ export function DashboardShell({
         <header className="border-b border-white/70 bg-white/78 shadow-sm shadow-slate-950/5 backdrop-blur-2xl lg:hidden">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-xs text-primary-foreground">
-                SB
-              </span>
+              <BrandMark logoUrl={logoUrl} className="size-8 text-xs" />
               {hostelConfig.shortName}
             </Link>
             <div className="flex items-center gap-2">
@@ -132,7 +130,6 @@ export function DashboardShell({
         </header>
 
         <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 pb-24 sm:px-6 lg:py-8 lg:pb-8">
-          {area === "resident" ? <ResidentProfileReminder /> : null}
           <RouteTransition className="grid gap-6">{children}</RouteTransition>
         </main>
 

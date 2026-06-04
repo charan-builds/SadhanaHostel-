@@ -7,6 +7,7 @@ import { Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 
 import { adminNavigationItems } from "@/components/admin/layout/admin-sidebar"
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -23,7 +24,7 @@ function isActiveRoute(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function AdminMobileSidebar() {
+export function AdminMobileSidebar({ logoUrl }: { logoUrl?: string | null }) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
 
@@ -43,9 +44,7 @@ export function AdminMobileSidebar() {
       <SheetContent side="left" className="w-[88vw] max-w-sm overflow-y-auto p-0">
         <SheetHeader className="border-b px-5 py-5 text-left">
           <SheetTitle className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-lg">
-              SB
-            </span>
+            <BrandMark logoUrl={logoUrl} />
             <span>{hostelConfig.shortName}</span>
           </SheetTitle>
           <SheetDescription>Admin dashboard navigation</SheetDescription>

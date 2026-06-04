@@ -18,7 +18,6 @@ import {
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
-import { LanguageSwitcher } from "@/components/public/language-switcher"
 import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 type PublicMobileMenuProps = {
@@ -118,9 +117,6 @@ export function PublicMobileMenu({ currentPathname, logoUrl }: PublicMobileMenuP
             </Button>
           </div>
 
-          <div className="border-t pt-4">
-            <LanguageSwitcher />
-          </div>
         </div>
       </SheetContent>
     </Sheet>

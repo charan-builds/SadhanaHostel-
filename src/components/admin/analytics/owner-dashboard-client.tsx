@@ -19,6 +19,7 @@ import { StatCard } from "@/components/shared/stat-card"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { hostelModules } from "@/config/hostel-modules"
 import {
   Card,
   CardContent,
@@ -136,6 +137,10 @@ export function OwnerDashboardClient() {
   }
 
   const data = ownerAnalytics.data
+  const showCapacityAnalytics = hostelModules.vacancy || hostelModules.roomAllocation
+  const visibleInsights = showCapacityAnalytics
+    ? data?.insights ?? []
+    : (data?.insights ?? []).filter((insight) => !isCapacityInsight(insight))
 
   if (!data) {
     return (
@@ -150,7 +155,7 @@ export function OwnerDashboardClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Owner Dashboard"
-        description="Business intelligence for occupancy, revenue, dues, reservations, onboarding, and capacity risk."
+        description="Business intelligence for revenue, dues, resident access, and payment risk."
         badge={selectedHostelLabel}
         actions={
           <>
@@ -237,13 +242,15 @@ export function OwnerDashboardClient() {
       </Card>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          title="Occupancy"
-          value={`${data.summary.occupancyRate}%`}
-          description={`${data.capacity.occupiedBeds}/${data.capacity.totalBeds} students occupied`}
-          icon={Users}
-          tone={data.summary.occupancyRate >= 85 ? "success" : "warning"}
-        />
+        {showCapacityAnalytics ? (
+          <StatCard
+            title="Occupancy"
+            value={`${data.summary.occupancyRate}%`}
+            description={`${data.capacity.occupiedBeds}/${data.capacity.totalBeds} students occupied`}
+            icon={Users}
+            tone={data.summary.occupancyRate >= 85 ? "success" : "warning"}
+          />
+        ) : null}
         <StatCard
           title="Revenue"
           value={formatCurrency(data.summary.revenue)}
@@ -267,12 +274,12 @@ export function OwnerDashboardClient() {
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <section className={showCapacityAnalytics ? "grid gap-6 xl:grid-cols-[1.4fr_1fr]" : "grid gap-6"}>
         <Card>
           <CardHeader>
-            <CardTitle>Revenue and Occupancy Trend</CardTitle>
+            <CardTitle>Revenue Trend</CardTitle>
             <CardDescription>
-              Monthly owner view across collections, billed dues, and occupied students.
+              Monthly owner view across collections and billed dues.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -287,41 +294,49 @@ export function OwnerDashboardClient() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Forecast</CardTitle>
-            <CardDescription>30-day projection from recent occupancy and finance patterns.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <ForecastMetric
-              label="Forecast occupancy"
-              value={`${data.forecasts.occupancy.forecastOccupancyRate}%`}
-              detail={`${data.forecasts.occupancy.forecastOccupiedBeds} occupied students expected`}
-            />
-            <ForecastMetric
-              label="Expected vacancies"
-              value={data.forecasts.expectedVacancies}
-              detail={`${data.forecasts.occupancy.expectedJoins} expected joins, ${data.forecasts.occupancy.expectedChurn} expected exits`}
-            />
-            <ForecastMetric
-              label="Expected revenue"
-              value={formatCurrency(data.forecasts.revenue.expectedCollectedRevenue)}
-              detail={`${data.forecasts.revenue.expectedCollectionRate}% expected collection rate`}
-            />
-          </CardContent>
-        </Card>
+        {showCapacityAnalytics ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Forecast</CardTitle>
+              <CardDescription>30-day projection from recent occupancy and finance patterns.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <ForecastMetric
+                label="Forecast occupancy"
+                value={`${data.forecasts.occupancy.forecastOccupancyRate}%`}
+                detail={`${data.forecasts.occupancy.forecastOccupiedBeds} occupied students expected`}
+              />
+              <ForecastMetric
+                label="Expected vacancies"
+                value={data.forecasts.expectedVacancies}
+                detail={`${data.forecasts.occupancy.expectedJoins} expected joins, ${data.forecasts.occupancy.expectedChurn} expected exits`}
+              />
+              <ForecastMetric
+                label="Expected revenue"
+                value={formatCurrency(data.forecasts.revenue.expectedCollectedRevenue)}
+                detail={`${data.forecasts.revenue.expectedCollectionRate}% expected collection rate`}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
+      <section className={showCapacityAnalytics ? "grid gap-6 xl:grid-cols-3" : "grid gap-6"}>
+        <Card className={showCapacityAnalytics ? "xl:col-span-2" : undefined}>
           <CardHeader>
             <CardTitle>Operational Insights</CardTitle>
             <CardDescription>
-              Prioritized owner actions from dues, occupancy, onboarding, and room-utilization signals.
+              Prioritized owner actions from dues, resident access, and payment signals.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {data.insights.map((insight) => (
+            {visibleInsights.length === 0 ? (
+              <EmptyState
+                title="No owner action needed"
+                message="No finance or resident-access risks are currently detected."
+              />
+            ) : null}
+            {visibleInsights.map((insight) => (
               <article key={`${insight.severity}-${insight.title}`} className="rounded-lg border p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={insight.severity === "critical" ? "destructive" : "secondary"}>
@@ -336,29 +351,31 @@ export function OwnerDashboardClient() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Student Vacancy</CardTitle>
-            <CardDescription>
-              {data.capacity.lastCalculatedAt
-                ? `Last calculated ${formatDateTime(data.capacity.lastCalculatedAt)}`
-                : "Calculated from current rooms and allocations"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DonutMetric
-              value={data.capacity.occupiedBeds}
-              total={data.capacity.totalBeds}
-              label={`${data.capacity.availableBeds} student vacancies`}
-            />
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <CapacityItem label="Reserved" value={data.capacity.reservedBeds} />
-              <CapacityItem label="Maintenance" value={data.capacity.maintenanceBlockedBeds} />
-              <CapacityItem label="Vacancy" value={data.capacity.availableBeds} />
-              <CapacityItem label="Total capacity" value={data.capacity.totalBeds} />
-            </div>
-          </CardContent>
-        </Card>
+        {showCapacityAnalytics ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Student Vacancy</CardTitle>
+              <CardDescription>
+                {data.capacity.lastCalculatedAt
+                  ? `Last calculated ${formatDateTime(data.capacity.lastCalculatedAt)}`
+                  : "Calculated from current rooms and allocations"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DonutMetric
+                value={data.capacity.occupiedBeds}
+                total={data.capacity.totalBeds}
+                label={`${data.capacity.availableBeds} student vacancies`}
+              />
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <CapacityItem label="Reserved" value={data.capacity.reservedBeds} />
+                <CapacityItem label="Maintenance" value={data.capacity.maintenanceBlockedBeds} />
+                <CapacityItem label="Vacancy" value={data.capacity.availableBeds} />
+                <CapacityItem label="Total capacity" value={data.capacity.totalBeds} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
@@ -381,7 +398,7 @@ export function OwnerDashboardClient() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Onboarding Completion</CardTitle>
+            <CardTitle>Resident Verification</CardTitle>
             <CardDescription>
               Verification health for residents in the selected scope.
             </CardDescription>
@@ -404,49 +421,62 @@ export function OwnerDashboardClient() {
         </Card>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Room Utilization</CardTitle>
-          <CardDescription>
-            Underperforming rooms are active rooms below 50% utilization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Room</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Occupancy</TableHead>
-                <TableHead>Utilization</TableHead>
-                <TableHead>Revenue Potential</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.roomUtilization.slice(0, 12).map((room) => (
-                <TableRow key={room.roomId}>
-                  <TableCell className="font-medium">{room.roomNumber}</TableCell>
-                  <TableCell>{humanizeEnum(room.roomType)}</TableCell>
-                  <TableCell>
-                    {room.occupied}/{room.capacity}
-                  </TableCell>
-                  <TableCell>
-                    <ProgressBar value={room.utilizationRate} />
-                  </TableCell>
-                  <TableCell>{formatCurrency(room.revenuePotential)}</TableCell>
-                  <TableCell>
-                    <Badge variant={room.underperforming ? "destructive" : "secondary"}>
-                      {room.underperforming ? "Under target" : humanizeEnum(room.status)}
-                    </Badge>
-                  </TableCell>
+      {showCapacityAnalytics ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Room Utilization</CardTitle>
+            <CardDescription>
+              Underperforming rooms are active rooms below 50% utilization.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Occupancy</TableHead>
+                  <TableHead>Utilization</TableHead>
+                  <TableHead>Revenue Potential</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {data.roomUtilization.slice(0, 12).map((room) => (
+                  <TableRow key={room.roomId}>
+                    <TableCell className="font-medium">{room.roomNumber}</TableCell>
+                    <TableCell>{humanizeEnum(room.roomType)}</TableCell>
+                    <TableCell>
+                      {room.occupied}/{room.capacity}
+                    </TableCell>
+                    <TableCell>
+                      <ProgressBar value={room.utilizationRate} />
+                    </TableCell>
+                    <TableCell>{formatCurrency(room.revenuePotential)}</TableCell>
+                    <TableCell>
+                      <Badge variant={room.underperforming ? "destructive" : "secondary"}>
+                        {room.underperforming ? "Under target" : humanizeEnum(room.status)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
     </ResponsiveContainer>
+  )
+}
+
+function isCapacityInsight(insight: OwnerAnalytics["insights"][number]) {
+  const text = `${insight.title} ${insight.description} ${insight.action}`.toLowerCase()
+
+  return (
+    text.includes("occupancy") ||
+    text.includes("vacanc") ||
+    text.includes("room") ||
+    text.includes("capacity")
   )
 }
 
@@ -517,15 +547,27 @@ function TrendChart({
             .join(" ")
 
           return (
-            <polyline
-              key={String(line.key)}
-              fill="none"
-              stroke={line.color}
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={points}
-            />
+            <g key={String(line.key)}>
+              <polyline
+                fill="none"
+                stroke={line.color}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+              {data.map((item, index) => {
+                const value = Number(item[line.key] ?? 0)
+                const x = xFor(index)
+                const y = yFor(value)
+
+                return (
+                  <g key={`${String(line.key)}-${item.month}`}>
+                    <circle cx={x} cy={y} r="5" fill={line.color} />
+                  </g>
+                )
+              })}
+            </g>
           )
         })}
         {data.map((item, index) => (
@@ -540,6 +582,23 @@ function TrendChart({
             <span className="size-3 rounded-full" style={{ backgroundColor: line.color }} />
             {line.label}
           </span>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        {data.map((item) => (
+          <div key={item.month} className="rounded-lg border p-3 text-sm">
+            <p className="font-medium">{item.month}</p>
+            <div className="mt-2 grid gap-1 text-muted-foreground">
+              {lines.map((line) => (
+                <div key={String(line.key)} className="flex items-center justify-between gap-3">
+                  <span>{line.label}</span>
+                  <span className="font-medium text-foreground">
+                    {formatCurrency(Number(item[line.key] ?? 0))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>

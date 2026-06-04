@@ -57,8 +57,14 @@ export const supportSdk = {
 
     return apiClient.post<
       SupportPasswordResetApprovalResult,
-      Omit<SupportPasswordResetApprovalInput, "requestId">
-    >(`/api/support/requests/${requestId}/resident-password-reset`, body, { retry: 0 })
+      Omit<SupportPasswordResetApprovalInput, "requestId"> & {
+        action: "approve_resident_password_reset"
+      }
+    >(
+      `/api/support/requests/${requestId}`,
+      { ...body, action: "approve_resident_password_reset" },
+      { retry: 0 }
+    )
   },
 
   publishRequestAsNotice(input: SupportPublishNoticeInput) {
@@ -66,8 +72,12 @@ export const supportSdk = {
 
     return apiClient.post<
       SupportPublishNoticeResult,
-      Omit<SupportPublishNoticeInput, "requestId">
-    >(`/api/support/requests/${requestId}/publish-notice`, body, { retry: 0 })
+      Omit<SupportPublishNoticeInput, "requestId"> & { action: "publish_notice" }
+    >(
+      `/api/support/requests/${requestId}`,
+      { ...body, action: "publish_notice" },
+      { retry: 0 }
+    )
   },
 
   operationalAlerts(params: OperationalAlertsQueryInput) {

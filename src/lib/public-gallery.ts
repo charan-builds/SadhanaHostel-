@@ -4,16 +4,42 @@ import { fallbackGalleryItems } from "@/constants/public-content"
 import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
 const galleryCategoryLabels: Record<string, string> = {
-  "exterior-surroundings": "Exterior / Surroundings",
-  "open-space-terrace": "Open space / Terrace",
+  logo: "Logo",
   "student-room": "Student rooms",
   "employee-room": "Employee rooms",
-  room: "Rooms",
-  facility: "Facilities",
-  gallery: "Gallery",
-  hero: "Hostel exterior",
-  hostel: "Hostel",
-  logo: "Logo",
+  "exterior-surroundings": "Exterior / Surroundings",
+  "open-space-terrace": "Open space / Terrace",
+}
+
+const galleryCategoryAliases: Record<string, keyof typeof galleryCategoryLabels> = {
+  logo: "logo",
+  brand: "logo",
+  room: "student-room",
+  rooms: "student-room",
+  accommodation: "student-room",
+  student: "student-room",
+  "student-room": "student-room",
+  "student-rooms": "student-room",
+  employee: "employee-room",
+  "employee-room": "employee-room",
+  "employee-rooms": "employee-room",
+  working: "employee-room",
+  professional: "employee-room",
+  facility: "open-space-terrace",
+  facilities: "open-space-terrace",
+  food: "open-space-terrace",
+  dining: "open-space-terrace",
+  terrace: "open-space-terrace",
+  "common-area": "open-space-terrace",
+  "open-space": "open-space-terrace",
+  "open-space-terrace": "open-space-terrace",
+  gallery: "exterior-surroundings",
+  hero: "exterior-surroundings",
+  hostel: "exterior-surroundings",
+  building: "exterior-surroundings",
+  exterior: "exterior-surroundings",
+  surroundings: "exterior-surroundings",
+  "exterior-surroundings": "exterior-surroundings",
 }
 
 const broadGalleryPreferences = new Set([
@@ -68,16 +94,13 @@ export function pickBrandLogo(galleryItems?: GalleryItem[]) {
 }
 
 export function formatGalleryCategory(category: string) {
-  const normalizedCategory = category.toLowerCase().trim()
+  const canonicalCategory = canonicalizeGalleryCategory(category)
 
-  return (
-    galleryCategoryLabels[normalizedCategory] ??
-    normalizedCategory
-      .split(/[-_\s]+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ")
-  )
+  return galleryCategoryLabels[canonicalCategory]
+}
+
+export function canonicalizeGalleryCategory(category: string) {
+  return galleryCategoryAliases[normalizeGalleryMatchKey(category)] ?? "exterior-surroundings"
 }
 
 function getRoomAudience(room: Pick<RoomTypeCard, "title" | "icon">) {

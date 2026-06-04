@@ -28,6 +28,7 @@ export type QueueNotificationInput = {
   organizationId: string
   hostelId?: string | null
   channel?: NotificationChannel
+  noticeId?: string | null
   recipient: NotificationRecipient
   message: NotificationMessage
   scheduledFor?: string | null
@@ -63,6 +64,7 @@ export class NotificationService {
       hostel_id: input.hostelId,
       recipient_user_id: input.recipient.userId,
       resident_id: input.recipient.residentId,
+      notice_id: input.noticeId,
       channel,
       title: sanitizeNotificationText(input.message.title),
       body: sanitizeNotificationText(input.message.body),

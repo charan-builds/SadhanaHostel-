@@ -68,32 +68,13 @@ export function ResidentDashboardClient() {
 
   const latestPayment = ledger.data?.payments[0]
   const latestLeave = leaves.data?.data[0]
-  const currentPeriod = currentPeriodMonth()
+  const nextDueDate = ledger.data?.billing.nextDueDate
+  const currentPeriod = ledger.data?.billing.currentPeriodMonth ?? currentPeriodMonth()
   const currentRecord =
     ledger.data?.feeRecords.find((record) => record.period_month === currentPeriod) ??
     ledger.data?.primaryDueRecord
-  const currentPayments =
-    ledger.data?.payments.filter((payment) =>
-      currentRecord
-        ? payment.monthly_fee_record_id === currentRecord.id
-        : isSameMonth(payment.created_at, new Date())
-    ) ?? []
-  const paidThisMonth = currentPayments
-    .filter((payment) => payment.status === "verified" && !payment.is_advance)
-    .reduce((total, payment) => total + payment.amount, 0)
-  const pendingThisMonth = currentPayments
-    .filter(
-      (payment) =>
-        !payment.is_advance &&
-        (payment.status === "pending" || payment.status === "initiated")
-    )
-    .reduce((total, payment) => total + payment.amount, 0)
-  const monthlyLeft =
-    currentRecord?.balance_amount ??
-    Math.max(resident.data.monthly_fee_amount - paidThisMonth - pendingThisMonth, 0)
-  const currentDue = currentRecord
-    ? Math.max(ledger.data?.totals.currentDue ?? 0, monthlyLeft)
-    : monthlyLeft
+  const monthlyLeft = currentRecord?.balance_amount ?? ledger.data?.totals.currentDue ?? 0
+  const currentDue = Math.max(ledger.data?.totals.currentDue ?? 0, monthlyLeft)
   const advancePaid = ledger.data?.totals.advanceBalance ?? 0
   const advanceLeft = Math.max(resident.data.monthly_fee_amount - advancePaid, 0)
   const totalPayable = currentDue + advanceLeft
@@ -126,7 +107,9 @@ export function ResidentDashboardClient() {
           label="Payable Now"
           value={formatCurrency(totalPayable)}
           detail={
-            latestPayment
+            currentDue <= 0 && nextDueDate
+              ? `Next fee due ${formatDate(nextDueDate)}`
+              : latestPayment
               ? `Last payment ${formatDate(latestPayment.created_at)}`
               : ledger.isLoading
                 ? "Ledger loading"
@@ -216,15 +199,6 @@ function currentPeriodMonth() {
   const now = new Date()
 
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
-}
-
-function isSameMonth(value: string, date: Date) {
-  const parsed = new Date(value)
-
-  return (
-    parsed.getFullYear() === date.getFullYear() &&
-    parsed.getMonth() === date.getMonth()
-  )
 }
 
 function QuickAction({

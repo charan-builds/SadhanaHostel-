@@ -9,13 +9,14 @@ import { getRequestId } from "@/lib/tracing"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
+import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import type {
   PaymentSettingRow,
   PaymentSettingView,
 } from "@/types/payment-operations"
-import type { Json } from "@/types/database"
+import type { Json, Tables } from "@/types/database"
 import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
@@ -49,6 +50,7 @@ export class PaymentsService {
   private readonly paymentSettingsRepository: PaymentSettingsRepository
   private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
+  private readonly roomsRepository: RoomsRepository
   private readonly uploadsRepository: UploadsRepository
   private readonly uploadsService: UploadsService
   private readonly invoicesService: InvoicesService
@@ -60,6 +62,7 @@ export class PaymentsService {
     this.paymentSettingsRepository = new PaymentSettingsRepository(db)
     this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.roomsRepository = new RoomsRepository(db)
     this.uploadsRepository = new UploadsRepository(db)
     this.uploadsService = new UploadsService(db)
     this.invoicesService = new InvoicesService(db)
@@ -869,6 +872,15 @@ export class PaymentsService {
       this.authService.requireHostelAccess(context, values.organizationId, resident.hostel_id)
     }
 
+    const billing = buildResidentBillingContext(resident.joined_on)
+    const generatedCurrentDue = await this.ensureCurrentAnniversaryDueRecord({
+      organizationId: values.organizationId,
+      resident,
+      periodMonth: billing.currentPeriodMonth,
+      dueDate: billing.currentDueDate,
+      actorUserId: context.authUser.id,
+    })
+
     const feeRecords = await this.paymentsRepository.listFeeRecords({
       organizationId: values.organizationId,
       hostelId: resident.hostel_id,
@@ -913,6 +925,7 @@ export class PaymentsService {
         full_name: resident.full_name,
         hostel_id: resident.hostel_id,
         monthly_fee_amount: resident.monthly_fee_amount,
+        joined_on: resident.joined_on,
       },
       totals: {
         currentDue,
@@ -921,11 +934,147 @@ export class PaymentsService {
         verifiedPaid,
         advanceBalance,
       },
+      billing: {
+        joinedOn: resident.joined_on,
+        currentPeriodMonth: billing.currentPeriodMonth,
+        currentDueDate: billing.currentDueDate,
+        nextDueDate: resolveNextDueDate({
+          billing,
+          unpaidFeeRecords,
+          feeRecords: feeRecords.data,
+        }),
+        generatedCurrentDue,
+      },
       primaryDueRecord: unpaidFeeRecords[0] ?? null,
       feeRecords: feeRecords.data,
       payments: payments.data,
       invoices,
     }
+  }
+
+  private async ensureCurrentAnniversaryDueRecord(values: {
+    organizationId: string
+    resident: Pick<
+      Tables<"residents">,
+      | "id"
+      | "organization_id"
+      | "hostel_id"
+      | "joined_on"
+      | "monthly_fee_amount"
+      | "is_active"
+      | "checkout_on"
+    >
+    periodMonth: string
+    dueDate: string | null
+    actorUserId: string
+  }) {
+    const today = todayDateOnly()
+
+    if (values.resident.joined_on && values.resident.joined_on > today) {
+      return false
+    }
+
+    if (!values.dueDate || !isDateOnOrBefore(values.dueDate, today)) {
+      return false
+    }
+
+    if (!values.resident.is_active || values.resident.checkout_on) {
+      return false
+    }
+
+    const existing = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+      values.organizationId,
+      values.resident.id,
+      values.periodMonth
+    )
+
+    if (existing) {
+      const repaired = await this.repairMisclassifiedAdmissionFeeRecord({
+        existing,
+        organizationId: values.organizationId,
+        resident: values.resident,
+        actorUserId: values.actorUserId,
+      })
+
+      if (!repaired) {
+        return false
+      }
+    }
+
+    const allocation = await this.roomsRepository.getActiveAllocationForResidentInHostel(
+      values.resident.id,
+      values.organizationId,
+      values.resident.hostel_id
+    )
+    const baseAmount = allocation?.monthly_fee_amount ?? values.resident.monthly_fee_amount
+
+    await this.paymentsRepository.createFeeRecord({
+      organization_id: values.organizationId,
+      hostel_id: values.resident.hostel_id,
+      resident_id: values.resident.id,
+      room_allocation_id: allocation?.id,
+      period_month: values.periodMonth,
+      due_date: values.dueDate,
+      base_amount: baseAmount,
+      total_amount: baseAmount,
+      balance_amount: baseAmount,
+      status: baseAmount === 0 ? "paid" : "pending",
+      notes: "Monthly fee generated from resident billing anniversary.",
+      metadata: {
+        source: "resident_ledger_anniversary_due",
+        joined_on: values.resident.joined_on,
+      },
+    })
+
+    return true
+  }
+
+  private async repairMisclassifiedAdmissionFeeRecord(values: {
+    existing: Tables<"monthly_fee_records">
+    organizationId: string
+    resident: Pick<Tables<"residents">, "id" | "joined_on">
+    actorUserId: string
+  }) {
+    const joinedOn = values.resident.joined_on
+    const joinedPeriodMonth = joinedOn ? periodMonthForDateOnly(joinedOn) : null
+
+    if (
+      !joinedOn ||
+      !joinedPeriodMonth ||
+      joinedPeriodMonth >= values.existing.period_month ||
+      !isQuickAdmissionFirstMonthRecord(values.existing)
+    ) {
+      return false
+    }
+
+    const joinedRecord = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+      values.organizationId,
+      values.resident.id,
+      joinedPeriodMonth
+    )
+
+    if (joinedRecord) {
+      return false
+    }
+
+    const metadata = jsonObject(values.existing.metadata)
+
+    await this.paymentsRepository.updateFeeRecord(
+      values.existing.id,
+      values.organizationId,
+      {
+        period_month: joinedPeriodMonth,
+        due_date: joinedOn,
+        metadata: {
+          ...metadata,
+          repaired_from_period_month: values.existing.period_month,
+          repaired_reason: "quick_admission_first_month_joined_date_alignment",
+        },
+        updated_by: values.actorUserId,
+      }
+    )
+
+    return true
   }
 
   async verifyPayment(input: unknown) {
@@ -1665,6 +1814,105 @@ function createScreenshotPaymentReference(idempotencyKey: string) {
   const compactKey = idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 32)
 
   return `SCREENSHOT-${compactKey || crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+}
+
+type BillingContext = {
+  joinedOn: string | null
+  currentPeriodMonth: string
+  currentDueDate: string | null
+  nextPeriodDueDate: string | null
+}
+
+function buildResidentBillingContext(joinedOn: string | null): BillingContext {
+  const today = new Date()
+  const currentPeriodMonth = toPeriodMonth(today)
+  const billingDay = joinedOn ? Number(joinedOn.slice(8, 10)) : 10
+  const currentDueDate = buildDueDateForMonth(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    billingDay
+  )
+  const nextPeriodDueDate = buildDueDateForMonth(
+    today.getUTCFullYear(),
+    today.getUTCMonth() + 1,
+    billingDay
+  )
+
+  return {
+    joinedOn,
+    currentPeriodMonth,
+    currentDueDate,
+    nextPeriodDueDate,
+  }
+}
+
+function isQuickAdmissionFirstMonthRecord(record: Tables<"monthly_fee_records">) {
+  const metadata = jsonObject(record.metadata)
+
+  return (
+    metadata.source === "resident_quick_admission" &&
+    metadata.generated_for_initial_collection === true
+  )
+}
+
+function jsonObject(value: Json): Record<string, Json> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, Json>
+}
+
+function resolveNextDueDate(input: {
+  billing: BillingContext
+  unpaidFeeRecords: Array<Tables<"monthly_fee_records">>
+  feeRecords: Array<Tables<"monthly_fee_records">>
+}) {
+  const currentRecord = input.feeRecords.find(
+    (record) => record.period_month === input.billing.currentPeriodMonth
+  )
+  const currentRecordIsClosed =
+    currentRecord && !["pending", "partial", "overdue"].includes(currentRecord.status)
+
+  if (currentRecordIsClosed) {
+    return input.billing.nextPeriodDueDate
+  }
+
+  if (input.unpaidFeeRecords.length > 0) {
+    return input.unpaidFeeRecords[0]?.due_date ?? input.billing.currentDueDate
+  }
+
+  return input.billing.currentDueDate
+}
+
+function toPeriodMonth(date: Date) {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-01`
+}
+
+function periodMonthForDateOnly(date: string) {
+  return `${date.slice(0, 7)}-01`
+}
+
+function todayDateOnly() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function buildDueDateForMonth(year: number, monthIndex: number, billingDay: number) {
+  const monthStart = new Date(Date.UTC(year, monthIndex, 1))
+  const lastDay = new Date(
+    Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)
+  ).getUTCDate()
+  const dueDay = Math.min(Math.max(1, billingDay), lastDay)
+
+  return `${monthStart.getUTCFullYear()}-${pad2(monthStart.getUTCMonth() + 1)}-${pad2(dueDay)}`
+}
+
+function isDateOnOrBefore(left: string, right: string) {
+  return left <= right
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0")
 }
 
 const MANUAL_PAYMENT_RECEIPT_MARKER_PNG = Uint8Array.from([

@@ -194,11 +194,19 @@ export class ResidentOnboardingService {
     const adminDb = createSupabaseAdminClient()
     const adminResidentsRepository = new ResidentsRepository(adminDb)
     const now = new Date().toISOString()
+    const onboardingMetadata = jsonObjectOrEmpty(resident.onboarding_metadata)
     let updated = await adminResidentsRepository.updateExtended(
       resident.id,
       organizationId,
       {
         metadata: resident.metadata as Json,
+        onboarding_metadata: {
+          ...onboardingMetadata,
+          self_completion: true,
+          legacy_verification: true,
+          verificationMode: "resident_self_completion",
+          verifiedWithoutAdminReviewAt: now,
+        },
         onboarding_status: "verified",
         onboarding_rejection_reason: null,
         onboarding_completed_at: resident.onboarding_completed_at ?? now,

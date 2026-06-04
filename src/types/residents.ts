@@ -11,6 +11,8 @@ export type ResidentCreateResult = {
 export type ResidentPasswordResetResult = {
   residentId: string
   targetUserId: string
+  residentName?: string | null
+  residentPhone?: string | null
   temporaryPassword: string
   expiresAt: string
   loginLink: string

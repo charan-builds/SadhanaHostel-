@@ -29,6 +29,7 @@ const createResidentBaseSchema = z.object({
   residentType: z.enum(Constants.public.Enums.resident_type_enum).default("student"),
   gender: z.string().trim().max(40).optional(),
   dateOfBirth: z.string().optional(),
+  joinedOn: dateOnlySchema.optional(),
   phone: phoneSchema,
   email: optionalEmailSchema,
   parentPhone: phoneSchema.optional(),
@@ -90,6 +91,7 @@ export const updateResidentSchema = createResidentBaseSchema
     firstMonthFeeMethod: true,
     firstMonthFeeManualReference: true,
     firstMonthFeeNotes: true,
+    joinedOn: true,
     inviteDeliveryChannel: true,
     inviteExpiresInHours: true,
   })

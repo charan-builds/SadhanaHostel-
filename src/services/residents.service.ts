@@ -11,13 +11,15 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
-import { ResidentsRepository } from "@/repositories/residents.repository"
+import { ResidentsRepository, type ResidentWithOnboarding } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UsersRepository } from "@/repositories/users.repository"
 import type { ResidentInviteCreated } from "@/types/invites"
 import type { ResidentCreateResult, ResidentPasswordResetResult } from "@/types/residents"
 import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import type { RealtimeEventType } from "@/services/realtime/event-types"
+import { RealtimeService } from "@/services/realtime/realtime.service"
+import { InvoicesService } from "@/services/invoices"
 import {
   checkoutResidentSchema,
   createResidentSchema,
@@ -36,12 +38,19 @@ type ResidentsServiceDependencies = {
   residentsRepository?: ResidentsRepository
   residentInviteService?: Pick<ResidentInviteService, "createResidentInvite">
   operationsRepository?: Pick<OperationsRepository, "repairResidentLifecycle">
+  realtimeService?: Pick<RealtimeService, "paymentStatusChanged" | "dashboardRefresh">
+  invoicesService?: Pick<
+    InvoicesService,
+    "generatePaymentReceiptInvoice" | "generateVerifiedMonthlyFeePaymentInvoice"
+  >
   paymentsRepository?: Pick<
     PaymentsRepository,
     | "create"
     | "createFeeRecord"
     | "findByIdempotencyKey"
     | "findFeeRecordByResidentPeriod"
+    | "getById"
+    | "updateInvoiceLink"
     | "updateFeeRecord"
   >
 }
@@ -51,12 +60,19 @@ export class ResidentsService {
   private readonly residentsRepository: ResidentsRepository
   private readonly residentInviteService: Pick<ResidentInviteService, "createResidentInvite">
   private readonly operationsRepository: Pick<OperationsRepository, "repairResidentLifecycle">
+  private readonly realtimeService: Pick<RealtimeService, "paymentStatusChanged" | "dashboardRefresh">
+  private readonly invoicesService: Pick<
+    InvoicesService,
+    "generatePaymentReceiptInvoice" | "generateVerifiedMonthlyFeePaymentInvoice"
+  >
   private readonly paymentsRepository: Pick<
     PaymentsRepository,
     | "create"
     | "createFeeRecord"
     | "findByIdempotencyKey"
     | "findFeeRecordByResidentPeriod"
+    | "getById"
+    | "updateInvoiceLink"
     | "updateFeeRecord"
   >
 
@@ -73,6 +89,8 @@ export class ResidentsService {
         residentsRepository: this.residentsRepository,
       })
     this.operationsRepository = dependencies.operationsRepository ?? new OperationsRepository(db)
+    this.realtimeService = dependencies.realtimeService ?? new RealtimeService(db)
+    this.invoicesService = dependencies.invoicesService ?? new InvoicesService(db)
     this.paymentsRepository = dependencies.paymentsRepository ?? new PaymentsRepository(db)
   }
 
@@ -169,6 +187,8 @@ export class ResidentsService {
     return {
       residentId: resident.id,
       targetUserId: resident.user_id,
+      residentName: resident.full_name,
+      residentPhone: resident.phone,
       temporaryPassword,
       expiresAt,
       loginLink: `${getAppBaseUrl()}/resident/login${resident.phone ? `?phone=${encodeURIComponent(resident.phone)}` : ""}`,
@@ -257,6 +277,10 @@ export class ResidentsService {
     )
 
     await this.publishResidentEvent("resident.created", currentResident, context.authUser.id)
+    await this.publishAdmissionPaymentEvents(
+      [firstMonthFeePayment, advancePayment],
+      context.authUser.id
+    )
 
     return {
       resident: currentResident,
@@ -279,7 +303,8 @@ export class ResidentsService {
       throw conflict("Resident hostel is required before recording first month fee.")
     }
 
-    const periodMonth = currentPeriodMonth()
+    const joinedOn = values.joinedOn ?? new Date().toISOString().slice(0, 10)
+    const periodMonth = periodMonthForDate(joinedOn)
     const idempotencyKey = `resident-admission-first-month-${resident.id}-${periodMonth}`
     const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
       values.organizationId,
@@ -287,7 +312,7 @@ export class ResidentsService {
     )
 
     if (existingPayment) {
-      return existingPayment
+      return this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId)
     }
 
     const monthlyFee = resolveResidentMonthlyFee(
@@ -306,7 +331,7 @@ export class ResidentsService {
         hostel_id: resident.hostel_id,
         resident_id: resident.id,
         period_month: periodMonth,
-        due_date: buildDueDate(periodMonth),
+        due_date: joinedOn,
         base_amount: monthlyFee,
         total_amount: monthlyFee,
         balance_amount: monthlyFee,
@@ -315,6 +340,7 @@ export class ResidentsService {
         metadata: {
           source: "resident_quick_admission",
           generated_for_initial_collection: true,
+          billing_cycle_start: joinedOn,
         },
         created_by: actorUserId,
         updated_by: actorUserId,
@@ -350,6 +376,7 @@ export class ResidentsService {
         source: "resident_quick_admission",
         first_month_fee: true,
         period_month: periodMonth,
+        billing_cycle_start: joinedOn,
       },
       created_by: actorUserId,
       updated_by: actorUserId,
@@ -366,7 +393,7 @@ export class ResidentsService {
       }
     )
 
-    return payment
+    return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
   }
 
   private async recordAdmissionAdvancePayment(
@@ -389,12 +416,12 @@ export class ResidentsService {
     )
 
     if (existingPayment) {
-      return existingPayment
+      return this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId)
     }
 
     const now = new Date().toISOString()
 
-    return this.paymentsRepository.create({
+    const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
       hostel_id: resident.hostel_id,
       resident_id: resident.id,
@@ -421,6 +448,38 @@ export class ResidentsService {
       created_by: actorUserId,
       updated_by: actorUserId,
     })
+
+    return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
+  }
+
+  private async ensureAdmissionPaymentInvoice(payment: PaymentRow, actorUserId: string) {
+    if (payment.status !== "verified") {
+      return payment
+    }
+
+    const invoice = payment.monthly_fee_record_id
+      ? await this.invoicesService.generateVerifiedMonthlyFeePaymentInvoice({
+          payment,
+          actorUserId,
+        })
+      : await this.invoicesService.generatePaymentReceiptInvoice({
+          payment,
+          actorUserId,
+        })
+
+    if (payment.invoice_id === invoice.id) {
+      return (
+        (await this.paymentsRepository.getById(payment.id, payment.organization_id)) ??
+        payment
+      )
+    }
+
+    return this.paymentsRepository.updateInvoiceLink(
+      payment.id,
+      payment.organization_id,
+      invoice.id,
+      actorUserId
+    )
   }
 
   private async createDraftResident(
@@ -438,6 +497,7 @@ export class ResidentsService {
         resident_type: values.residentType,
         gender: values.gender,
         date_of_birth: values.dateOfBirth,
+        joined_on: values.joinedOn ?? new Date().toISOString().slice(0, 10),
         phone: values.phone,
         email: values.email,
         parent_name: values.parentPhone ? "Father" : undefined,
@@ -545,7 +605,7 @@ export class ResidentsService {
       "Resident profile is not linked to this account yet."
     )
 
-    return this.residentsRepository.update(resident.id, values.organizationId, {
+    const updated = await this.residentsRepository.update(resident.id, values.organizationId, {
       preferred_name: values.preferredName,
       phone: values.phone,
       email: values.email,
@@ -557,6 +617,31 @@ export class ResidentsService {
       permanent_address: values.permanentAddress,
       updated_by: context.authUser.id,
     })
+
+    const completedProfile = hasCompletedResidentSelfProfile({
+      ...resident,
+      ...updated,
+    })
+
+    if (completedProfile && updated.status === "draft") {
+      const activated = await this.residentsRepository.activateCompletedProfile({
+        residentId: updated.id,
+        organizationId: values.organizationId,
+        actorUserId: context.authUser.id,
+        metadata: recordFromUnknown(updated.metadata),
+        onboardingMetadata: recordFromUnknown(
+          (updated as ResidentWithOnboarding).onboarding_metadata
+        ),
+      })
+
+      await this.publishResidentEvent("resident.updated", activated, context.authUser.id)
+
+      return activated
+    }
+
+    await this.publishResidentEvent("resident.updated", updated, context.authUser.id)
+
+    return updated
   }
 
   async onboardResident(residentId: string, userId: string) {
@@ -682,6 +767,37 @@ export class ResidentsService {
     return result
   }
 
+  private async publishAdmissionPaymentEvents(
+    payments: Array<PaymentRow | null>,
+    actorUserId: string
+  ) {
+    const recordedPayments = payments.filter(
+      (payment): payment is PaymentRow => Boolean(payment)
+    )
+
+    if (recordedPayments.length === 0) {
+      return
+    }
+
+    await Promise.all(
+      recordedPayments.flatMap((payment) => [
+        this.realtimeService.paymentStatusChanged({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+          actorUserId,
+          paymentId: payment.id,
+          residentId: payment.resident_id,
+          status: payment.status,
+        }),
+        this.realtimeService.dashboardRefresh({
+          organizationId: payment.organization_id,
+          hostelId: payment.hostel_id,
+          reason: "admission_payment_recorded",
+        }),
+      ])
+    )
+  }
+
   private async publishResidentEvent(
     type: RealtimeEventType,
     resident: { id: string; organization_id: string; hostel_id: string | null },
@@ -760,14 +876,8 @@ function getAppBaseUrl() {
   return getServerEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")
 }
 
-function currentPeriodMonth() {
-  const now = new Date()
-
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`
-}
-
-function buildDueDate(periodMonth: string) {
-  return `${periodMonth.slice(0, 7)}-10`
+function periodMonthForDate(date: string) {
+  return `${date.slice(0, 7)}-01`
 }
 
 function recordFromUnknown(value: unknown): Record<string, unknown> {
@@ -776,6 +886,20 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>
+}
+
+function hasCompletedResidentSelfProfile(resident: {
+  phone?: string | null
+  parent_phone?: string | null
+  emergency_contact_phone?: string | null
+  permanent_address?: string | null
+}) {
+  return [
+    resident.phone,
+    resident.parent_phone,
+    resident.emergency_contact_phone,
+    resident.permanent_address,
+  ].every((value) => typeof value === "string" && value.trim().length > 0)
 }
 
 function resolveResidentMonthlyFee(residentType: string | undefined, monthlyFeeAmount: number | undefined) {

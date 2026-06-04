@@ -15,6 +15,7 @@ import {
   createLeadSchema,
   createReservationPaymentSchema,
   createReservationSchema,
+  leadIdMutationSchema,
   leadListSchema,
   publicInquirySchema,
   reservationIdSchema,
@@ -249,6 +250,34 @@ export class AdmissionsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+  }
+
+  async removeLead(input: unknown) {
+    const values = leadIdMutationSchema.parse(input)
+    const context = await this.authService.requirePermission("admissions.manage")
+
+    const existingLead = assertFound(
+      await this.admissionsRepository.getLeadById(values.leadId, values.organizationId),
+      "Lead not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingLead.organization_id,
+      existingLead.hostel_id
+    )
+
+    const lead = await this.admissionsRepository.removeLead(
+      values.leadId,
+      values.organizationId,
+      context.authUser.id
+    )
+
+    await this.publish("lead.removed", lead.organization_id, lead.hostel_id, context.authUser.id, {
+      leadId: lead.id,
+    })
+
+    return lead
   }
 
   async listReservations(input: unknown) {

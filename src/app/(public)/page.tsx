@@ -53,7 +53,6 @@ export default async function HomePage() {
       <HomeHero
         heroTitle={cms.heroTitle}
         heroSubtitle={cms.heroSubtitle}
-        roomTypes={cms.roomTypes}
         galleryItems={cms.galleryItems}
         mapLink={cms.mapLink}
       />

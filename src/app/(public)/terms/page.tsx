@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { TermsPageContent } from "@/components/public/terms-page-content"
 import { JsonLd } from "@/components/seo/json-ld"
 import { hostelConfig } from "@/constants/hostel"
+import { getPublicCmsContent } from "@/lib/cms/public-cms"
 import { createPublicMetadata, createPublicPageJsonLd } from "@/lib/seo"
 
 const termsDescription = `Read hostel rules, resident terms, and stay conditions for students and employees at ${hostelConfig.name} in Pulivendula.`
@@ -14,7 +15,9 @@ export const metadata: Metadata = createPublicMetadata({
   keywords: ["Sadhana Boys Hostel rules", "Pulivendula hostel terms"],
 })
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const cms = await getPublicCmsContent()
+
   return (
     <>
       <JsonLd
@@ -24,7 +27,7 @@ export default function TermsPage() {
           path: "/terms",
         })}
       />
-      <TermsPageContent />
+      <TermsPageContent rules={cms.hostelRules} />
     </>
   )
 }

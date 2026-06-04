@@ -181,7 +181,7 @@ export function LaunchReadinessClient() {
         <CardHeader>
           <CardTitle>Launch Metrics</CardTitle>
           <CardDescription>
-            Daily operating metrics for resident activation, onboarding, payments, and dues.
+            Daily operating metrics for resident activation, profile access, payments, and dues.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

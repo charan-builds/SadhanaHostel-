@@ -91,7 +91,6 @@ export function AdminPaymentsClient() {
   const [rejectionReason, setRejectionReason] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [searchTerm, setSearchTerm] = useState("")
-
   const payments = usePayments({
     organizationId: organizationId ?? "",
     hostelId,
@@ -105,7 +104,11 @@ export function AdminPaymentsClient() {
     organizationId && hostelId ? { organizationId, hostelId } : undefined
   )
 
-  const rows = useMemo(() => payments.data?.data ?? [], [payments.data?.data])
+  const rows = useMemo(
+    () => payments.data?.data ?? [],
+    [payments.data?.data]
+  )
+  const paymentRecordsLoading = payments.isLoading
   const pendingPayments = rows.filter((payment) => payment.status === "pending")
   const verifiedPayments = rows.filter((payment) => payment.status === "verified")
   const failedPayments = rows.filter((payment) => payment.status === "failed")
@@ -298,7 +301,7 @@ export function AdminPaymentsClient() {
             icon={TrendingUp}
             label="Active UPI"
             value={paymentSettings.data?.upi_id ?? "Not configured"}
-            detail={failedPayments.length ? `${failedPayments.length} failed payments` : "Finance route ready"}
+            detail={failedPayments.length ? `${failedPayments.length} failed payments` : "0 failed payments"}
             tone="info"
           />
         </motion.section>
@@ -339,7 +342,7 @@ export function AdminPaymentsClient() {
               </div>
             </div>
 
-            {payments.isLoading ? (
+            {paymentRecordsLoading ? (
               <div className="p-4">
                 <LoadingState variant="table" />
               </div>
@@ -433,7 +436,7 @@ export function AdminPaymentsClient() {
             )}
           </div>
 
-          <PaymentTimeline payments={rows} isLoading={payments.isLoading} />
+          <PaymentTimeline payments={rows} isLoading={paymentRecordsLoading} />
         </motion.section>
 
         <ConfirmDialog

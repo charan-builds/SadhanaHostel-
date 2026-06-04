@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest"
 
 import { fallbackGalleryItems } from "@/constants/public-content"
 import { galleryItems as legacyPublicGalleryItems } from "@/data/public"
-import { formatGalleryCategory, pickGalleryImage, pickRoomGalleryImage } from "@/lib/public-gallery"
+import {
+  canonicalizeGalleryCategory,
+  formatGalleryCategory,
+  pickGalleryImage,
+  pickRoomGalleryImage,
+} from "@/lib/public-gallery"
 import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
 
 const studentRoom: GalleryItem = {
@@ -68,6 +73,14 @@ describe("public gallery image selection", () => {
     expect(formatGalleryCategory("employee-room")).toBe("Employee rooms")
     expect(formatGalleryCategory("open-space-terrace")).toBe("Open space / Terrace")
     expect(formatGalleryCategory("exterior-surroundings")).toBe("Exterior / Surroundings")
+  })
+
+  it("collapses legacy gallery category labels into the approved admin categories", () => {
+    expect(formatGalleryCategory("Hostel")).toBe("Exterior / Surroundings")
+    expect(formatGalleryCategory("Facilities")).toBe("Open space / Terrace")
+    expect(formatGalleryCategory("Common area")).toBe("Open space / Terrace")
+    expect(formatGalleryCategory("Room")).toBe("Student rooms")
+    expect(canonicalizeGalleryCategory("random old category")).toBe("exterior-surroundings")
   })
 
   it("keeps fallback gallery copy aligned with actual shared hostel facilities", () => {

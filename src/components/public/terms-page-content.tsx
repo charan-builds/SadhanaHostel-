@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { termsAndRules } from "@/constants/public-content"
 
-export function TermsPageContent() {
+export function TermsPageContent({ rules = termsAndRules }: { rules?: string[] }) {
+  const visibleRules = rules.length > 0 ? rules : termsAndRules
+
   return (
     <main className="flex flex-1 flex-col bg-white">
       <section className="border-b bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_76%)] px-4 py-14 sm:px-6 sm:py-18">
@@ -32,7 +34,7 @@ export function TermsPageContent() {
             </div>
           </div>
 
-          {termsAndRules.map((rule, index) => (
+          {visibleRules.map((rule, index) => (
             <article key={rule} className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="flex gap-4">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">

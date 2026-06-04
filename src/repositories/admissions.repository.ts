@@ -370,6 +370,29 @@ export class AdmissionsRepository {
     return data as LeadRow
   }
 
+  async removeLead(leadId: string, organizationId: string, actorUserId: string) {
+    const now = new Date().toISOString()
+    const { data, error } = await this.admissionDb()
+      .from("leads")
+      .update({
+        is_active: false,
+        deleted_at: now,
+        deleted_by: actorUserId,
+        updated_by: actorUserId,
+      })
+      .eq("id", leadId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to remove lead.")
+    }
+
+    return data as LeadRow
+  }
+
   async addLeadNote(values: {
     organization_id: string
     hostel_id?: string | null

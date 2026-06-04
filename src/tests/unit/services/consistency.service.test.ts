@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("@/config/hostel-modules", () => ({
+  hostelModules: {
+    rooms: true,
+    roomAllocation: true,
+    reservations: true,
+    vacancy: true,
+    startupFinanceZero: false,
+    launchReadiness: true,
+    maintenance: true,
+  },
+  isAdminModuleEnabled: vi.fn(() => true),
+}))
+
 import {
   ConsistencyService,
   scanConsistency,

@@ -22,6 +22,8 @@ export type ResidentPasswordResetRequestResult = {
 export type SupportPasswordResetApprovalResult = {
   request: Tables<"support_requests">
   reset: ResidentPasswordResetResult
+  whatsappMessage: string
+  whatsappShareUrl: string
 }
 
 export type SupportPublishNoticeResult = {

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 
 type LanguageSwitcherProps = {
   className?: string
+  compact?: boolean
 }
 
 const languageOptions = [
@@ -42,7 +43,7 @@ const ENGLISH_LANGUAGE = "en"
 const TELUGU_LANGUAGE = "te"
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 
-export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
+export function LanguageSwitcher({ className, compact = false }: LanguageSwitcherProps) {
   const labelId = useId()
   const [language, setLanguage] = useState<LanguageValue>(() => readCurrentLanguage())
 
@@ -65,6 +66,27 @@ export function LanguageSwitcher({ className }: LanguageSwitcherProps) {
 
     clearTranslationCookie()
     window.location.reload()
+  }
+
+  if (compact) {
+    const nextLanguage = language === TELUGU_LANGUAGE ? ENGLISH_LANGUAGE : TELUGU_LANGUAGE
+    const nextOption = languageOptions.find((option) => option.value === nextLanguage)
+
+    return (
+      <div className={cn("flex items-center", className)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9 gap-1.5 px-2 text-xs font-semibold"
+          aria-label={`Translate website to ${nextOption?.name ?? "Telugu"}`}
+          onClick={() => handleLanguageChange(nextLanguage)}
+        >
+          <Languages className="size-3.5" aria-hidden="true" />
+          {nextOption?.label ?? "తెలుగు"}
+        </Button>
+      </div>
+    )
   }
 
   return (

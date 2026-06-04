@@ -39,7 +39,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { hostelGalleryImages, hostelImages } from "@/constants/hostel-images"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
-import { formatGalleryCategory } from "@/lib/public-gallery"
+import { canonicalizeGalleryCategory, formatGalleryCategory } from "@/lib/public-gallery"
 import { useDeleteGalleryItem, useGallery, useUploadGalleryImage } from "@/hooks"
 
 type GallerySlot = {
@@ -132,21 +132,10 @@ const galleryCategoryOptions = [
   { value: "open-space-terrace", label: "Open space / Terrace" },
   { value: "exterior-surroundings", label: "Exterior / Surroundings" },
 ] as const
+const galleryAdminPageSize = 100
 
-function findGallerySlotItem<T extends SlotGalleryItem>(items: T[], slot: GallerySlot) {
-  const slotCategory = normalizeGallerySlotKey(slot.category)
-  const exactMatches = items.filter(
-    (item) => normalizeGallerySlotKey(item.category) === slotCategory
-  )
-  const exactMatch = pickPreferredSlotItem(exactMatches)
-
-  if (exactMatch) {
-    return exactMatch
-  }
-
-  const matches = items.filter((item) => matchesGallerySlot(item, slot))
-
-  return pickPreferredSlotItem(matches)
+function findGallerySlotItems<T extends SlotGalleryItem>(items: T[], slot: GallerySlot) {
+  return items.filter((item) => matchesGallerySlot(item, slot))
 }
 
 function getGalleryItemUsage(item: SlotGalleryItem) {
@@ -184,6 +173,36 @@ function normalizeGallerySlotKey(value: string) {
     .replace(/^-|-$/g, "")
 }
 
+function buildGalleryUploadTitle(
+  title: string,
+  file: File,
+  index: number,
+  totalFiles: number
+) {
+  const baseTitle = title.trim() || file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")
+
+  return totalFiles === 1 ? baseTitle : `${baseTitle} ${index + 1}`
+}
+
+function buildGalleryUploadAltText(
+  altText: string,
+  title: string,
+  index: number,
+  totalFiles: number
+) {
+  const baseAltText = altText.trim()
+
+  if (!baseAltText) {
+    return title
+  }
+
+  return totalFiles === 1 ? baseAltText : `${baseAltText} ${index + 1}`
+}
+
+function buildGalleryUploadSortOrder(category: string, existingItemCount: number, index: number) {
+  return canonicalizeGalleryCategory(category) === "logo" ? 0 : existingItemCount + index
+}
+
 export function AdminGalleryClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
@@ -196,7 +215,7 @@ export function AdminGalleryClient() {
     (publicOrganizationId !== organizationId || publicHostelId !== hostelId)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<GallerySlot | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<GalleryDeleteTarget | null>(null)
   const [formValues, setFormValues] = useState({
@@ -209,7 +228,7 @@ export function AdminGalleryClient() {
     organizationId: galleryOrganizationId ?? "",
     hostelId: galleryHostelId,
     page: 1,
-    pageSize: 50,
+    pageSize: galleryAdminPageSize,
   })
   const uploadGalleryImage = useUploadGalleryImage()
   const deleteGalleryItem = useDeleteGalleryItem()
@@ -227,7 +246,7 @@ export function AdminGalleryClient() {
 
   function openSlotUpload(slot: GallerySlot) {
     setSelectedSlot(slot)
-    setSelectedFile(null)
+    setSelectedFiles([])
     setUploadProgress(null)
     setFormValues({
       title: slot.defaultTitle,
@@ -240,7 +259,7 @@ export function AdminGalleryClient() {
 
   function openGeneralUpload() {
     setSelectedSlot(null)
-    setSelectedFile(null)
+    setSelectedFiles([])
     setUploadProgress(null)
     setFormValues({
       title: "",
@@ -256,6 +275,8 @@ export function AdminGalleryClient() {
 
     if (!open) {
       setSelectedSlot(null)
+      setSelectedFiles([])
+      setUploadProgress(null)
     }
   }
 
@@ -266,32 +287,41 @@ export function AdminGalleryClient() {
       return
     }
 
-    if (!selectedFile) {
-      toast.error("Choose a hostel photo before uploading.")
+    if (selectedFiles.length === 0) {
+      toast.error("Choose at least one hostel photo before uploading.")
       return
     }
 
     setUploadProgress(0)
 
     try {
-      await uploadGalleryImage.mutateAsync({
-        file: selectedFile,
-        input: {
-          organizationId: galleryOrganizationId,
-          hostelId: galleryHostelId,
-          title: formValues.title,
-          description: formValues.description || undefined,
-          category: formValues.category || "exterior-surroundings",
-          altText: formValues.altText || formValues.title,
-          sortOrder: selectedSlot ? 0 : items.length,
-          status: "published",
-        },
-        options: {
-          onProgress: (progress) => setUploadProgress(progress.percent),
-        },
-      })
-      toast.success("Gallery image uploaded.")
-      setSelectedFile(null)
+      for (const [index, file] of selectedFiles.entries()) {
+        const title = buildGalleryUploadTitle(formValues.title, file, index, selectedFiles.length)
+
+        await uploadGalleryImage.mutateAsync({
+          file,
+          input: {
+            organizationId: galleryOrganizationId,
+            hostelId: galleryHostelId,
+            title,
+            description: formValues.description || undefined,
+            category: formValues.category || "exterior-surroundings",
+            altText: buildGalleryUploadAltText(formValues.altText, title, index, selectedFiles.length),
+            sortOrder: buildGalleryUploadSortOrder(formValues.category, items.length, index),
+            status: "published",
+          },
+          options: {
+            onProgress: (progress) =>
+              setUploadProgress(
+                Math.round(((index + progress.percent / 100) / selectedFiles.length) * 100)
+              ),
+          },
+        })
+      }
+      toast.success(
+        `${selectedFiles.length} gallery photo${selectedFiles.length === 1 ? "" : "s"} uploaded.`
+      )
+      setSelectedFiles([])
       setUploadProgress(null)
       await galleryQuery.refetch()
       setFormValues({
@@ -331,7 +361,7 @@ export function AdminGalleryClient() {
         />
         <GalleryMetric
           label="Categories"
-          value={new Set(items.map((item) => item.category)).size}
+          value={new Set(items.map((item) => canonicalizeGalleryCategory(item.category))).size}
         />
       </div>
 
@@ -344,17 +374,19 @@ export function AdminGalleryClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Public website image slots</CardTitle>
+          <CardTitle>Public website photo groups</CardTitle>
           <CardDescription>
-            Upload or replace each public-facing photo from one place. Each slot shows where the
-            image appears so the public website is easy to maintain.
+            Add multiple public-facing photos under each category. Public pages use the full group
+            in gallery views and the newest published match where a single image is needed.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {gallerySlots.map((slot) => {
-              const slotItem = findGallerySlotItem(items, slot)
-              const previewUrl = slotItem?.imageUrl ?? slot.fallbackImage
+              const slotItems = findGallerySlotItems(items, slot)
+              const primarySlotItem = pickPreferredSlotItem(slotItems)
+              const previewItems = slotItems.filter((item) => item.imageUrl).slice(0, 4)
+              const fallbackUrl = primarySlotItem?.imageUrl ?? slot.fallbackImage
 
               return (
                 <article
@@ -365,16 +397,32 @@ export function AdminGalleryClient() {
                     {slot.id === "logo" ? (
                       <div className="grid size-full place-items-center bg-gradient-to-br from-primary/10 via-muted to-muted">
                         <BrandMark
-                          logoUrl={slotItem?.imageUrl}
+                          logoUrl={primarySlotItem?.imageUrl}
                           className="size-20 rounded-2xl text-2xl"
                         />
                       </div>
-                    ) : previewUrl ? (
+                    ) : previewItems.length > 0 ? (
+                      <div
+                        className={`grid size-full gap-1 bg-muted p-1 ${
+                          previewItems.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                        }`}
+                      >
+                        {previewItems.map((item) => (
+                          <div
+                            key={item.id}
+                            role="img"
+                            aria-label={item.alt_text ?? item.title}
+                            className="size-full rounded-md bg-cover bg-center"
+                            style={{ backgroundImage: `url("${item.imageUrl}")` }}
+                          />
+                        ))}
+                      </div>
+                    ) : fallbackUrl ? (
                       <div
                         role="img"
-                        aria-label={slotItem?.alt_text ?? slot.defaultAlt}
+                        aria-label={slot.defaultAlt}
                         className="size-full bg-cover bg-center"
-                        style={{ backgroundImage: `url("${previewUrl}")` }}
+                        style={{ backgroundImage: `url("${fallbackUrl}")` }}
                       />
                     ) : (
                       <div className="grid size-full place-items-center">
@@ -382,7 +430,9 @@ export function AdminGalleryClient() {
                       </div>
                     )}
                     <span className="absolute left-3 top-3 rounded-full bg-background/90 px-2 py-1 text-[11px] font-medium shadow-sm backdrop-blur">
-                      {slotItem ? "Uploaded" : "Fallback"}
+                      {slotItems.length > 0
+                        ? `${slotItems.length} uploaded`
+                        : "Fallback"}
                     </span>
                   </div>
                   <div className="grid gap-3 p-4">
@@ -402,45 +452,70 @@ export function AdminGalleryClient() {
                         </span>
                       ))}
                     </div>
-                    {slotItem ? (
+                    {slotItems.length > 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        Current: <span className="font-medium text-foreground">{slotItem.title}</span>{" "}
-                        · {formatGalleryCategory(slotItem.category)}
+                        {slotItems.length} photo{slotItems.length === 1 ? "" : "s"} in this
+                        category. Primary:{" "}
+                        <span className="font-medium text-foreground">
+                          {primarySlotItem?.title}
+                        </span>
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Upload with category <code>{slot.category}</code> to replace this slot.
+                        Upload with category <code>{slot.category}</code> to start this group.
                       </p>
                     )}
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                      <Button
-                        type="button"
-                        variant={slotItem ? "outline" : "default"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => openSlotUpload(slot)}
-                      >
-                        <UploadCloud className="size-3.5" aria-hidden="true" />
-                        {slotItem ? "Replace image" : "Upload image"}
-                      </Button>
-                      {slotItem ? (
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="w-full"
-                          onClick={() =>
-                            setDeleteTarget({
-                              id: slotItem.id,
-                              title: slotItem.title,
-                            })
-                          }
-                        >
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                          Remove
-                        </Button>
-                      ) : null}
-                    </div>
+                    {slotItems.length > 0 ? (
+                      <div className="grid max-h-44 gap-2 overflow-y-auto pr-1">
+                        {slotItems.slice(0, 8).map((item) => (
+                          <div
+                            key={item.id}
+                            className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-lg border bg-muted/30 p-2"
+                          >
+                            {item.imageUrl ? (
+                              <div
+                                role="img"
+                                aria-label={item.alt_text ?? item.title}
+                                className="size-10 rounded-md bg-cover bg-center"
+                                style={{ backgroundImage: `url("${item.imageUrl}")` }}
+                              />
+                            ) : (
+                              <div className="grid size-10 place-items-center rounded-md bg-muted">
+                                <ImageIcon
+                                  className="size-4 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                              </div>
+                            )}
+                            <p className="truncate text-xs font-medium">{item.title}</p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Remove ${item.title}`}
+                              onClick={() =>
+                                setDeleteTarget({
+                                  id: item.id,
+                                  title: item.title,
+                                })
+                              }
+                            >
+                              <Trash2 className="size-3.5 text-destructive" aria-hidden="true" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant={slotItems.length > 0 ? "outline" : "default"}
+                      size="sm"
+                      className="w-full"
+                      onClick={() => openSlotUpload(slot)}
+                    >
+                      <UploadCloud className="size-3.5" aria-hidden="true" />
+                      Add photos
+                    </Button>
                   </div>
                 </article>
               )
@@ -453,15 +528,15 @@ export function AdminGalleryClient() {
         <CardHeader>
           <CardTitle>Public Website Photo Source</CardTitle>
           <CardDescription>
-            Published uploads here feed the public logo, hero, room previews, gallery page, and
-            homepage gallery. Upload your logo with category <code>logo</code>. If no gallery records exist,
-            the site uses the local fallback photos below.
+            Published uploads here feed the public logo, Student rooms, Employee rooms, Open space
+            / Terrace, and Exterior / Surroundings gallery groups. Each category can contain many
+            photos. If no gallery records exist, the site uses the local fallback photos below.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {items.length > 0 ? (
             <div className="rounded-xl border bg-success-surface p-4 text-sm text-success-foreground">
-              Public pages are currently using {items.filter((item) => item.status === "published").length} published admin-uploaded photo(s). Logo records are detected by category <code>logo</code>.
+              Public pages are currently using {items.filter((item) => item.status === "published").length} published admin-uploaded photo(s) across the five approved gallery categories.
             </div>
           ) : (
             <div className="grid gap-4">
@@ -508,26 +583,36 @@ export function AdminGalleryClient() {
               <form onSubmit={handleUpload}>
                 <DialogHeader>
                   <DialogTitle>
-                    {selectedSlot ? `Upload ${selectedSlot.title}` : "Upload Gallery Image"}
+                    {selectedSlot ? `Add ${selectedSlot.title} photos` : "Upload Gallery Images"}
                   </DialogTitle>
                   <DialogDescription>
                     {selectedSlot
-                      ? `This image will update: ${selectedSlot.visibleIn.join(", ")}.`
-                      : "Add a public hostel photo. JPG, PNG, and WebP images up to 6 MB are accepted."}
+                      ? `These photos will be added to: ${selectedSlot.visibleIn.join(", ")}.`
+                      : "Add public hostel photos. JPG, PNG, and WebP images up to 6 MB each are accepted."}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="gallery-file">Image</Label>
+                    <Label htmlFor="gallery-file">Images</Label>
                     <Input
                       id="gallery-file"
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                      multiple
+                      onChange={(event) =>
+                        setSelectedFiles(Array.from(event.target.files ?? []))
+                      }
                     />
+                    {selectedFiles.length > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"} selected.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="gallery-title">Title</Label>
+                    <Label htmlFor="gallery-title">
+                      {selectedFiles.length > 1 ? "Title prefix" : "Title"}
+                    </Label>
                     <Input
                       id="gallery-title"
                       required
@@ -611,7 +696,7 @@ export function AdminGalleryClient() {
                     ) : (
                       <UploadCloud className="size-4" />
                     )}
-                    Publish image
+                    {selectedFiles.length > 1 ? "Publish photos" : "Publish image"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -722,7 +807,7 @@ export function AdminGalleryClient() {
         title="Remove gallery image?"
         description={
           deleteTarget
-            ? `${deleteTarget.title} will be removed from the admin gallery and public website slots.`
+            ? `${deleteTarget.title} will be removed from the admin gallery and public website photo groups.`
             : undefined
         }
         confirmLabel="Remove image"

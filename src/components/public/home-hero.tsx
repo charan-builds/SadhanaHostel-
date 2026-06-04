@@ -2,31 +2,22 @@
 
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { CheckCircle2, MapPin, MessageCircle, Navigation, Phone, ShieldCheck, Star, type LucideIcon } from "lucide-react"
+import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { hostelImages } from "@/constants/hostel-images"
-import { fallbackRoomTypes } from "@/constants/public-content"
 import { buildMapNavigationUrl, pickGalleryImage } from "@/lib/public-gallery"
-import type { GalleryItem, RoomTypeCard } from "@/types/frontend"
-
-const trustBadges = [
-  hostelConfig.location.note,
-  "CCTV monitored premises",
-  "Student and employee hostel",
-] as const
+import type { GalleryItem } from "@/types/frontend"
 
 export function HomeHero({
   heroTitle = hostelConfig.name,
   heroSubtitle = `Safe, neat, and affordable accommodation for students and working professionals in ${hostelConfig.location.city}.`,
-  roomTypes = fallbackRoomTypes,
   galleryItems,
   mapLink,
 }: {
   heroTitle?: string | null
   heroSubtitle?: string | null
-  roomTypes?: RoomTypeCard[]
   galleryItems?: GalleryItem[]
   mapLink?: string | null
 }) {
@@ -56,7 +47,7 @@ export function HomeHero({
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.86)_0%,rgba(15,23,42,0.7)_42%,rgba(15,23,42,0.2)_100%)]" />
       <div className="absolute inset-x-0 bottom-0 h-36 bg-linear-to-t from-background to-transparent" />
 
-      <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-14 pt-16 sm:px-6 md:pb-16 md:pt-24 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
+      <div className="relative mx-auto grid w-full max-w-7xl gap-10 px-4 pb-14 pt-16 sm:px-6 md:pb-16 md:pt-24 lg:items-end">
         <motion.div
           initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -73,12 +64,6 @@ export function HomeHero({
 
           <p className="mt-5 max-w-2xl text-lg leading-8 text-white/82 sm:text-xl">
             {heroSubtitle}
-          </p>
-
-          <p className="mt-4 max-w-2xl text-base leading-7 text-white/70">
-            Located on {hostelConfig.location.note}, {hostelConfig.name} is a boys hostel in
-            Pulivendula with student rooms, employee accommodation, tasty food, WiFi, CCTV,
-            water facility, and a clean environment.
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -111,53 +96,9 @@ export function HomeHero({
               </a>
             </Button>
           </div>
-
-          <div className="mt-7 flex flex-wrap gap-2">
-            {trustBadges.map((badge) => (
-              <span
-                key={badge}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/82 shadow-sm backdrop-blur-xl"
-              >
-                <CheckCircle2 className="size-3.5 text-cyan-200" aria-hidden="true" />
-                {badge}
-              </span>
-            ))}
-          </div>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 24, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.75, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
-          className="hidden lg:block"
-        >
-          <div className="ml-auto max-w-md rounded-2xl border border-white/15 bg-white/10 p-4 shadow-2xl backdrop-blur-2xl">
-            <div className="grid gap-3">
-              <HeroMetric icon={ShieldCheck} label="Monitored" value="CCTV" />
-              <HeroMetric icon={Star} label="Student fee" value={roomTypes[0]?.priceLabel ?? "Clear pricing"} />
-              <HeroMetric icon={CheckCircle2} label="Location" value={hostelConfig.location.note} />
-            </div>
-          </div>
-        </motion.div>
       </div>
     </section>
-  )
-}
-
-function HeroMetric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-xl">
-      <Icon className="size-5 text-cyan-200" aria-hidden="true" />
-      <p className="mt-4 text-xs text-white/58">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-white">{value}</p>
-    </div>
   )
 }

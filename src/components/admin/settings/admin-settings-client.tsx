@@ -472,7 +472,7 @@ export function AdminSettingsClient() {
         <CardHeader>
           <CardTitle>Platform Operations</CardTitle>
           <CardDescription>
-            Owner-managed business controls for launch state, support routing, onboarding, and
+            Owner-managed business controls for launch state, support routing, resident access, and
             enabled modules. Infrastructure secrets, migrations, backups, and storage policies
             remain outside the admin panel.
           </CardDescription>
@@ -546,7 +546,7 @@ export function AdminSettingsClient() {
                   form={platformControlsForm}
                   name="allowPaymentsBeforeVerification"
                   label="Allow payments before verification"
-                  description="Keep off for stricter onboarding-controlled finance."
+                  description="Keep off for stricter profile-verification finance."
                 />
                 <CheckboxField
                   form={platformControlsForm}
@@ -558,7 +558,7 @@ export function AdminSettingsClient() {
                   form={platformControlsForm}
                   name="admissionsEnabled"
                   label="Admissions enabled"
-                  description="Leads, reservations, and invite onboarding are available."
+                  description="Leads, reservations, and resident invite access are available."
                 />
                 <CheckboxField
                   form={platformControlsForm}

@@ -268,7 +268,7 @@ export function AdminAutomationClient() {
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               Detect stale Supabase Auth users, internal resident aliases, duplicate phone identities,
-              missing resident links, and onboarding auth drift after reset or repeated activation testing.
+              missing resident links, and resident access drift after reset or repeated activation testing.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -337,7 +337,7 @@ export function AdminAutomationClient() {
         ) : (
           <EmptyState
             title="No identity drift detected"
-            message="Resident auth identities, public users, onboarding state, and resident links are synchronized for this scope."
+            message="Resident auth identities, public users, access state, and resident links are synchronized for this scope."
           />
         )}
       </section>
@@ -588,7 +588,7 @@ export function AdminAutomationClient() {
         open={resetDialogOpen}
         onOpenChange={setResetDialogOpen}
         title="Reset resident demo/test data?"
-        description="This permanently removes residents, invites, onboarding records, allocations, payments, invoices, leads, reservations, resident notifications, linked resident auth users, and private resident/payment files for the selected tenant scope. Admin access and configuration are preserved."
+        description="This permanently removes residents, invites, resident access records, allocations, payments, invoices, leads, reservations, resident notifications, linked resident auth users, and private resident/payment files for the selected tenant scope. Admin access and configuration are preserved."
         confirmLabel={resetDemoData.isPending ? "Resetting..." : "Reset demo data"}
         variant="danger"
         onConfirm={() => runDemoDataReset(false)}
@@ -1042,7 +1042,7 @@ function recurrencePreventionSteps(finding: ConsistencyFinding) {
 function automationInstruction(action: ConsistencyRepairAction) {
   const labels: Record<ConsistencyRepairAction, string> = {
     cleanup_uploads: "Run Stale Upload Cleanup to remove failed temporary uploads, then retry the document upload.",
-    dedupe_invites: "Run Onboarding Access Repair to expire stale or duplicate invites.",
+    dedupe_invites: "Run Resident Access Repair to expire stale or duplicate invites.",
     expire_invites: "Run Invite Expiry Automation to close expired activation links.",
     expire_reservations: "Run Reservation Expiry Automation to release stale reserved capacity.",
     generate_fees: "Run Monthly Fee Generation after confirming the billing period.",
@@ -1051,7 +1051,7 @@ function automationInstruction(action: ConsistencyRepairAction) {
     release_stale_allocations: "Run Repair Occupancy to close stale allocations and refresh vacancy.",
     repair_analytics: "Run Analytics Repair to refresh hostel capacity snapshots.",
     repair_tenant_linkage: "Run Tenant Linkage Repair to rescope records to the correct organization or hostel.",
-    resync_auth_linkage: "Run Auth Linkage Repair to synchronize resident login and onboarding state.",
+    resync_auth_linkage: "Run Auth Linkage Repair to synchronize resident login and access state.",
     run_consistency_scan: "Run Consistency Scan to refresh the report before applying repairs.",
     review_manually: "Manual review is required. The detailed finding now shows record IDs, safe-repair eligibility, exact manual steps, and prevention guidance.",
   }
@@ -1064,7 +1064,7 @@ function identityAutomationInstruction(action: IdentityReconciliationFinding["re
     delete_orphan_auth: "Run Identity Repair to remove safe orphan Supabase Auth users.",
     dedupe_identity: "Review duplicate identities, then run Identity Repair only for safe cleanup items.",
     relink_resident: "Review the resident record, then run Auth Linkage Repair if the link is safe.",
-    reset_onboarding: "Review onboarding history, then resend activation or reset onboarding from the resident profile.",
+    reset_onboarding: "Review resident access history, then resend activation or reset access from the resident profile.",
     review_manually: "Manual review is required before an automation can safely change identity data.",
   }
 

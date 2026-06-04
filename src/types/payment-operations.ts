@@ -66,7 +66,7 @@ export type PaymentQrUploadResult = {
 export type ResidentPaymentLedger = {
   resident: Pick<
     Tables<"residents">,
-    "id" | "full_name" | "hostel_id" | "monthly_fee_amount"
+    "id" | "full_name" | "hostel_id" | "monthly_fee_amount" | "joined_on"
   >
   totals: {
     currentDue: number
@@ -74,6 +74,13 @@ export type ResidentPaymentLedger = {
     pendingVerification: number
     verifiedPaid: number
     advanceBalance: number
+  }
+  billing: {
+    joinedOn: string | null
+    currentPeriodMonth: string
+    currentDueDate: string | null
+    nextDueDate: string | null
+    generatedCurrentDue: boolean
   }
   primaryDueRecord: Tables<"monthly_fee_records"> | null
   feeRecords: Tables<"monthly_fee_records">[]

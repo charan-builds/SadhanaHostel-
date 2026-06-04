@@ -3,6 +3,7 @@ export const hostelModules = {
   roomAllocation: false,
   reservations: false,
   vacancy: false,
+  startupFinanceZero: false,
   launchReadiness: true,
   maintenance: true,
 } as const

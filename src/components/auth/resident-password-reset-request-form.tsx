@@ -24,8 +24,6 @@ export function ResidentPasswordResetRequestForm() {
     resolver: zodResolver(residentPasswordResetRequestSchema),
     defaultValues: {
       phone: "",
-      admissionNumber: "",
-      email: "",
       message: "",
     },
   })
@@ -54,7 +52,7 @@ export function ResidentPasswordResetRequestForm() {
           <div>
             <h2 className="text-base font-semibold">Request sent</h2>
             <p className="mt-2 text-sm leading-6">
-              If these details match an active resident account, hostel administration will verify
+              If this phone matches an active resident account, hostel administration will verify
               your identity and issue a 24-hour temporary password. The request appears in Admin
               sidebar under Password resets.
             </p>
@@ -93,42 +91,11 @@ export function ResidentPasswordResetRequestForm() {
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="reset-admission">Admission number</Label>
-        <Input
-          id="reset-admission"
-          autoComplete="off"
-          placeholder="SBH-001"
-          aria-invalid={Boolean(form.formState.errors.admissionNumber)}
-          {...form.register("admissionNumber")}
-        />
-        {form.formState.errors.admissionNumber ? (
-          <p className="text-xs text-destructive">
-            {form.formState.errors.admissionNumber.message}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="reset-email">Email, if added</Label>
-        <Input
-          id="reset-email"
-          type="email"
-          autoComplete="email"
-          placeholder="resident@example.com"
-          aria-invalid={Boolean(form.formState.errors.email)}
-          {...form.register("email")}
-        />
-        {form.formState.errors.email ? (
-          <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-2">
         <Label htmlFor="reset-message">Message</Label>
         <Textarea
           id="reset-message"
           className="min-h-24"
-          placeholder="Tell admin when you last used the resident portal."
+          placeholder="Optional note for hostel admin."
           aria-invalid={Boolean(form.formState.errors.message)}
           {...form.register("message")}
         />

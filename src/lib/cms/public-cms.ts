@@ -24,11 +24,13 @@ export type PublicCmsContent = {
   roomTypes: RoomTypeCard[]
   facilities: FacilityItem[]
   galleryItems: GalleryItem[]
+  hostelRules: string[]
   source: "cms" | "fallback"
 }
 
 export const PUBLIC_CMS_CACHE_TAG = "public-cms-content-v2"
 const publicCmsCacheRevalidateSeconds = 60
+const publicCmsGalleryPageSize = 100
 
 export const getPublicCmsContent = cache(async (): Promise<PublicCmsContent> => {
   const organizationId = process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
@@ -72,7 +74,7 @@ async function loadPublicCmsContent(
         organizationId: organizationId || undefined,
         hostelId: hostelId || undefined,
         page: 1,
-        pageSize: 50,
+        pageSize: publicCmsGalleryPageSize,
         status: "published",
       }),
     ])
@@ -105,6 +107,8 @@ function buildCmsContent(
   const about = asObject(settings.about?.content)
   const contact = asObject(settings.contact?.content)
   const pricing = asObject(settings.pricing?.content)
+  const terms = asObject(settings.terms?.content)
+  const hostelRules = getHostelRules(terms)
   const roomTypes = withRequiredRoomAudiences(mapPricingToRoomTypes(pricing))
   const facilities = facilityRows.map(mapFacility)
   const galleryItems = galleryRows.map(mapGalleryItem)
@@ -117,6 +121,7 @@ function buildCmsContent(
     roomTypes: roomTypes.length > 0 ? roomTypes : fallbackRoomTypes,
     facilities: facilities.length > 0 ? facilities : fallbackFacilities,
     galleryItems: galleryItems.length > 0 ? galleryItems : fallbackGalleryItems,
+    hostelRules,
     source: "cms",
   }
 }
@@ -130,6 +135,7 @@ function fallbackCmsContent(): PublicCmsContent {
     roomTypes: fallbackRoomTypes,
     facilities: fallbackFacilities,
     galleryItems: fallbackGalleryItems,
+    hostelRules: [],
     source: "fallback",
   }
 }
@@ -221,4 +227,28 @@ function asObject(value: unknown): CmsObject {
 
 function stringOrNull(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : null
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : []
+}
+
+function getHostelRules(terms: Record<string, unknown>) {
+  const listRules = stringArray(terms.rules)
+
+  if (listRules.length > 0) {
+    return listRules
+  }
+
+  const legacyRules = stringArray(terms.terms_and_rules)
+
+  if (legacyRules.length > 0) {
+    return legacyRules
+  }
+
+  return ["payment_rules", "leave_policy", "conduct_rules"]
+    .map((key) => terms[key])
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
 }

@@ -3,7 +3,15 @@
 import Link from "next/link"
 import type { Route } from "next"
 import { useSearchParams } from "next/navigation"
-import { AlertTriangle, CheckCircle2, Copy, KeyRound, Loader2, Megaphone } from "lucide-react"
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  KeyRound,
+  Loader2,
+  Megaphone,
+  MessageCircle,
+} from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -160,7 +168,7 @@ export function AdminOperationalAlertsClient({
             ? "Verify resident identity, generate a temporary password, and share it securely."
             : residentReportQueue
               ? "Evaluate lost/found, maintenance, and safety reports before publishing notices."
-            : "Recovery queue for blocked residents, payment reviews, onboarding issues, capacity risk, and missing configuration."
+            : "Recovery queue for blocked residents, payment reviews, profile issues, capacity risk, and missing configuration."
         }
       />
 
@@ -223,7 +231,7 @@ export function AdminOperationalAlertsClient({
                   ? "When an existing resident asks admin to reset their password, the request will appear here."
                   : residentReportQueue
                     ? "Lost/found, maintenance, and safety reports will appear here after residents submit them."
-                  : "When residents get blocked by onboarding, uploads, payments, or account access, their requests will appear here."
+                  : "When residents get blocked by profile, uploads, payments, or account access, their requests will appear here."
               }
             />
           ) : undefined
@@ -376,9 +384,22 @@ function PasswordResetResultDialog({
     }
   }
 
+  async function copyWhatsappMessage() {
+    if (!result?.whatsappMessage) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(result.whatsappMessage)
+      toast.success("WhatsApp message copied.")
+    } catch {
+      toast.error("Copy failed. Select and copy the message manually.")
+    }
+  }
+
   return (
     <Dialog open={Boolean(result)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Temporary resident password</DialogTitle>
           <DialogDescription>
@@ -402,10 +423,36 @@ function PasswordResetResultDialog({
                 </p>
               </div>
             </div>
+            <div className="rounded-lg border bg-emerald-50 p-4 text-emerald-950">
+              <p className="text-sm font-semibold">WhatsApp-ready message</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-900">
+                This includes the login link, temporary password, expiry, and reset instruction.
+              </p>
+              <Textarea
+                readOnly
+                value={result.whatsappMessage}
+                className="mt-3 min-h-48 resize-none bg-white/80 font-mono text-xs leading-5"
+                aria-label="WhatsApp password reset message"
+              />
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => void copyPassword()}>
                 <Copy className="size-3.5" aria-hidden="true" />
                 Copy password
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyWhatsappMessage()}
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+                Copy WhatsApp message
+              </Button>
+              <Button asChild variant="outline">
+                <a href={result.whatsappShareUrl} target="_blank" rel="noreferrer">
+                  <MessageCircle className="size-3.5" aria-hidden="true" />
+                  Open WhatsApp
+                </a>
               </Button>
               <Button asChild variant="outline">
                 <a href={result.reset.loginLink} target="_blank" rel="noreferrer">

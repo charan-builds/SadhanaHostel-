@@ -137,7 +137,7 @@ export function ResidentSupportClient() {
     <div className="grid gap-6">
       <PageHeader
         title="Support & Recovery"
-        description="Get unstuck from onboarding, uploads, payments, lost/found items, facility issues, or account access."
+        description="Get unstuck from profile, uploads, payments, lost/found items, facility issues, or account access."
         actions={
           <>
             <Button asChild variant="outline">
@@ -181,7 +181,7 @@ export function ResidentSupportClient() {
                   <SelectContent>
                     {categories.map((item) => (
                       <SelectItem key={item} value={item}>
-                        {humanizeEnum(item)}
+                        {item === "onboarding" ? "Profile access" : humanizeEnum(item)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -284,7 +284,7 @@ export function ResidentSupportClient() {
           requests.data?.data.length === 0 ? (
             <EmptyState
               title="No support requests yet"
-              message="Raise a request when onboarding, uploads, payment, or account access gets stuck."
+              message="Raise a request when profile, uploads, payment, or account access gets stuck."
             />
           ) : undefined
         }
@@ -324,7 +324,7 @@ function parseCategory(value: string | null): Category {
 
 function defaultSubject(category: Category) {
   const labels: Record<Category, string> = {
-    onboarding: "Onboarding recovery needed",
+    onboarding: "Profile access recovery needed",
     payment: "Payment review or retry needed",
     invite: "Invite access needed",
     upload: "Upload retry needed",
@@ -342,7 +342,7 @@ function defaultSubject(category: Category) {
 
 function descriptionPlaceholder(category: Category) {
   const placeholders: Record<Category, string> = {
-    onboarding: "Example: I need to correct my father or mother phone number before finishing onboarding.",
+    onboarding: "Example: I need to correct my father or mother phone number in my resident profile.",
     payment: "Example: I paid by UPI, but my payment is still pending after uploading proof.",
     invite: "Example: My invite link expired before I completed activation.",
     upload: "Example: The screenshot upload failed on mobile even after retrying.",

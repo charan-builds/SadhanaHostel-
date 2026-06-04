@@ -1,4 +1,4 @@
-import { parseJsonBody, successResponse, withApiRoute } from "@/lib/api"
+import { getQueryParams, parseJsonBody, successResponse, withApiRoute } from "@/lib/api"
 import { AdmissionsService } from "@/services/admissions.service"
 
 export const dynamic = "force-dynamic"
@@ -23,6 +23,27 @@ export async function PATCH(request: Request, context: RouteContext) {
       })
 
       return successResponse(lead, "Lead updated.")
+    }
+  )
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const { id } = await context.params
+
+  return withApiRoute(
+    request,
+    {
+      route: "admissions.leads.remove",
+    },
+    async () => {
+      const service = await AdmissionsService.create()
+      const { organizationId } = getQueryParams(request)
+      const lead = await service.removeLead({
+        organizationId,
+        leadId: id,
+      })
+
+      return successResponse(lead, "Lead removed.")
     }
   )
 }

@@ -41,7 +41,7 @@ const optionalTextSchema = z
 const phoneFormSchema = z
   .string()
   .trim()
-  .min(8, "Phone number is required for onboarding access.")
+  .min(8, "Phone number is required for resident access.")
   .max(20)
   .regex(/^[+0-9\s-]+$/, "Phone number contains unsupported characters.")
 
@@ -54,6 +54,7 @@ const residentFormSchema = z.object({
   residentType: z.enum(["student", "employee", "other"]),
   gender: optionalTextSchema.pipe(z.string().max(40).optional()),
   dateOfBirth: optionalTextSchema,
+  joinedOn: optionalTextSchema,
   phone: optionalPhoneFormSchema,
   email: z.string().trim().email("Enter a valid email.").optional().or(z.literal("")),
   parentPhone: optionalPhoneFormSchema,
@@ -155,6 +156,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       residentType: resident?.resident_type ?? "student",
       gender: resident?.gender ?? "",
       dateOfBirth: resident?.date_of_birth ?? "",
+      joinedOn: resident?.joined_on ?? new Date().toISOString().slice(0, 10),
       phone: resident?.phone ?? "",
       email: resident?.email ?? "",
       parentPhone: resident?.parent_phone ?? "",
@@ -196,7 +198,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
 
     if (!resident && !onboardingPhone) {
       setError("phone", {
-        message: "Phone number is required to send resident onboarding access.",
+        message: "Phone number is required to create resident access.",
       })
       return
     }
@@ -241,6 +243,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             residentType: values.residentType,
             gender: undefined,
             dateOfBirth: undefined,
+            joinedOn: values.joinedOn || undefined,
             phone: onboardingPhone ?? "",
             email: values.email || undefined,
             parentPhone: undefined,
@@ -281,7 +284,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         toast.success(
           accessMode === "temporary_password"
             ? "Resident created and temporary phone login is ready."
-            : "Resident created and WhatsApp onboarding link is ready."
+            : "Resident created and WhatsApp access link is ready."
         )
       } else {
         toast.success("Resident updated.")
@@ -314,7 +317,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {isCreate
-            ? "Add the resident in seconds. They will complete contact, father phone, mother phone, address, and hostel rules through self-onboarding."
+            ? "Add the resident in seconds with phone access, fee details, and admission date."
             : "Update resident profile data through the production API."}
         </p>
       </div>
@@ -418,11 +421,16 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
         </Field>
         <Field
           id="phone"
-          label={isCreate ? "Phone for WhatsApp onboarding" : "Phone"}
+          label={isCreate ? "Phone for resident access" : "Phone"}
           error={errors.phone?.message}
         >
           <Input id="phone" type="tel" autoComplete="tel" {...register("phone")} />
         </Field>
+        {isCreate ? (
+          <Field id="joinedOn" label="Admission / joined date" error={errors.joinedOn?.message}>
+            <Input id="joinedOn" type="date" {...register("joinedOn")} />
+          </Field>
+        ) : null}
         {!isCreate ? (
           <>
             <Field id="email" label="Email (optional)" error={errors.email?.message}>
@@ -587,8 +595,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             <div className="md:col-span-2">
               <h3 className="text-sm font-semibold text-foreground">Room assignment</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Save a preferred room for onboarding. When the resident completes their
-                profile, the room is activated automatically if capacity is still available.
+                Save a preferred room for the resident. It can be activated if capacity is still available.
               </p>
             </div>
             <Field id="roomId" label="Preferred room" error={errors.roomId?.message}>
@@ -638,9 +645,8 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                   Resident access will be generated now
                 </p>
                 <p className="mt-1 text-muted-foreground">
-                  Quick admission always creates draft resident access so onboarding cannot
-                  deadlock. Share a WhatsApp activation link or a phone login temporary password.
-                  Email can be added later during self-onboarding.
+                  Quick admission creates resident access immediately. Share a WhatsApp activation
+                  link or a phone login temporary password. Email can be added later if needed.
                 </p>
               </div>
               <div className="grid gap-2">
@@ -713,7 +719,7 @@ function CreatedResidentAccessPanel({
           <p className="font-semibold">Draft resident created</p>
           <p className="mt-1 text-emerald-900">
             {resident.full_name} can now access their portal and complete profile,
-            father phone, mother phone, address, and hostel rules from their phone.
+            hostel services from their phone.
           </p>
           <p className="mt-2 text-xs text-emerald-800">
             Admission: {resident.admission_number} · Status: draft
@@ -816,7 +822,7 @@ function DuplicateResidentRecovery({
       <p className="mt-1 text-amber-900">
         We found {resident.fullName ?? "an existing resident"} with matching{" "}
         {details.matchedFields?.join(" and ") ?? "contact details"}. Continue the
-        existing onboarding instead of creating another record.
+        existing resident record instead of creating another record.
       </p>
       <div className="mt-3 grid gap-1 text-xs text-amber-900 sm:grid-cols-2">
         <p>Admission: {resident.admissionNumber ?? "Not assigned"}</p>
@@ -828,7 +834,7 @@ function DuplicateResidentRecovery({
         <Button asChild size="sm" variant="outline">
           <Link href={`/admin/residents/${resident.id}` as Route}>
             <ExternalLink className="size-4" aria-hidden="true" />
-            Continue Onboarding
+            Open Resident
           </Link>
         </Button>
         <Button

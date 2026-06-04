@@ -309,7 +309,7 @@ export function AdminResidentsClient() {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Residents"
-        description="Manage resident profiles, onboarding details, fees, and account status."
+        description="Manage resident profiles, admission details, fees, and account status."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -348,9 +348,9 @@ export function AdminResidentsClient() {
       >
         <SummaryCard label="Registered Residents" value={summary.registered} icon={Users} tone="info" />
         <SummaryCard label="Active Residents" value={summary.active} icon={ShieldCheck} tone="success" />
-        <SummaryCard label="Draft / Onboarding" value={summary.onboarding} icon={KeyRound} tone="warning" />
+        <SummaryCard label="Draft Residents" value={summary.onboarding} icon={KeyRound} tone="warning" />
         <SummaryCard label="Verified Residents" value={summary.verified} icon={IdCard} tone="success" />
-        <SummaryCard label="Onboarding Follow-up" value={summary.pendingVerification} icon={Wrench} tone="warning" />
+        <SummaryCard label="Resident Follow-up" value={summary.pendingVerification} icon={Wrench} tone="warning" />
         <SummaryCard label="Suspended Residents" value={summary.suspended} icon={UserX} tone="danger" />
         <SummaryCard label="Left Residents" value={summary.checkedOut} icon={LogOut} tone="neutral" />
         <SummaryCard label="Monthly Fees on This Page" value={formatCurrency(summary.monthlyFees)} icon={CreditCard} tone="info" />
@@ -623,7 +623,7 @@ export function AdminResidentsClient() {
         open={Boolean(repairTarget)}
         onOpenChange={(open) => !open && setRepairTarget(null)}
         title={`Repair lifecycle for ${repairTarget?.full_name ?? "resident"}?`}
-        description="This safely checks auth linkage, duplicate invites, stale onboarding, active allocations, invalid dues, and occupancy snapshots for this resident. All changes are tenant-scoped and audit logged."
+        description="This safely checks auth linkage, duplicate invites, stale access state, active allocations, invalid dues, and occupancy snapshots for this resident. All changes are tenant-scoped and audit logged."
         confirmLabel={repairResidentLifecycle.isPending ? "Repairing..." : "Repair lifecycle"}
         onConfirm={confirmRepair}
       />
@@ -1175,7 +1175,7 @@ function ResidentFinancePanel({
     )
   }
 
-  const currentPeriod = currentPeriodMonth()
+  const currentPeriod = ledger.billing.currentPeriodMonth
   const currentRecord =
     ledger.feeRecords.find((record) => record.period_month === currentPeriod) ??
     ledger.primaryDueRecord
@@ -1200,12 +1200,7 @@ function ResidentFinancePanel({
   const thisMonthLeft =
     currentRecord && !advanceAppliedToCurrentRecord
       ? currentRecord.balance_amount
-      : Math.max(
-          (currentRecord?.total_amount ?? resident.monthly_fee_amount) -
-            paidThisMonth -
-            pendingThisMonth,
-          0
-        )
+      : ledger.totals.currentDue
   const recordableDueRecord =
     currentRecord &&
     ((["pending", "partial", "overdue"].includes(currentRecord.status) &&
@@ -1224,8 +1219,12 @@ function ResidentFinancePanel({
   const advanceRequired = resident.monthly_fee_amount
   const advancePaid = ledger.totals.advanceBalance
   const advanceLeft = Math.max(advanceRequired - advancePaid, 0)
-  const dueLeft = currentRecord ? Math.max(ledger.totals.currentDue, thisMonthLeft) : thisMonthLeft
-  const dueDate = recordableDueRecord?.due_date ?? currentRecord?.due_date ?? buildMonthlyDueDate(currentPeriod)
+  const dueLeft = Math.max(ledger.totals.currentDue, thisMonthLeft)
+  const dueDate =
+    recordableDueRecord?.due_date ??
+    currentRecord?.due_date ??
+    ledger.billing.nextDueDate ??
+    buildMonthlyDueDate(currentPeriod)
   const reminderAmount = dueLeft + advanceLeft
   const reminderMessage = buildAdminPaymentReminderMessage({
     resident,
@@ -1850,15 +1849,10 @@ function getResidentFinanceSnapshot(
   const thisMonthLeft =
     currentRecord && !advanceAppliedToCurrentRecord
       ? currentRecord.balance_amount
-      : Math.max(
-          (currentRecord?.total_amount ?? resident.monthly_fee_amount) -
-            paidThisMonth -
-            pendingThisMonth,
-          0
-        )
+      : ledger.totals.currentDue
   const advancePaid = ledger.totals.advanceBalance
   const advanceLeft = Math.max(resident.monthly_fee_amount - advancePaid, 0)
-  const dueLeft = currentRecord ? Math.max(ledger.totals.currentDue, thisMonthLeft) : thisMonthLeft
+  const dueLeft = Math.max(ledger.totals.currentDue, thisMonthLeft)
   const reminderAmount = dueLeft + advanceLeft
   const status =
     ledger.totals.overdue > 0 || currentRecord?.status === "overdue"
@@ -1873,7 +1867,7 @@ function getResidentFinanceSnapshot(
     currentPeriod,
     currentRecord,
     currentPayments,
-    dueDate: currentRecord?.due_date ?? buildMonthlyDueDate(currentPeriod),
+    dueDate: currentRecord?.due_date ?? ledger.billing.nextDueDate ?? buildMonthlyDueDate(currentPeriod),
     paidThisMonth,
     pendingThisMonth,
     pendingVerification: ledger.totals.pendingVerification,

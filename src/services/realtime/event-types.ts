@@ -11,6 +11,7 @@ export type RealtimeEventType =
   | "room.transfer_completed"
   | "lead.created"
   | "lead.updated"
+  | "lead.removed"
   | "reservation.created"
   | "reservation.confirmed"
   | "reservation.expired"

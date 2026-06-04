@@ -61,6 +61,7 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
           organizationId: payload.organizationId,
           hostelId: resident.hostel_id,
           channel: "in_app",
+          noticeId: notice.id,
           recipient: {
             residentId: resident.id,
             userId: resident.user_id,
@@ -77,6 +78,30 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
             },
           },
         })
+
+        if (resident.phone) {
+          await notificationService.queue({
+            organizationId: payload.organizationId,
+            hostelId: resident.hostel_id,
+            channel: "whatsapp",
+            noticeId: notice.id,
+            recipient: {
+              residentId: resident.id,
+              userId: resident.user_id,
+              email: resident.email,
+              phone: resident.phone,
+            },
+            message: {
+              title: notice.title,
+              body: notice.body,
+              templateKey: "notice_published",
+              payload: {
+                notice_id: notice.id,
+                audience_type: notice.audience_type,
+              },
+            },
+          })
+        }
         processed += 1
       }
     }

@@ -125,7 +125,7 @@ export function ResidentLeaveClient() {
               <ShieldCheck className="size-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold">Onboarding required</h2>
+              <h2 className="text-base font-semibold">Resident access required</h2>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 {verification.message}
               </p>
@@ -139,7 +139,7 @@ export function ResidentLeaveClient() {
                 </div>
               ) : null}
               <Button asChild className="mt-5">
-                <Link href={"/resident/onboarding" as Route}>Open onboarding</Link>
+                <Link href={"/resident/profile" as Route}>Open profile</Link>
               </Button>
             </div>
           </div>
@@ -191,6 +191,10 @@ export function ResidentLeaveClient() {
           <p className="mt-1 text-sm text-muted-foreground">
             Submit accurate dates and travel details so admins can notify your family when needed.
           </p>
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+            Once you leave the hostel premises for approved leave, hostel management is not
+            responsible for your safety, travel, or personal belongings until you return.
+          </div>
 
           {errors.root?.message ? (
             <div className="mt-4">
@@ -322,7 +326,7 @@ function getLeaveVerificationState(resident: LeaveResident) {
       canApplyLeave,
       missing,
       message:
-        "Finish the missing onboarding items below, then complete onboarding to unlock leave requests.",
+        "Finish the missing resident profile items below, then ask the hostel office to activate leave requests.",
     }
   }
 
@@ -331,7 +335,7 @@ function getLeaveVerificationState(resident: LeaveResident) {
       canApplyLeave,
       missing,
       message:
-        "Your profile is complete and waiting to be activated. Open onboarding to finish.",
+        "Your profile is complete and waiting to be activated by the hostel office.",
     }
   }
 

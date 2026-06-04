@@ -6,7 +6,7 @@ import { hostelConfig } from "@/constants/hostel"
 import { createPublicMetadata, createPublicPageJsonLd } from "@/lib/seo"
 
 const supportDescription =
-  `Get help with resident login, onboarding, payments, uploads, invites, and account access at ${hostelConfig.name} in Pulivendula.`
+  `Get help with resident login, profile access, payments, uploads, invites, and account access at ${hostelConfig.name} in Pulivendula.`
 
 export const metadata: Metadata = createPublicMetadata({
   title: `Support ${hostelConfig.name} Pulivendula`,

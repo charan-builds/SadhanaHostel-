@@ -31,6 +31,7 @@ import {
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { hostelModules } from "@/config/hostel-modules"
 import { hostelConfig } from "@/constants/hostel"
@@ -50,7 +51,6 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
   { title: "Residents", href: "/admin/residents", icon: Users },
-  { title: "Onboarding", href: "/admin/residents/verification", icon: ClipboardCheck },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
   { title: "Payment Security", href: "/admin/finance/payment-security", icon: ShieldCheck },
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
@@ -78,7 +78,7 @@ const quickActions = [
   { title: "Publish notice", href: "/admin/notices", icon: Megaphone },
 ] satisfies AdminNavigationItem[]
 
-export function AdminSidebar() {
+export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
   const pathname = usePathname()
   const { organizationId, session } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -156,9 +156,11 @@ export function AdminSidebar() {
           >
             <motion.span
               whileHover={{ rotate: -4, scale: 1.05 }}
-              className="flex size-11 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground shadow-lg shadow-cyan-950/20"
             >
-              SB
+              <BrandMark
+                logoUrl={logoUrl}
+                className="size-11 rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-cyan-950/20"
+              />
             </motion.span>
             <AnimatePresence initial={false}>
               {!collapsed ? (

@@ -6,6 +6,7 @@ import {
   buildTenantCacheKey,
   getOrSetCache,
 } from "@/lib/cache"
+import { hostelModules } from "@/config/hostel-modules"
 import { measureAsync } from "@/lib/performance"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AnalyticsRepository } from "@/repositories/analytics.repository"
@@ -25,7 +26,7 @@ import {
   isResidentEligibleForOccupancy,
 } from "./analytics/operational-metrics"
 
-const DASHBOARD_CACHE_TTL_MS = 30_000
+const DASHBOARD_CACHE_TTL_MS = 0
 const OWNER_ANALYTICS_CACHE_TTL_MS = 60_000
 
 export class AnalyticsService {
@@ -250,6 +251,11 @@ export class AnalyticsService {
         .filter((record) => billingEligibleResidentIds.has(record.resident_id))
         .map((record) => record.balance_amount)
     )
+    const finance = {
+      monthlyRevenue,
+      pendingDues,
+      pendingPayments,
+    }
     const vacantBeds = Math.max(0, capacity - occupiedBeds)
 
     return {
@@ -261,11 +267,7 @@ export class AnalyticsService {
         vacantBeds,
         occupancyRate: capacity === 0 ? 0 : Number(((occupiedBeds / capacity) * 100).toFixed(2)),
       },
-      finance: {
-        monthlyRevenue,
-        pendingDues,
-        pendingPayments,
-      },
+      finance,
       operations: {
         activeLeaves,
         newAdmissions,
@@ -504,11 +506,27 @@ export class AnalyticsService {
         allocations: activeAllocations,
       })
     )
-    const revenue = sum(verifiedPayments.map((payment) => payment.amount))
-    const billed = sum(billingFeeRecords.map((record) => record.total_amount))
-    const pendingDues = sum(pendingFeeRecords.map((record) => record.balance_amount))
+    const financeMonthly = hostelModules.startupFinanceZero
+      ? monthly.map((item) => ({
+          ...item,
+          revenue: 0,
+          billed: 0,
+          dues: 0,
+          reservationAdvance: 0,
+          paymentConversion: 0,
+        }))
+      : monthly
+    const revenue = hostelModules.startupFinanceZero
+      ? 0
+      : sum(verifiedPayments.map((payment) => payment.amount))
+    const billed = hostelModules.startupFinanceZero
+      ? 0
+      : sum(billingFeeRecords.map((record) => record.total_amount))
+    const pendingDues = hostelModules.startupFinanceZero
+      ? 0
+      : sum(pendingFeeRecords.map((record) => record.balance_amount))
     const paymentConversion =
-      payments.length === 0
+      hostelModules.startupFinanceZero || payments.length === 0
         ? 0
         : Number(((verifiedPayments.length / payments.length) * 100).toFixed(2))
     const averageStayDurationDays = average(
@@ -519,11 +537,11 @@ export class AnalyticsService {
         )
       )
     )
-    const revenueForecast = buildOwnerRevenueForecast(monthly)
+    const revenueForecast = buildOwnerRevenueForecast(financeMonthly)
     const occupancyForecast = buildOwnerOccupancyForecast({
       currentOccupied: occupiedBeds,
       totalBeds,
-      monthly,
+      monthly: financeMonthly,
       residents: operationalResidents,
       fromDate: now.toISOString(),
     })
@@ -532,8 +550,8 @@ export class AnalyticsService {
       totalBeds,
       occupiedBeds,
       pendingDues,
-      overdueRecords: overdueRecords.length,
-      unpaidResidents: unpaidResidentIds.size,
+      overdueRecords: hostelModules.startupFinanceZero ? 0 : overdueRecords.length,
+      unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
       roomUtilization,
       onboardingIncomplete: Math.max(0, residents.length - completedOnboarding),
       paymentConversion,
@@ -546,8 +564,8 @@ export class AnalyticsService {
         revenue,
         billed,
         pendingDues,
-        unpaidResidents: unpaidResidentIds.size,
-        monthlyGrowth: calculateGrowth(monthly.map((item) => item.newResidents)),
+        unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
+        monthlyGrowth: calculateGrowth(financeMonthly.map((item) => item.newResidents)),
         paymentConversion,
         residentChurn: percent(checkedOutInRange, Math.max(residents.length, 1)),
         averageStayDurationDays,
@@ -568,8 +586,8 @@ export class AnalyticsService {
           String(resident.onboarding_status ?? "unknown")
         ),
       },
-      duesAging: buildDuesAging(pendingFeeRecords, now),
-      trends: monthly,
+      duesAging: hostelModules.startupFinanceZero ? [] : buildDuesAging(pendingFeeRecords, now),
+      trends: financeMonthly,
       roomUtilization,
       forecasts: {
         occupancy: occupancyForecast,

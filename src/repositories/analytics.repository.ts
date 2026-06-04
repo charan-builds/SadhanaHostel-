@@ -424,8 +424,12 @@ export class AnalyticsRepository {
       .select("amount,status,method,created_at,verified_at")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
-      .gte("created_at", fromDate)
-      .lte("created_at", toDate)
+      .or(
+        [
+          `and(created_at.gte.${fromDate},created_at.lte.${toDate})`,
+          `and(verified_at.gte.${fromDate},verified_at.lte.${toDate})`,
+        ].join(",")
+      )
 
     if (hostelId) {
       query = query.eq("hostel_id", hostelId)

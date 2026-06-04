@@ -11,6 +11,7 @@ import type {
   CreateLeadInput,
   CreateReservationInput,
   CreateReservationPaymentInput,
+  LeadIdMutationInput,
   LeadListInput,
   PublicInquiryInput,
   ReservationIdInput,
@@ -81,6 +82,15 @@ export function useUpdateLead() {
 
   return useMutation({
     mutationFn: (input: UpdateLeadInput) => admissionsSdk.updateLead(input),
+    onSuccess: (lead) => invalidateAdmissions(queryClient, lead.organization_id, lead.hostel_id),
+  })
+}
+
+export function useRemoveLead() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: LeadIdMutationInput) => admissionsSdk.removeLead(input),
     onSuccess: (lead) => invalidateAdmissions(queryClient, lead.organization_id, lead.hostel_id),
   })
 }
