@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { PaymentsService } from "@/services/payments.service"
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/tests/fixtures"
 import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { PaymentSettingRow } from "@/types/payment-operations"
+import type { Tables } from "@/types/database"
 
 function createServiceHarness() {
   const service = new PaymentsService({} as never)
@@ -33,6 +34,17 @@ function createServiceHarness() {
     createResidentUpiDraft: vi.fn(),
     finalizeSubmission: vi.fn(),
     updateInvoiceLink: vi.fn(),
+    findFeeRecordByResidentPeriod: vi.fn(),
+    createFeeRecord: vi.fn(),
+    updateFeeRecord: vi.fn(),
+    listFeeRecords: vi.fn(),
+    listResidentPayments: vi.fn(),
+    listResidentInvoices: vi.fn(),
+  }
+  const systemPaymentsRepository = {
+    findFeeRecordByResidentPeriod: vi.fn(),
+    createFeeRecord: vi.fn(),
+    updateFeeRecord: vi.fn(),
   }
   const uploadsRepository = {
     findLatestPaymentProof: vi.fn(),
@@ -41,6 +53,10 @@ function createServiceHarness() {
   }
   const residentsRepository = {
     getById: vi.fn().mockResolvedValue(null),
+    getByUserId: vi.fn().mockResolvedValue(null),
+  }
+  const roomsRepository = {
+    getActiveAllocationForResidentInHostel: vi.fn(),
   }
   const realtimeService = {
     paymentStatusChanged: vi.fn().mockResolvedValue(null),
@@ -62,8 +78,10 @@ function createServiceHarness() {
     authService,
     paymentSettingsRepository,
     paymentsRepository,
+    systemPaymentsRepository,
     uploadsRepository,
     residentsRepository,
+    roomsRepository,
     realtimeService,
     notificationService,
     uploadsService,
@@ -75,9 +93,11 @@ function createServiceHarness() {
     authService,
     paymentSettingsRepository,
     paymentsRepository,
+    systemPaymentsRepository,
     uploadsRepository,
     uploadsService,
     residentsRepository,
+    roomsRepository,
     invoicesService,
   }
 }
@@ -124,7 +144,45 @@ function paymentSettingFixture(
   }
 }
 
+function monthlyFeeRecordFixture(
+  overrides: Partial<Tables<"monthly_fee_records">> = {}
+): Tables<"monthly_fee_records"> {
+  return {
+    id: FEE_RECORD_ID,
+    organization_id: TEST_ORGANIZATION_ID,
+    hostel_id: TEST_HOSTEL_ID,
+    resident_id: RESIDENT_ID,
+    room_allocation_id: null,
+    period_month: "2026-06-01",
+    due_date: "2026-06-01",
+    base_amount: 6500,
+    advance_adjustment_amount: 0,
+    discount_amount: 0,
+    penalty_amount: 0,
+    adjustment_amount: 0,
+    total_amount: 6500,
+    paid_amount: 0,
+    balance_amount: 6500,
+    status: "pending",
+    generated_at: "2026-06-04T00:00:00.000Z",
+    notes: null,
+    metadata: {},
+    is_active: true,
+    created_at: "2026-06-04T00:00:00.000Z",
+    updated_at: "2026-06-04T00:00:00.000Z",
+    created_by: null,
+    updated_by: null,
+    deleted_at: null,
+    deleted_by: null,
+    ...overrides,
+  }
+}
+
 describe("PaymentsService", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("reconciles an already verified payment by ensuring receipt invoice linkage", async () => {
     const harness = createServiceHarness()
     const verified = paymentFixture({ status: "verified", is_advance: true })
@@ -344,6 +402,157 @@ describe("PaymentsService", () => {
         record_id: setting.id,
       })
     )
+  })
+
+  it("creates resident ledger dues through the system repository after ownership is verified", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-04T12:00:00.000Z"))
+
+    const harness = createServiceHarness()
+    const context = residentAuthContext()
+    const resident = residentFixture({
+      user_id: context.authUser.id,
+      joined_on: "2026-06-01",
+      monthly_fee_amount: 5000,
+    })
+    const feeRecord = monthlyFeeRecordFixture({
+      period_month: "2026-06-01",
+      due_date: "2026-06-01",
+      base_amount: 5000,
+      total_amount: 5000,
+      balance_amount: 5000,
+    })
+
+    harness.authService.getCurrentContext.mockResolvedValue(context)
+    harness.residentsRepository.getByUserId.mockResolvedValue(resident)
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+    harness.systemPaymentsRepository.findFeeRecordByResidentPeriod.mockResolvedValue(null)
+    harness.systemPaymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
+    harness.roomsRepository.getActiveAllocationForResidentInHostel.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000061",
+      monthly_fee_amount: 5000,
+    })
+    harness.paymentsRepository.listFeeRecords.mockResolvedValue({
+      data: [feeRecord],
+      meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+    })
+    harness.paymentsRepository.listResidentPayments.mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
+    })
+    harness.paymentsRepository.listResidentInvoices.mockResolvedValue([])
+
+    const ledger = await harness.service.getResidentLedger({
+      organizationId: TEST_ORGANIZATION_ID,
+    })
+
+    expect(harness.paymentsRepository.createFeeRecord).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organization_id: TEST_ORGANIZATION_ID,
+        hostel_id: TEST_HOSTEL_ID,
+        resident_id: RESIDENT_ID,
+        period_month: "2026-06-01",
+        due_date: "2026-06-01",
+        base_amount: 5000,
+        total_amount: 5000,
+        balance_amount: 5000,
+        status: "pending",
+        created_by: context.authUser.id,
+        updated_by: context.authUser.id,
+      })
+    )
+    expect(ledger.billing.generatedCurrentDue).toBe(true)
+    expect(ledger.billing.nextDueDate).toBe("2026-06-01")
+    expect(ledger.totals.currentDue).toBe(5000)
+  })
+
+  it("catches up missed monthly dues from the joined month before selecting the payable due", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-04T12:00:00.000Z"))
+
+    const harness = createServiceHarness()
+    const context = residentAuthContext()
+    const resident = residentFixture({
+      user_id: context.authUser.id,
+      joined_on: "2026-04-01",
+      monthly_fee_amount: 5000,
+    })
+    const aprilPaid = monthlyFeeRecordFixture({
+      id: "00000000-0000-4000-8000-000000000141",
+      period_month: "2026-04-01",
+      due_date: "2026-04-01",
+      total_amount: 5000,
+      paid_amount: 5000,
+      balance_amount: 0,
+      status: "paid",
+      metadata: {
+        source: "resident_quick_admission",
+        generated_for_initial_collection: true,
+      },
+    })
+    const mayDue = monthlyFeeRecordFixture({
+      id: "00000000-0000-4000-8000-000000000142",
+      period_month: "2026-05-01",
+      due_date: "2026-05-01",
+      base_amount: 5000,
+      total_amount: 5000,
+      balance_amount: 5000,
+    })
+    const juneDue = monthlyFeeRecordFixture({
+      id: "00000000-0000-4000-8000-000000000143",
+      period_month: "2026-06-01",
+      due_date: "2026-06-01",
+      base_amount: 5000,
+      total_amount: 5000,
+      balance_amount: 5000,
+    })
+
+    harness.authService.getCurrentContext.mockResolvedValue(context)
+    harness.residentsRepository.getByUserId.mockResolvedValue(resident)
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+    harness.systemPaymentsRepository.findFeeRecordByResidentPeriod
+      .mockResolvedValueOnce(aprilPaid)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+    harness.systemPaymentsRepository.createFeeRecord
+      .mockResolvedValueOnce(mayDue)
+      .mockResolvedValueOnce(juneDue)
+    harness.roomsRepository.getActiveAllocationForResidentInHostel.mockResolvedValue(null)
+    harness.paymentsRepository.listFeeRecords.mockResolvedValue({
+      data: [juneDue, mayDue, aprilPaid],
+      meta: { page: 1, pageSize: 100, total: 3, totalPages: 1 },
+    })
+    harness.paymentsRepository.listResidentPayments.mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
+    })
+    harness.paymentsRepository.listResidentInvoices.mockResolvedValue([])
+
+    const ledger = await harness.service.getResidentLedger({
+      organizationId: TEST_ORGANIZATION_ID,
+    })
+
+    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenCalledTimes(2)
+    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        period_month: "2026-05-01",
+        due_date: "2026-05-01",
+        total_amount: 5000,
+      })
+    )
+    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        period_month: "2026-06-01",
+        due_date: "2026-06-01",
+        total_amount: 5000,
+      })
+    )
+    expect(ledger.primaryDueRecord?.id).toBe(mayDue.id)
+    expect(ledger.billing.nextDueDate).toBe("2026-05-01")
+    expect(ledger.totals.currentDue).toBe(10000)
   })
 
   it("allows residents to submit payment proof before profile completion", async () => {

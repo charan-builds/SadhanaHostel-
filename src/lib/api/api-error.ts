@@ -68,6 +68,12 @@ export function toApiError(error: unknown): ApiError {
   }
 
   if (isRepositoryError(error)) {
+    const guardError = mapRepositoryGuardError(error)
+
+    if (guardError) {
+      return guardError
+    }
+
     const code = error.code ?? "DATABASE_ERROR"
     const isStorageError = code.includes("STORAGE") || code.includes("SIGNED_URL")
 
@@ -129,7 +135,59 @@ export function databaseError(message = "Database operation failed.", details?: 
   return new ApiError("DATABASE_ERROR", message, 500, details, false)
 }
 
-function isRepositoryError(error: unknown): error is { name: string; code?: string } {
+function mapRepositoryGuardError(error: RepositoryErrorLike) {
+  const message = error.message
+
+  if (error.code === "42501") {
+    if (message.includes("resident_profile_self_update_locked")) {
+      return new ApiError(
+        "FORBIDDEN",
+        "This resident profile is locked for self-service changes. Contact hostel administration.",
+        403
+      )
+    }
+
+    if (message.includes("resident_profile_self_update_protected_fields")) {
+      return new ApiError(
+        "FORBIDDEN",
+        "Only contact and family profile fields can be updated from the resident portal.",
+        403
+      )
+    }
+
+    if (message.includes("Not authorized to update resident profile")) {
+      return new ApiError(
+        "FORBIDDEN",
+        "You can update only your own resident profile.",
+        403
+      )
+    }
+
+    if (message.includes("Residents cannot update protected profile fields")) {
+      return new ApiError(
+        "FORBIDDEN",
+        "Protected resident fields can be changed only by hostel administration.",
+        403
+      )
+    }
+
+    return new ApiError("FORBIDDEN", "You do not have permission for this action.", 403)
+  }
+
+  if (message.includes("resident_onboarding_requirements_missing")) {
+    return new ApiError(
+      "VALIDATION_ERROR",
+      "Complete all required profile and document fields before submitting verification.",
+      422
+    )
+  }
+
+  return null
+}
+
+type RepositoryErrorLike = Error & { name: string; code?: string }
+
+function isRepositoryError(error: unknown): error is RepositoryErrorLike {
   return (
     error instanceof Error &&
     error.name === "RepositoryError" &&

@@ -231,6 +231,29 @@ describe("tenant isolation and security hardening contracts", () => {
     expect(roleGuard).toMatch(/if\s+v_is_admin_transition\s+then[\s\S]*insert\s+into\s+public\.audit_logs/i)
   })
 
+  it("allows verified residents to update contact details without opening admin-only fields", () => {
+    const residentContactPolicy = migration(
+      "20260604001000_resident_verified_contact_update_policy.sql"
+    )
+
+    expect(residentContactPolicy).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.protect_resident_profile_update/i
+    )
+    expect(residentContactPolicy).not.toMatch(
+      /old\.onboarding_status\s+in\s+\('verified',\s*'suspended'\)/
+    )
+    expect(residentContactPolicy).toMatch(
+      /old\.onboarding_status\s+=\s+'suspended'::public\.resident_onboarding_status_enum/
+    )
+    expect(residentContactPolicy).toMatch(
+      /- 'phone'[\s\S]*- 'email'[\s\S]*- 'parent_phone'[\s\S]*- 'emergency_contact_phone'[\s\S]*- 'permanent_address'/
+    )
+    expect(residentContactPolicy).toMatch(
+      /- 'user_id'[\s\S]*- 'onboarding_status'[\s\S]*- 'onboarding_metadata'/
+    )
+    expect(residentContactPolicy).toMatch(/resident_profile_self_update_protected_fields/)
+  })
+
   it("enforces explicit hostel scope on finance, analytics, exports, and automation surfaces", () => {
     const authService = projectFile("src/services/auth.service.ts")
     const paymentsService = projectFile("src/services/payments.service.ts")

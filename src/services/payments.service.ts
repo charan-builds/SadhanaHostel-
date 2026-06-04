@@ -4,6 +4,7 @@ import { anyRoleHasPermission } from "@/constants/auth"
 import { badRequest, conflict, forbidden } from "@/lib/api/api-error"
 import { logError, logPaymentEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
@@ -56,6 +57,7 @@ export class PaymentsService {
   private readonly invoicesService: InvoicesService
   private readonly notificationService: NotificationService
   private readonly realtimeService: RealtimeService
+  private systemPaymentsRepository?: PaymentsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
@@ -74,6 +76,12 @@ export class PaymentsService {
     const db = await createSupabaseServerClient()
 
     return new PaymentsService(db)
+  }
+
+  private getSystemPaymentsRepository() {
+    this.systemPaymentsRepository ??= new PaymentsRepository(createSupabaseAdminClient())
+
+    return this.systemPaymentsRepository
   }
 
   async listPayments(input: unknown) {
@@ -899,9 +907,9 @@ export class PaymentsService {
       50
     )
 
-    const unpaidFeeRecords = feeRecords.data.filter((record) =>
-      ["pending", "partial", "overdue"].includes(record.status)
-    )
+    const unpaidFeeRecords = feeRecords.data
+      .filter((record) => ["pending", "partial", "overdue"].includes(record.status))
+      .toSorted(compareFeeRecordsByDueDate)
     const currentDue = unpaidFeeRecords.reduce(
       (total, record) => total + record.balance_amount,
       0
@@ -982,51 +990,67 @@ export class PaymentsService {
       return false
     }
 
-    const existing = await this.paymentsRepository.findFeeRecordByResidentPeriod(
-      values.organizationId,
-      values.resident.id,
-      values.periodMonth
-    )
+    const systemPaymentsRepository = this.getSystemPaymentsRepository()
+    const duePeriods = buildDuePeriodsThroughCurrent({
+      joinedOn: values.resident.joined_on,
+      currentPeriodMonth: values.periodMonth,
+      today,
+    })
+    let generated = false
 
-    if (existing) {
-      const repaired = await this.repairMisclassifiedAdmissionFeeRecord({
-        existing,
-        organizationId: values.organizationId,
-        resident: values.resident,
-        actorUserId: values.actorUserId,
+    for (const duePeriod of duePeriods) {
+      const existing = await systemPaymentsRepository.findFeeRecordByResidentPeriod(
+        values.organizationId,
+        values.resident.id,
+        duePeriod.periodMonth
+      )
+
+      if (existing) {
+        const repaired = await this.repairMisclassifiedAdmissionFeeRecord({
+          existing,
+          organizationId: values.organizationId,
+          resident: values.resident,
+          actorUserId: values.actorUserId,
+          systemPaymentsRepository,
+        })
+
+        if (!repaired) {
+          continue
+        }
+      }
+
+      const allocation = await this.roomsRepository.getActiveAllocationForResidentInHostel(
+        values.resident.id,
+        values.organizationId,
+        values.resident.hostel_id
+      )
+      const baseAmount = allocation?.monthly_fee_amount ?? values.resident.monthly_fee_amount
+
+      await systemPaymentsRepository.createFeeRecord({
+        organization_id: values.organizationId,
+        hostel_id: values.resident.hostel_id,
+        resident_id: values.resident.id,
+        room_allocation_id: allocation?.id,
+        period_month: duePeriod.periodMonth,
+        due_date: duePeriod.dueDate,
+        base_amount: baseAmount,
+        total_amount: baseAmount,
+        balance_amount: baseAmount,
+        status: baseAmount === 0 ? "paid" : "pending",
+        notes: "Monthly fee generated from resident billing anniversary.",
+        metadata: {
+          source: "resident_ledger_anniversary_due",
+          joined_on: values.resident.joined_on,
+          generated_from_ledger_open: true,
+        },
+        created_by: values.actorUserId,
+        updated_by: values.actorUserId,
       })
 
-      if (!repaired) {
-        return false
-      }
+      generated = true
     }
 
-    const allocation = await this.roomsRepository.getActiveAllocationForResidentInHostel(
-      values.resident.id,
-      values.organizationId,
-      values.resident.hostel_id
-    )
-    const baseAmount = allocation?.monthly_fee_amount ?? values.resident.monthly_fee_amount
-
-    await this.paymentsRepository.createFeeRecord({
-      organization_id: values.organizationId,
-      hostel_id: values.resident.hostel_id,
-      resident_id: values.resident.id,
-      room_allocation_id: allocation?.id,
-      period_month: values.periodMonth,
-      due_date: values.dueDate,
-      base_amount: baseAmount,
-      total_amount: baseAmount,
-      balance_amount: baseAmount,
-      status: baseAmount === 0 ? "paid" : "pending",
-      notes: "Monthly fee generated from resident billing anniversary.",
-      metadata: {
-        source: "resident_ledger_anniversary_due",
-        joined_on: values.resident.joined_on,
-      },
-    })
-
-    return true
+    return generated
   }
 
   private async repairMisclassifiedAdmissionFeeRecord(values: {
@@ -1034,6 +1058,7 @@ export class PaymentsService {
     organizationId: string
     resident: Pick<Tables<"residents">, "id" | "joined_on">
     actorUserId: string
+    systemPaymentsRepository: PaymentsRepository
   }) {
     const joinedOn = values.resident.joined_on
     const joinedPeriodMonth = joinedOn ? periodMonthForDateOnly(joinedOn) : null
@@ -1047,7 +1072,7 @@ export class PaymentsService {
       return false
     }
 
-    const joinedRecord = await this.paymentsRepository.findFeeRecordByResidentPeriod(
+    const joinedRecord = await values.systemPaymentsRepository.findFeeRecordByResidentPeriod(
       values.organizationId,
       values.resident.id,
       joinedPeriodMonth
@@ -1059,7 +1084,7 @@ export class PaymentsService {
 
     const metadata = jsonObject(values.existing.metadata)
 
-    await this.paymentsRepository.updateFeeRecord(
+    await values.systemPaymentsRepository.updateFeeRecord(
       values.existing.id,
       values.organizationId,
       {
@@ -1885,8 +1910,56 @@ function resolveNextDueDate(input: {
   return input.billing.currentDueDate
 }
 
+function buildDuePeriodsThroughCurrent(input: {
+  joinedOn: string | null
+  currentPeriodMonth: string
+  today: string
+}) {
+  const startPeriodMonth = input.joinedOn
+    ? periodMonthForDateOnly(input.joinedOn)
+    : input.currentPeriodMonth
+  const billingDay = input.joinedOn ? Number(input.joinedOn.slice(8, 10)) : 10
+  const periods: Array<{ periodMonth: string; dueDate: string }> = []
+  let cursor = parsePeriodMonth(startPeriodMonth)
+  const endPeriod = input.currentPeriodMonth
+  let guard = 0
+
+  while (toPeriodMonth(cursor) <= endPeriod && guard < 120) {
+    const periodMonth = toPeriodMonth(cursor)
+    const dueDate = buildDueDateForMonth(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth(),
+      billingDay
+    )
+
+    if (isDateOnOrBefore(dueDate, input.today)) {
+      periods.push({ periodMonth, dueDate })
+    }
+
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
+    guard += 1
+  }
+
+  return periods
+}
+
+function compareFeeRecordsByDueDate(
+  left: Tables<"monthly_fee_records">,
+  right: Tables<"monthly_fee_records">
+) {
+  return (
+    left.due_date.localeCompare(right.due_date) ||
+    left.period_month.localeCompare(right.period_month) ||
+    left.created_at.localeCompare(right.created_at)
+  )
+}
+
 function toPeriodMonth(date: Date) {
   return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-01`
+}
+
+function parsePeriodMonth(periodMonth: string) {
+  return new Date(Date.UTC(Number(periodMonth.slice(0, 4)), Number(periodMonth.slice(5, 7)) - 1, 1))
 }
 
 function periodMonthForDateOnly(date: string) {
