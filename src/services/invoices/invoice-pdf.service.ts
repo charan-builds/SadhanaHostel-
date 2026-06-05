@@ -10,7 +10,12 @@ import {
 
 import { measureAsync } from "@/lib/performance"
 
-import { formatCurrency, type InvoiceTemplateData } from "./invoice-template"
+import {
+  formatCurrency,
+  getInvoiceHostelAddressLines,
+  getInvoiceHostelContactLine,
+  type InvoiceTemplateData,
+} from "./invoice-template"
 
 export type GeneratedInvoicePdf = {
   bytes: Uint8Array
@@ -44,7 +49,7 @@ export class InvoicePdfService {
     this.drawResidentBlock(page, data, bold, regular)
     this.drawLineItems(page, data, bold, regular)
     this.drawTotals(page, data, bold, regular)
-    this.drawFooter(page, data, regular)
+    this.drawFooter(page, data, bold, regular)
 
     const bytes = await pdf.save()
 
@@ -200,31 +205,66 @@ export class InvoicePdfService {
     })
   }
 
-  private drawFooter(page: PDFPage, data: InvoiceTemplateData, regular: PDFFont) {
-    const address = [
-      data.organization.address_line1,
-      data.organization.address_line2,
-      data.organization.city,
-      data.organization.state,
-      data.organization.postal_code,
-    ]
-      .filter(Boolean)
-      .join(", ")
+  private drawFooter(
+    page: PDFPage,
+    data: InvoiceTemplateData,
+    bold: PDFFont,
+    regular: PDFFont
+  ) {
+    page.drawRectangle({
+      x: 42,
+      y: 136,
+      width: 511,
+      height: 0.75,
+      color: rgb(0.86, 0.89, 0.93),
+    })
 
-    page.drawText(safePdfText(data.footerNote), {
+    let y = 120
+    for (const noteLine of wrapText(safePdfText(data.footerNote), regular, 8, 511).slice(0, 2)) {
+      page.drawText(noteLine, {
+        x: 42,
+        y,
+        size: 8,
+        font: regular,
+        color: rgb(0.38, 0.44, 0.52),
+      })
+      y -= 11
+    }
+
+    y -= 8
+    page.drawText("Hostel Address", {
       x: 42,
-      y: 118,
-      size: 8,
-      font: regular,
-      color: rgb(0.38, 0.44, 0.52),
+      y,
+      size: 8.5,
+      font: bold,
+      color: rgb(0.12, 0.18, 0.24),
     })
-    page.drawText(safePdfText(address || data.organization.name), {
-      x: 42,
-      y: 92,
-      size: 8,
-      font: regular,
-      color: rgb(0.38, 0.44, 0.52),
-    })
+
+    y -= 13
+    const addressLines = getInvoiceHostelAddressLines(data).flatMap((line) =>
+      wrapText(safePdfText(line), regular, 8.5, 511)
+    )
+    for (const addressLine of addressLines.slice(0, 3)) {
+      page.drawText(addressLine, {
+        x: 42,
+        y,
+        size: 8.5,
+        font: regular,
+        color: rgb(0.28, 0.34, 0.42),
+      })
+      y -= 11
+    }
+
+    const contactLine = safePdfText(getInvoiceHostelContactLine(data))
+    if (contactLine && y >= 42) {
+      page.drawText(contactLine, {
+        x: 42,
+        y,
+        size: 8,
+        font: regular,
+        color: rgb(0.38, 0.44, 0.52),
+      })
+    }
   }
 
   private drawLabelValue(
@@ -255,6 +295,29 @@ export class InvoicePdfService {
 
 function formatCurrencyForPdf(amount: number) {
   return safePdfText(formatCurrency(amount))
+}
+
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let currentLine = ""
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word
+
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth || !currentLine) {
+      currentLine = candidate
+    } else {
+      lines.push(currentLine)
+      currentLine = word
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+
+  return lines.length > 0 ? lines : [""]
 }
 
 function safePdfText(value: string) {

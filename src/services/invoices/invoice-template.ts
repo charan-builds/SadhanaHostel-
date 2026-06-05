@@ -17,7 +17,10 @@ export type InvoiceTemplateData = {
     OrganizationRow,
     "name" | "legal_name" | "billing_email" | "contact_phone" | "address_line1" | "address_line2" | "city" | "state" | "postal_code"
   >
-  hostel: Pick<HostelRow, "name" | "code" | "phone" | "email">
+  hostel: Pick<
+    HostelRow,
+    "name" | "code" | "phone" | "email" | "address_line1" | "address_line2" | "city" | "state" | "postal_code"
+  >
   resident: Pick<ResidentRow, "full_name" | "admission_number" | "phone" | "email">
   invoice: Pick<
     InvoiceRow,
@@ -148,4 +151,56 @@ export function formatCurrency(amount: number) {
     currency: "INR",
     maximumFractionDigits: 2,
   }).format(amount)
+}
+
+export function getInvoiceHostelAddressLines(
+  data: Pick<InvoiceTemplateData, "organization" | "hostel">
+) {
+  const hostelAddress = addressParts(data.hostel)
+  const organizationAddress = addressParts(data.organization)
+  const address = hostelAddress.length > 0 ? hostelAddress : organizationAddress
+
+  return [data.hostel.name, address.join(", ")]
+    .map((line) => normalizeSingleLine(line))
+    .filter(Boolean)
+}
+
+export function getInvoiceHostelContactLine(
+  data: Pick<InvoiceTemplateData, "organization" | "hostel">
+) {
+  const phone = firstPresent(data.hostel.phone, data.organization.contact_phone)
+  const email = firstPresent(data.hostel.email, data.organization.billing_email)
+
+  return [
+    phone ? `Phone: ${phone}` : "",
+    email ? `Email: ${email}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ")
+}
+
+function addressParts(source: {
+  address_line1?: string | null
+  address_line2?: string | null
+  city?: string | null
+  state?: string | null
+  postal_code?: string | null
+}) {
+  return [
+    source.address_line1,
+    source.address_line2,
+    source.city,
+    source.state,
+    source.postal_code,
+  ]
+    .map((value) => normalizeSingleLine(value))
+    .filter(Boolean)
+}
+
+function firstPresent(...values: Array<string | null | undefined>) {
+  return values.map((value) => normalizeSingleLine(value)).find(Boolean) ?? ""
+}
+
+function normalizeSingleLine(value: string | null | undefined) {
+  return value?.trim().replace(/\s+/g, " ") ?? ""
 }
