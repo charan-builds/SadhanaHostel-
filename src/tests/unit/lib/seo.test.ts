@@ -149,7 +149,6 @@ describe("SEO URL helpers", () => {
 
         expect(localBusiness).toEqual(
           expect.objectContaining({
-            "@type": ["LodgingBusiness", "Hostel"],
             name: "Sadhana Boys Hostel",
             telephone: "+917013762904",
             currenciesAccepted: "INR",
@@ -157,6 +156,9 @@ describe("SEO URL helpers", () => {
             knowsLanguage: ["en-IN", "te-IN"],
             hasMap: expect.stringContaining("google.com/maps"),
           })
+        )
+        expect(localBusiness?.["@type"]).toEqual(
+          expect.arrayContaining(["LocalBusiness", "LodgingBusiness", "Hostel"])
         )
         expect(localBusiness?.potentialAction).toEqual(
           expect.arrayContaining([

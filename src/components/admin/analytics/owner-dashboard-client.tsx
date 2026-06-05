@@ -19,7 +19,6 @@ import { StatCard } from "@/components/shared/stat-card"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { hostelModules } from "@/config/hostel-modules"
 import {
   Card,
   CardContent,
@@ -36,19 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
-import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
+import { formatCurrency, humanizeEnum } from "@/lib/format"
 import { useRealtimeOwnerAnalytics } from "@/lib/realtime"
-import { useHostels, useOwnerAnalytics } from "@/hooks"
+import { useFinanceDashboard, useHostels, useOwnerAnalytics } from "@/hooks"
 import { analyticsSdk, type OwnerAnalytics } from "@/sdk"
 
 type ExportFormat = "csv" | "pdf"
@@ -68,6 +59,14 @@ export function OwnerDashboardClient() {
     fromDate,
     toDate,
   })
+  const financeDashboard = useFinanceDashboard(
+    organizationId
+      ? {
+          organizationId,
+          hostelId,
+        }
+      : undefined
+  )
 
   useRealtimeOwnerAnalytics({ enabled: Boolean(organizationId) })
 
@@ -137,16 +136,13 @@ export function OwnerDashboardClient() {
   }
 
   const data = ownerAnalytics.data
-  const showCapacityAnalytics = hostelModules.vacancy || hostelModules.roomAllocation
-  const visibleInsights = showCapacityAnalytics
-    ? data?.insights ?? []
-    : (data?.insights ?? []).filter((insight) => !isCapacityInsight(insight))
+  const finance = financeDashboard.data
 
   if (!data) {
     return (
       <EmptyState
         title="Analytics are not ready"
-        message="Add rooms, residents, payments, and reservations to start seeing owner insights."
+        message="Add residents, payments, and dues to start seeing owner insights."
       />
     )
   }
@@ -242,15 +238,101 @@ export function OwnerDashboardClient() {
       </Card>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {showCapacityAnalytics ? (
-          <StatCard
-            title="Occupancy"
-            value={`${data.summary.occupancyRate}%`}
-            description={`${data.capacity.occupiedBeds}/${data.capacity.totalBeds} students occupied`}
-            icon={Users}
-            tone={data.summary.occupancyRate >= 85 ? "success" : "warning"}
-          />
-        ) : null}
+        <StatCard
+          title="Today's Revenue"
+          value={formatCurrency(finance?.owner.summary.todayRevenue ?? 0)}
+          description="Verified collections today"
+          icon={IndianRupee}
+          tone="success"
+        />
+        <StatCard
+          title="This Month Revenue"
+          value={formatCurrency(finance?.owner.summary.revenue ?? data.summary.revenue)}
+          description="Verified monthly collections"
+          icon={TrendingUp}
+          tone="success"
+        />
+        <StatCard
+          title="Pending Collection"
+          value={formatCurrency(finance?.kpis.pendingAmount ?? data.summary.pendingDues)}
+          description={`${finance?.kpis.residentsWithPending ?? data.summary.unpaidResidents} residents pending`}
+          icon={AlertTriangle}
+          tone="warning"
+        />
+        <StatCard
+          title="Overdue Collection"
+          value={formatCurrency(finance?.kpis.overdueAmount ?? 0)}
+          description="Past due date balance"
+          icon={AlertTriangle}
+          tone={(finance?.kpis.overdueAmount ?? 0) > 0 ? "warning" : "success"}
+        />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Owner Collection Pulse</CardTitle>
+            <CardDescription>Daily hostel collection signals from Finance.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <OwnerMiniMetric
+              label="Residents Due Today"
+              value={finance?.dueWindows.todayCount ?? 0}
+              detail={formatCurrency(finance?.dueWindows.today ?? 0)}
+            />
+            <OwnerMiniMetric
+              label="Upcoming Dues"
+              value={formatCurrency(finance?.owner.upcomingDues.next7Days ?? 0)}
+              detail="Next 7 days"
+            />
+            <OwnerMiniMetric
+              label="Cash Today"
+              value={formatCurrency(finance?.owner.collectionToday.cash ?? 0)}
+              detail="Counter collections"
+            />
+            <OwnerMiniMetric
+              label="UPI + Bank Today"
+              value={formatCurrency(
+                (finance?.owner.collectionToday.upi ?? 0) +
+                  (finance?.owner.collectionToday.bank ?? 0)
+              )}
+              detail="Digital collections"
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Collections</CardTitle>
+            <CardDescription>Latest verified payments from Finance.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {(finance?.recentPayments ?? []).slice(0, 5).length === 0 ? (
+              <EmptyState title="No recent collections" message="Verified payments will appear here." />
+            ) : (
+              (finance?.recentPayments ?? []).slice(0, 5).map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{humanizeEnum(payment.method)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {payment.verified_at ?? payment.created_at}
+                    </p>
+                  </div>
+                  <span className="font-semibold">{formatCurrency(payment.amount)}</span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Active Residents"
+          value={data.summary.activeResidents}
+          description={`${data.summary.billingResidents} residents in billing`}
+          icon={Users}
+          tone="info"
+        />
         <StatCard
           title="Revenue"
           value={formatCurrency(data.summary.revenue)}
@@ -274,7 +356,7 @@ export function OwnerDashboardClient() {
         />
       </section>
 
-      <section className={showCapacityAnalytics ? "grid gap-6 xl:grid-cols-[1.4fr_1fr]" : "grid gap-6"}>
+      <section className="grid gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Revenue Trend</CardTitle>
@@ -293,36 +375,10 @@ export function OwnerDashboardClient() {
             />
           </CardContent>
         </Card>
-
-        {showCapacityAnalytics ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Forecast</CardTitle>
-              <CardDescription>30-day projection from recent occupancy and finance patterns.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <ForecastMetric
-                label="Forecast occupancy"
-                value={`${data.forecasts.occupancy.forecastOccupancyRate}%`}
-                detail={`${data.forecasts.occupancy.forecastOccupiedBeds} occupied students expected`}
-              />
-              <ForecastMetric
-                label="Expected vacancies"
-                value={data.forecasts.expectedVacancies}
-                detail={`${data.forecasts.occupancy.expectedJoins} expected joins, ${data.forecasts.occupancy.expectedChurn} expected exits`}
-              />
-              <ForecastMetric
-                label="Expected revenue"
-                value={formatCurrency(data.forecasts.revenue.expectedCollectedRevenue)}
-                detail={`${data.forecasts.revenue.expectedCollectionRate}% expected collection rate`}
-              />
-            </CardContent>
-          </Card>
-        ) : null}
       </section>
 
-      <section className={showCapacityAnalytics ? "grid gap-6 xl:grid-cols-3" : "grid gap-6"}>
-        <Card className={showCapacityAnalytics ? "xl:col-span-2" : undefined}>
+      <section className="grid gap-6">
+        <Card>
           <CardHeader>
             <CardTitle>Operational Insights</CardTitle>
             <CardDescription>
@@ -330,13 +386,13 @@ export function OwnerDashboardClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {visibleInsights.length === 0 ? (
+            {data.insights.length === 0 ? (
               <EmptyState
                 title="No owner action needed"
                 message="No finance or resident-access risks are currently detected."
               />
             ) : null}
-            {visibleInsights.map((insight) => (
+            {data.insights.map((insight) => (
               <article key={`${insight.severity}-${insight.title}`} className="rounded-lg border p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={insight.severity === "critical" ? "destructive" : "secondary"}>
@@ -350,32 +406,6 @@ export function OwnerDashboardClient() {
             ))}
           </CardContent>
         </Card>
-
-        {showCapacityAnalytics ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Student Vacancy</CardTitle>
-              <CardDescription>
-                {data.capacity.lastCalculatedAt
-                  ? `Last calculated ${formatDateTime(data.capacity.lastCalculatedAt)}`
-                  : "Calculated from current rooms and allocations"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DonutMetric
-                value={data.capacity.occupiedBeds}
-                total={data.capacity.totalBeds}
-                label={`${data.capacity.availableBeds} student vacancies`}
-              />
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <CapacityItem label="Reserved" value={data.capacity.reservedBeds} />
-                <CapacityItem label="Maintenance" value={data.capacity.maintenanceBlockedBeds} />
-                <CapacityItem label="Vacancy" value={data.capacity.availableBeds} />
-                <CapacityItem label="Total capacity" value={data.capacity.totalBeds} />
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
@@ -420,90 +450,7 @@ export function OwnerDashboardClient() {
           </CardContent>
         </Card>
       </section>
-
-      {showCapacityAnalytics ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Room Utilization</CardTitle>
-            <CardDescription>
-              Underperforming rooms are active rooms below 50% utilization.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Occupancy</TableHead>
-                  <TableHead>Utilization</TableHead>
-                  <TableHead>Revenue Potential</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.roomUtilization.slice(0, 12).map((room) => (
-                  <TableRow key={room.roomId}>
-                    <TableCell className="font-medium">{room.roomNumber}</TableCell>
-                    <TableCell>{humanizeEnum(room.roomType)}</TableCell>
-                    <TableCell>
-                      {room.occupied}/{room.capacity}
-                    </TableCell>
-                    <TableCell>
-                      <ProgressBar value={room.utilizationRate} />
-                    </TableCell>
-                    <TableCell>{formatCurrency(room.revenuePotential)}</TableCell>
-                    <TableCell>
-                      <Badge variant={room.underperforming ? "destructive" : "secondary"}>
-                        {room.underperforming ? "Under target" : humanizeEnum(room.status)}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : null}
     </ResponsiveContainer>
-  )
-}
-
-function isCapacityInsight(insight: OwnerAnalytics["insights"][number]) {
-  const text = `${insight.title} ${insight.description} ${insight.action}`.toLowerCase()
-
-  return (
-    text.includes("occupancy") ||
-    text.includes("vacanc") ||
-    text.includes("room") ||
-    text.includes("capacity")
-  )
-}
-
-function ForecastMetric({
-  label,
-  value,
-  detail,
-}: {
-  label: string
-  value: string | number
-  detail: string
-}) {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
-    </div>
-  )
-}
-
-function CapacityItem({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold">{value}</p>
-    </div>
   )
 }
 
@@ -639,6 +586,24 @@ function DonutMetric({
   )
 }
 
+function OwnerMiniMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string | number
+  detail: string
+}) {
+  return (
+    <div className="rounded-lg border bg-background/70 p-3">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-xl font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </div>
+  )
+}
+
 function BarList({
   data,
   formatValue,
@@ -665,20 +630,6 @@ function BarList({
           <p className="text-xs text-muted-foreground">{item.detail}</p>
         </div>
       ))}
-    </div>
-  )
-}
-
-function ProgressBar({ value }: { value: number }) {
-  return (
-    <div className="flex min-w-36 items-center gap-2">
-      <div className="h-2 flex-1 rounded-full bg-muted">
-        <div
-          className="h-2 rounded-full bg-emerald-600"
-          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-        />
-      </div>
-      <span className="w-12 text-right text-xs text-muted-foreground">{value}%</span>
     </div>
   )
 }

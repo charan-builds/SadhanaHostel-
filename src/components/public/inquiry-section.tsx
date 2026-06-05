@@ -7,6 +7,10 @@ import { MapPin, MessageCircle, Phone, type LucideIcon } from "lucide-react"
 import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { hostelImages } from "@/constants/hostel-images"
+import {
+  trackContactAction,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 
 export function InquirySection() {
   return (
@@ -73,6 +77,15 @@ function ContactPill({
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noreferrer" : undefined}
       className="rounded-xl border border-white/10 bg-white/[0.08] p-3 transition-colors hover:bg-white/[0.12]"
+      onClick={() => {
+        const method = label === "WhatsApp" ? "whatsapp" : label === "Call" ? "phone" : "map"
+
+        trackContactAction(method, "home_inquiry_section")
+
+        if (method === "whatsapp") {
+          trackWhatsAppClick("home_inquiry_section")
+        }
+      }}
     >
       <Icon className="size-4 text-cyan-200" aria-hidden="true" />
       <p className="mt-3 text-xs text-sidebar-foreground/55">{label}</p>

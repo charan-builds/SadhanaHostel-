@@ -31,6 +31,7 @@ function createRepository(overrides: Partial<{
   repairOccupancyConsistency: ReturnType<typeof vi.fn>
   repairTenantLinkageConsistency: ReturnType<typeof vi.fn>
   repairOnboardingAccessConsistency: ReturnType<typeof vi.fn>
+  resyncResidentIdentityModeMetadata: ReturnType<typeof vi.fn>
   listResidentTenantIdentityAnomalies: ReturnType<typeof vi.fn>
   reconcileInvalidDues: ReturnType<typeof vi.fn>
   repairAnalyticsConsistency: ReturnType<typeof vi.fn>
@@ -61,6 +62,9 @@ function createRepository(overrides: Partial<{
       duplicateInvitesRevokedCount: 0,
       authProfilesSyncedCount: 0,
       deadlockResidentsAdvancedCount: 0,
+    }),
+    resyncResidentIdentityModeMetadata: vi.fn().mockResolvedValue({
+      identityModesSyncedCount: 0,
     }),
     listResidentTenantIdentityAnomalies: vi.fn().mockResolvedValue([]),
     reconcileInvalidDues: vi.fn().mockResolvedValue({
@@ -489,6 +493,159 @@ describe("operational consistency scanning", () => {
     )
   })
 
+  it("reports financial integrity anomalies with repair recommendations", async () => {
+    const duplicateFeeA = {
+      id: "00000000-0000-4000-8000-000000000501",
+      organization_id: TEST_ORGANIZATION_ID,
+      hostel_id: TEST_HOSTEL_ID,
+      resident_id: RESIDENT_ID,
+      period_month: "2026-06-01",
+      balance_amount: 0,
+      total_amount: 3500,
+    }
+    const duplicateFeeB = {
+      ...duplicateFeeA,
+      id: "00000000-0000-4000-8000-000000000502",
+    }
+    const repository = createRepository({
+      list: vi.fn().mockImplementation(async (table: string, input: { select?: string }) => {
+        if (table === "payments" && input.select?.includes("amount")) {
+          return [
+            {
+              id: "00000000-0000-4000-8000-000000000601",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "verified",
+              amount: 1000,
+              invoice_id: null,
+              monthly_fee_record_id: null,
+              is_advance: true,
+            },
+            {
+              id: "00000000-0000-4000-8000-000000000602",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "verified",
+              amount: 2000,
+              invoice_id: "00000000-0000-4000-8000-000000000701",
+              monthly_fee_record_id: duplicateFeeA.id,
+              is_advance: false,
+            },
+          ]
+        }
+
+        if (table === "monthly_fee_records") {
+          return [
+            duplicateFeeA,
+            duplicateFeeB,
+            {
+              id: "00000000-0000-4000-8000-000000000503",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              period_month: "2026-07-01",
+              balance_amount: -1,
+              total_amount: 3500,
+            },
+          ]
+        }
+
+        if (table === "invoices") {
+          return [
+            {
+              id: "00000000-0000-4000-8000-000000000701",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "paid",
+              monthly_fee_record_id: duplicateFeeA.id,
+              total_amount: 3500,
+              balance_amount: 0,
+              metadata: { source: "monthly_fee" },
+            },
+            {
+              id: "00000000-0000-4000-8000-000000000702",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "paid",
+              monthly_fee_record_id: duplicateFeeA.id,
+              total_amount: 3500,
+              balance_amount: 0,
+              metadata: { source: "monthly_fee" },
+            },
+          ]
+        }
+
+        return []
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+    const findingIds = report.findings.map((finding) => finding.id)
+
+    expect(findingIds).toContain("finance.verified_payment_missing_invoice")
+    expect(findingIds).toContain("finance.verified_payment_missing_receipt")
+    expect(findingIds).toContain("finance.paid_fee_missing_invoice")
+    expect(findingIds).toContain("finance.paid_invoice_payment_mismatch")
+    expect(findingIds).toContain("finance.negative_balances")
+    expect(findingIds).toContain("finance.duplicate_monthly_fee_records")
+    expect(findingIds).toContain("finance.duplicate_invoices")
+    expect(
+      report.findings.find((finding) => finding.id === "finance.verified_payment_missing_invoice")
+        ?.repairAction
+    ).toBe("repair_financial_reconciliation")
+  })
+
+  it("routes missing invoice PDF findings through financial reconciliation repair", async () => {
+    const repository = createRepository({
+      count: vi.fn().mockImplementation((table: string, input: { isNull?: string[] }) => {
+        return table === "invoices" && input.isNull?.includes("pdf_document_id") ? 1 : 0
+      }),
+      list: vi.fn().mockImplementation((table: string, input: { isNull?: string[] }) => {
+        if (table === "invoices" && input.isNull?.includes("pdf_document_id")) {
+          return Promise.resolve([
+            {
+              id: "invoice-missing-pdf",
+              organization_id: TEST_ORGANIZATION_ID,
+              hostel_id: TEST_HOSTEL_ID,
+              resident_id: RESIDENT_ID,
+              status: "paid",
+              pdf_document_id: null,
+            },
+          ])
+        }
+
+        return Promise.resolve([])
+      }),
+    })
+
+    const report = await scanConsistency(repository as never, {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "finance.invoice_pdf_missing",
+          repairAction: "repair_financial_reconciliation",
+          details: expect.arrayContaining([
+            expect.objectContaining({
+              recordId: "invoice-missing-pdf",
+              recommendedRepairAction: "repair_financial_reconciliation",
+            }),
+          ]),
+        }),
+      ])
+    )
+  })
+
   it("reports pending invite identity mode mismatches before residents activate", async () => {
     const repository = createRepository({
       list: vi.fn().mockImplementation((table: string, input: { select?: string }) => {
@@ -755,7 +912,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -800,7 +957,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -835,7 +992,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -854,6 +1011,37 @@ describe("ConsistencyService repair", () => {
     expect(repository.repairOccupancyConsistency).not.toHaveBeenCalled()
   })
 
+  it("blocks mutating consistency repair in production before auth or repository calls", async () => {
+    vi.stubEnv("LAUNCH_MODE", "production")
+    vi.stubEnv("NEXT_PUBLIC_LAUNCH_MODE", "production")
+
+    const service = new ConsistencyService({} as never)
+    const repository = createRepository({
+      repairOccupancyConsistency: vi.fn(),
+    })
+    const authService = {
+      requirePermission: vi.fn(),
+      requireHostelAccess: vi.fn(),
+    }
+
+    Object.assign(service, {
+      authService,
+      adminRepository: repository,
+    })
+
+    await expect(
+      service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "release_stale_allocations",
+        dryRun: false,
+      })
+    ).rejects.toThrow(/consistency repair is blocked in production/i)
+
+    expect(authService.requirePermission).not.toHaveBeenCalled()
+    expect(repository.repairOccupancyConsistency).not.toHaveBeenCalled()
+  })
+
   it("blocks mutating repairs when the emergency repair kill switch is disabled", async () => {
     vi.stubEnv("OPERATIONAL_REPAIRS_ENABLED", "false")
 
@@ -867,7 +1055,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -897,6 +1085,9 @@ describe("ConsistencyService repair", () => {
         authProfilesSyncedCount: 1,
         deadlockResidentsAdvancedCount: 1,
       }),
+      resyncResidentIdentityModeMetadata: vi.fn().mockResolvedValue({
+        identityModesSyncedCount: 1,
+      }),
     })
 
     Object.assign(service, {
@@ -904,7 +1095,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -915,12 +1106,17 @@ describe("ConsistencyService repair", () => {
         dryRun: false,
       })
     ).resolves.toMatchObject({
-      repaired: 6,
+      repaired: 7,
       dryRun: false,
       message: expect.stringContaining("duplicate invite"),
     })
 
     expect(repository.repairOnboardingAccessConsistency).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(repository.resyncResidentIdentityModeMetadata).toHaveBeenCalledWith({
       organizationId: TEST_ORGANIZATION_ID,
       hostelId: TEST_HOSTEL_ID,
       actorUserId: adminAuthContext().authUser.id,
@@ -941,7 +1137,7 @@ describe("ConsistencyService repair", () => {
         requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
         requireHostelAccess: vi.fn(),
       },
-      repository,
+      adminRepository: repository,
     })
 
     await expect(
@@ -962,5 +1158,18 @@ describe("ConsistencyService repair", () => {
       hostelId: TEST_HOSTEL_ID,
       actorUserId: adminAuthContext().authUser.id,
     })
+  })
+
+  it("accepts financial reconciliation repair as a consistency action", async () => {
+    const parsed = await import("@/validations/operations.validation").then(({ consistencyRepairSchema }) =>
+      consistencyRepairSchema.parse({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        action: "repair_financial_reconciliation",
+        dryRun: true,
+      })
+    )
+
+    expect(parsed.action).toBe("repair_financial_reconciliation")
   })
 })

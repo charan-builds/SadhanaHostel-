@@ -1,5 +1,5 @@
 import type { User } from "@supabase/supabase-js"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { IdentityReconciliationService } from "@/services/operations"
 import {
@@ -39,6 +39,7 @@ function createServiceHarness(input: {
   residents?: Array<Record<string, unknown>>
   users?: Array<Record<string, unknown>>
   userRoles?: Array<Record<string, unknown>>
+  invites?: Array<Record<string, unknown>>
   roles?: Array<"owner" | "admin" | "super_admin">
 } = {}) {
   const authUsers = input.authUsers ?? []
@@ -46,6 +47,7 @@ function createServiceHarness(input: {
     residents: input.residents ?? [],
     users: input.users ?? [],
     user_roles: input.userRoles ?? [],
+    resident_invites: input.invites ?? [],
     audit_logs: [],
   }
   const db = {
@@ -86,6 +88,10 @@ function createServiceHarness(input: {
 }
 
 describe("IdentityReconciliationService", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it("detects and dry-runs cleanup for orphan resident auth identities", async () => {
     const ghost = residentAuthUser()
     const harness = createServiceHarness({
@@ -134,6 +140,27 @@ describe("IdentityReconciliationService", () => {
 
     expect(result.deletedAuthUsers).toBe(1)
     expect(harness.db.auth.admin.deleteUser).toHaveBeenCalledWith(ghost.id)
+  })
+
+  it("blocks mutating identity repair in production before deleting auth users", async () => {
+    vi.stubEnv("LAUNCH_MODE", "production")
+    vi.stubEnv("NEXT_PUBLIC_LAUNCH_MODE", "production")
+
+    const ghost = residentAuthUser()
+    const harness = createServiceHarness({
+      authUsers: [ghost],
+    })
+
+    await expect(
+      harness.service.repair({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        dryRun: false,
+        action: "repair_safe",
+      })
+    ).rejects.toThrow(/identity repair is blocked in production/i)
+
+    expect(harness.db.auth.admin.deleteUser).not.toHaveBeenCalled()
   })
 
   it("blocks destructive auth cleanup for non-owner admins", async () => {
@@ -259,6 +286,44 @@ describe("IdentityReconciliationService", () => {
           category: "invalid_linkage",
           severity: "high",
           recommendedRepairAction: "relink_resident",
+        }),
+      ])
+    )
+  })
+
+  it("does not flag invited residents that still have a live activation invite", async () => {
+    const harness = createServiceHarness({
+      residents: [
+        residentRow({
+          id: RESIDENT_USER_ID,
+          user_id: null,
+          status: "draft",
+          onboarding_status: "invited",
+        }),
+      ],
+      invites: [
+        {
+          id: "invite-live",
+          organization_id: TEST_ORGANIZATION_ID,
+          hostel_id: TEST_HOSTEL_ID,
+          resident_id: RESIDENT_USER_ID,
+          status: "pending",
+          used_at: null,
+          revoked_at: null,
+          expires_at: "2999-01-01T00:00:00.000Z",
+        },
+      ],
+    })
+
+    const report = await harness.service.scan({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+    })
+
+    expect(report.findings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `resident-without-auth:${RESIDENT_USER_ID}`,
         }),
       ])
     )

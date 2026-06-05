@@ -1,4 +1,9 @@
-import { errorResponse, parseJsonBody, successResponse } from "@/lib/api"
+import {
+  assertSameOriginMutation,
+  errorResponse,
+  parseJsonBody,
+  successResponse,
+} from "@/lib/api"
 import { NoticesService } from "@/services/notices.service"
 
 export const dynamic = "force-dynamic"
@@ -9,6 +14,8 @@ type NoticeRouteContext = {
 
 export async function PATCH(request: Request, context: NoticeRouteContext) {
   try {
+    assertSameOriginMutation(request)
+
     const { id } = await context.params
     const service = await NoticesService.create()
     const notice = await service.updateNotice({

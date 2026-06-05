@@ -7,12 +7,19 @@ import { getServerEnv } from "@/config/env"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent, logger } from "@/lib/logger"
+import { assertNonProductionMutation } from "@/lib/operations/production-safety"
+import { createManualPaymentReceiptMarker } from "@/lib/payments/manual-receipt-marker"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
-import { ResidentsRepository, type ResidentWithOnboarding } from "@/repositories/residents.repository"
+import {
+  ResidentsRepository,
+  type ResidentRow,
+  type ResidentWithOnboarding,
+} from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { UploadsRepository } from "@/repositories/uploads.repository"
 import type { Json } from "@/types/database"
 import { UsersRepository } from "@/repositories/users.repository"
 import type { ResidentInviteCreated } from "@/types/invites"
@@ -53,6 +60,11 @@ type ResidentsServiceDependencies = {
     | "getById"
     | "updateInvoiceLink"
     | "updateFeeRecord"
+    | "verify"
+  >
+  uploadsRepository?: Pick<
+    UploadsRepository,
+    "findLatestPaymentProof" | "uploadObject" | "createDocument" | "updateDocument"
   >
 }
 
@@ -75,6 +87,11 @@ export class ResidentsService {
     | "getById"
     | "updateInvoiceLink"
     | "updateFeeRecord"
+    | "verify"
+  >
+  private readonly uploadsRepository: Pick<
+    UploadsRepository,
+    "findLatestPaymentProof" | "uploadObject" | "createDocument" | "updateDocument"
   >
 
   constructor(
@@ -93,6 +110,7 @@ export class ResidentsService {
     this.realtimeService = dependencies.realtimeService ?? new RealtimeService(db)
     this.invoicesService = dependencies.invoicesService ?? new InvoicesService(db)
     this.paymentsRepository = dependencies.paymentsRepository ?? new PaymentsRepository(db)
+    this.uploadsRepository = dependencies.uploadsRepository ?? new UploadsRepository(db)
   }
 
   static async create() {
@@ -258,30 +276,53 @@ export class ResidentsService {
       throw duplicateResidentConflict(duplicate)
     }
 
-    const resident = await this.createDraftResident(values, context.authUser.id)
-    const currentResident =
+    const hasAdmissionFinance = admissionRequiresFinance(values)
+    const resident = await this.createDraftResident(
+      values,
+      context.authUser.id,
+      hasAdmissionFinance ? "pending_finance" : "draft"
+    )
+    let currentResident =
       (await this.residentsRepository.getById(resident.id, values.organizationId)) ?? resident
+    let firstMonthFeePayment: PaymentRow | null = null
+    let openingMonthFeePayments: PaymentRow[] = []
+    let advancePayment: PaymentRow | null = null
+
+    try {
+      firstMonthFeePayment = await this.recordAdmissionFirstMonthFeePayment(
+        values,
+        currentResident,
+        context.authUser.id
+      )
+      openingMonthFeePayments = await this.recordAdmissionOpeningMonthlyFees(
+        values,
+        currentResident,
+        context.authUser.id
+      )
+      advancePayment = await this.recordAdmissionAdvancePayment(
+        values,
+        currentResident,
+        context.authUser.id
+      )
+      currentResident = hasAdmissionFinance
+        ? await this.markAdmissionFinanceComplete(currentResident, context.authUser.id)
+        : currentResident
+    } catch (error) {
+      currentResident = await this.markAdmissionFinanceFailed(
+        currentResident,
+        error,
+        context.authUser.id
+      )
+      await this.publishResidentEvent("resident.updated", currentResident, context.authUser.id)
+      throw error
+    }
+
     const invite = await this.createOnboardingInviteForResident({
       organizationId: values.organizationId,
       residentId: currentResident.id,
       deliveryChannel: values.inviteDeliveryChannel,
       expiresInHours: values.inviteExpiresInHours,
     })
-    const firstMonthFeePayment = await this.recordAdmissionFirstMonthFeePayment(
-      values,
-      currentResident,
-      context.authUser.id
-    )
-    const openingMonthFeePayments = await this.recordAdmissionOpeningMonthlyFees(
-      values,
-      currentResident,
-      context.authUser.id
-    )
-    const advancePayment = await this.recordAdmissionAdvancePayment(
-      values,
-      currentResident,
-      context.authUser.id
-    )
 
     await this.publishResidentEvent("resident.created", currentResident, context.authUser.id)
     await this.publishAdmissionPaymentEvents(
@@ -350,7 +391,7 @@ export class ResidentsService {
     )
 
     if (existingPayment) {
-      return this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId)
+      return this.finalizeAdmissionPayment(existingPayment, idempotencyKey, actorUserId)
     }
 
     const feeRecord = await this.ensureAdmissionMonthlyFeeRecord({
@@ -382,7 +423,7 @@ export class ResidentsService {
       monthly_fee_record_id: feeRecord.id,
       amount: paidAmount,
       method: values.firstMonthFeeMethod,
-      status: "verified",
+      status: "pending",
       idempotency_key: idempotencyKey,
       manual_reference: normalizeOptionalText(values.firstMonthFeeManualReference) ?? null,
       notes:
@@ -392,8 +433,6 @@ export class ResidentsService {
       is_partial: balanceAmount > 0,
       provider: "admin_quick_admission",
       paid_at: now,
-      verified_at: now,
-      verified_by: actorUserId,
       received_by: actorUserId,
       metadata: {
         idempotency_key: idempotencyKey,
@@ -401,23 +440,13 @@ export class ResidentsService {
         first_month_fee: true,
         period_month: periodMonth,
         billing_cycle_start: joinedOn,
+        created_as_pending_for_atomic_verification: true,
       },
       created_by: actorUserId,
       updated_by: actorUserId,
     })
 
-    await this.paymentsRepository.updateFeeRecord(
-      feeRecord.id,
-      values.organizationId,
-      {
-        paid_amount: newPaidAmount,
-        balance_amount: balanceAmount,
-        status: balanceAmount === 0 ? "paid" : newPaidAmount > 0 ? "partial" : "pending",
-        updated_by: actorUserId,
-      }
-    )
-
-    return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
+    return this.finalizeAdmissionPayment(payment, idempotencyKey, actorUserId)
   }
 
   private async recordAdmissionOpeningMonthlyFees(
@@ -469,12 +498,17 @@ export class ResidentsService {
       )
 
       if (existingPayment) {
-        payments.push(await this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId))
+        payments.push(
+          await this.finalizeAdmissionPayment(existingPayment, idempotencyKey, actorUserId)
+        )
         continue
       }
 
       const now = new Date().toISOString()
-      const paidAmount = Math.min(existingRecord.total_amount, existingRecord.paid_amount + fee.amount)
+      const paidAmount = Math.min(
+        existingRecord.total_amount,
+        existingRecord.paid_amount + fee.amount
+      )
       const balanceAmount = Math.max(0, existingRecord.total_amount - paidAmount)
       const payment = await this.paymentsRepository.create({
         organization_id: values.organizationId,
@@ -483,7 +517,7 @@ export class ResidentsService {
         monthly_fee_record_id: existingRecord.id,
         amount: fee.amount,
         method: fee.method,
-        status: "verified",
+        status: "pending",
         idempotency_key: idempotencyKey,
         manual_reference: normalizeOptionalText(fee.manualReference) ?? null,
         notes:
@@ -493,31 +527,19 @@ export class ResidentsService {
         is_partial: balanceAmount > 0,
         provider: "admin_quick_admission",
         paid_at: now,
-        verified_at: now,
-        verified_by: actorUserId,
         received_by: actorUserId,
         metadata: {
           idempotency_key: idempotencyKey,
           source: "resident_quick_admission",
           opening_month_fee: true,
           period_month: fee.periodMonth,
+          created_as_pending_for_atomic_verification: true,
         },
         created_by: actorUserId,
         updated_by: actorUserId,
       })
 
-      await this.paymentsRepository.updateFeeRecord(
-        existingRecord.id,
-        values.organizationId,
-        {
-          paid_amount: paidAmount,
-          balance_amount: balanceAmount,
-          status: balanceAmount === 0 ? "paid" : paidAmount > 0 ? "partial" : "pending",
-          updated_by: actorUserId,
-        }
-      )
-
-      payments.push(await this.ensureAdmissionPaymentInvoice(payment, actorUserId))
+      payments.push(await this.finalizeAdmissionPayment(payment, idempotencyKey, actorUserId))
     }
 
     return payments
@@ -586,7 +608,7 @@ export class ResidentsService {
     )
 
     if (existingPayment) {
-      return this.ensureAdmissionPaymentInvoice(existingPayment, actorUserId)
+      return this.finalizeAdmissionPayment(existingPayment, idempotencyKey, actorUserId)
     }
 
     const now = new Date().toISOString()
@@ -597,7 +619,7 @@ export class ResidentsService {
       resident_id: resident.id,
       amount: values.advancePaymentAmount,
       method: values.advancePaymentMethod,
-      status: "verified",
+      status: "pending",
       idempotency_key: idempotencyKey,
       manual_reference: normalizeOptionalText(values.advanceManualReference) ?? null,
       notes:
@@ -607,19 +629,48 @@ export class ResidentsService {
       is_partial: false,
       provider: "admin_quick_admission",
       paid_at: now,
-      verified_at: now,
-      verified_by: actorUserId,
       received_by: actorUserId,
       metadata: {
         idempotency_key: idempotencyKey,
         source: "resident_quick_admission",
         recorded_during_admission: true,
+        created_as_pending_for_atomic_verification: true,
       },
       created_by: actorUserId,
       updated_by: actorUserId,
     })
 
-    return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
+    return this.finalizeAdmissionPayment(payment, idempotencyKey, actorUserId)
+  }
+
+  private async finalizeAdmissionPayment(
+    payment: PaymentRow,
+    idempotencyKey: string,
+    actorUserId: string
+  ) {
+    if (payment.status === "verified") {
+      return this.ensureAdmissionPaymentInvoice(payment, actorUserId)
+    }
+
+    if (payment.status !== "pending") {
+      throw conflict("Admission payment is not ready for verification.")
+    }
+
+    const proof = await this.ensureAdmissionManualPaymentProof(payment, actorUserId)
+    const verifiedPayment = await this.paymentsRepository.verify(
+      payment.id,
+      payment.organization_id,
+      actorUserId,
+      idempotencyKey
+    )
+
+    await this.markAdmissionManualPaymentProofVerified(
+      proof.id,
+      payment.organization_id,
+      actorUserId
+    )
+
+    return this.ensureAdmissionPaymentInvoice(verifiedPayment, actorUserId)
   }
 
   private async ensureAdmissionPaymentInvoice(payment: PaymentRow, actorUserId: string) {
@@ -652,9 +703,78 @@ export class ResidentsService {
     )
   }
 
+  private async ensureAdmissionManualPaymentProof(
+    payment: PaymentRow,
+    actorUserId: string
+  ) {
+    const existingProof = await this.uploadsRepository.findLatestPaymentProof(
+      payment.organization_id,
+      payment.id
+    )
+
+    if (existingProof) {
+      return existingProof
+    }
+
+    const file = createManualPaymentReceiptMarker(payment.id)
+    const storagePath = [
+      payment.organization_id,
+      payment.resident_id,
+      "admission-payment-receipts",
+      `${payment.id}.png`,
+    ].join("/")
+    const now = new Date().toISOString()
+
+    await this.uploadsRepository.uploadObject("payment-screenshots", storagePath, file, {
+      upsert: true,
+      cacheControl: "3600",
+    })
+
+    return this.uploadsRepository.createDocument({
+      organization_id: payment.organization_id,
+      hostel_id: payment.hostel_id,
+      resident_id: payment.resident_id,
+      payment_id: payment.id,
+      uploaded_by_user_id: actorUserId,
+      document_type: "payment_receipt",
+      status: "pending",
+      bucket_name: "payment-screenshots",
+      storage_path: storagePath,
+      file_name: file.name,
+      mime_type: file.type,
+      file_size_bytes: file.size,
+      verified_by: null,
+      verified_at: null,
+      is_public: false,
+      metadata: {
+        source: "resident_quick_admission",
+        generated_receipt_marker: true,
+        method: payment.method,
+        amount: payment.amount,
+        generated_at: now,
+      },
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    })
+  }
+
+  private async markAdmissionManualPaymentProofVerified(
+    documentId: string,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    return this.uploadsRepository.updateDocument(documentId, organizationId, {
+      status: "verified",
+      verified_by: actorUserId,
+      verified_at: new Date().toISOString(),
+      updated_by: actorUserId,
+    })
+  }
+
   private async createDraftResident(
     values: ReturnType<typeof createResidentSchema.parse>,
-    actorUserId: string
+    actorUserId: string,
+    status: "draft" | "pending_finance" = "draft"
   ) {
     try {
       return await this.residentsRepository.create({
@@ -679,20 +799,12 @@ export class ResidentsService {
         monthly_fee_amount: resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount),
         security_deposit_amount: values.securityDepositAmount,
         notes: values.notes,
-        status: "draft",
+        status,
         metadata: {
           admission_flow: "quick_admin_create",
+          admission_finance_status: status === "pending_finance" ? "pending" : "not_required",
           profile_completion_required: true,
           whatsapp_onboarding_ready: true,
-          ...(values.roomId
-            ? {
-                requested_room_assignment: {
-                  room_id: values.roomId,
-                  bed_label: normalizeOptionalText(values.bedLabel) ?? null,
-                  allocated_from: values.allocatedFrom ?? null,
-                },
-              }
-            : {}),
         },
         created_by: actorUserId,
         updated_by: actorUserId,
@@ -700,6 +812,38 @@ export class ResidentsService {
     } catch (error) {
       throw mapResidentCreateError(error)
     }
+  }
+
+  private async markAdmissionFinanceComplete(
+    resident: ResidentRow,
+    actorUserId: string
+  ) {
+    return this.residentsRepository.update(resident.id, resident.organization_id, {
+      status: "draft",
+      metadata: {
+        ...recordFromUnknown(resident.metadata),
+        admission_finance_status: "completed",
+        admission_finance_completed_at: new Date().toISOString(),
+      },
+      updated_by: actorUserId,
+    })
+  }
+
+  private async markAdmissionFinanceFailed(
+    resident: ResidentRow,
+    error: unknown,
+    actorUserId: string
+  ) {
+    return this.residentsRepository.update(resident.id, resident.organization_id, {
+      status: "pending_finance",
+      metadata: {
+        ...recordFromUnknown(resident.metadata),
+        admission_finance_status: "failed",
+        admission_finance_failed_at: new Date().toISOString(),
+        admission_finance_error: errorMessage(error),
+      },
+      updated_by: actorUserId,
+    })
   }
 
   private async createOnboardingInviteForResident(input: {
@@ -895,6 +1039,11 @@ export class ResidentsService {
 
   async repairResidentLifecycle(input: unknown) {
     const values = repairResidentLifecycleSchema.parse(input)
+
+    assertNonProductionMutation("resident_lifecycle_repair", {
+      dryRun: values.dryRun,
+    })
+
     const context = await this.authService.requirePermission("settings.manage")
 
     const existingResident = assertFound(
@@ -1056,6 +1205,18 @@ function recordFromUnknown(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>
+}
+
+function admissionRequiresFinance(values: ReturnType<typeof createResidentSchema.parse>) {
+  return Boolean(
+    values.firstMonthFeeStatus ||
+      (values.advancePaymentAmount && values.advancePaymentAmount > 0) ||
+      values.openingMonthlyFees.length > 0
+  )
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function hasCompletedResidentSelfProfile(resident: {

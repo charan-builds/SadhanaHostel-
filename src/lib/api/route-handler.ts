@@ -1,6 +1,7 @@
 import type { NextResponse } from "next/server"
 
 import { errorResponse } from "@/lib/api/api-response"
+import { assertSameOriginMutation } from "@/lib/api/origin-security"
 import {
   assertRateLimit,
   getClientIp,
@@ -54,6 +55,8 @@ export async function withApiRoute(
           route: options.route,
           method: request.method,
         })
+
+        assertSameOriginMutation(request)
 
         if (options.rateLimit) {
           await assertRateLimit(request, options.rateLimit, options.rateLimitScope)

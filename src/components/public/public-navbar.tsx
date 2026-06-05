@@ -9,6 +9,10 @@ import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
+import {
+  trackContactAction,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 import { cn } from "@/lib/utils"
 import { LanguageSwitcher } from "@/components/public/language-switcher"
 import { PublicMobileMenu } from "@/components/public/public-mobile-menu"
@@ -62,7 +66,11 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
 
         <div className="flex shrink-0 items-center gap-2">
           <Button asChild variant="outline" size="sm" className="hidden md:inline-flex">
-            <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
+            <a
+              href={callHref}
+              aria-label={`Call ${hostelConfig.name}`}
+              onClick={() => trackContactAction("phone", "public_navbar")}
+            >
               <Phone className="size-4" aria-hidden="true" />
               Call
             </a>
@@ -73,6 +81,10 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
               target="_blank"
               rel="noreferrer"
               aria-label={`Message ${hostelConfig.name} on WhatsApp`}
+              onClick={() => {
+                trackContactAction("whatsapp", "public_navbar")
+                trackWhatsAppClick("public_navbar")
+              }}
             >
               <MessageCircle className="size-4" aria-hidden="true" />
               WhatsApp

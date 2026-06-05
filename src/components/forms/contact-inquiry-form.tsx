@@ -17,6 +17,12 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useSubmitPublicInquiry } from "@/hooks"
 import { hostelConfig } from "@/constants/hostel"
+import {
+  trackContactAction,
+  trackLeadSubmission,
+  trackRoomEnquirySubmission,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 import type { ResidentType } from "@/types/admissions"
 
 export function ContactInquiryForm() {
@@ -51,6 +57,16 @@ export function ContactInquiryForm() {
         notes: message || undefined,
         source: "website",
         company,
+      })
+      trackLeadSubmission({
+        source: "website",
+        form: "contact_inquiry",
+        resident_type: residentType,
+      })
+      trackRoomEnquirySubmission({
+        source: "website",
+        form: "contact_inquiry",
+        resident_type: residentType,
       })
       setSubmitted(true)
       form.reset()
@@ -182,8 +198,16 @@ export function ContactInquiryForm() {
       </Button>
 
       <Button asChild variant="outline" className="mt-3 w-full">
-        <a href={hostelConfig.links.whatsappHref} target="_blank" rel="noreferrer">
-        WhatsApp instead
+        <a
+          href={hostelConfig.links.whatsappHref}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => {
+            trackContactAction("whatsapp", "contact_inquiry_form")
+            trackWhatsAppClick("contact_inquiry_form")
+          }}
+        >
+          WhatsApp instead
         </a>
       </Button>
     </form>

@@ -11,6 +11,10 @@ import {
   isMaintenanceExemptPath,
   isMaintenanceModeEnabled,
 } from "@/config/launch"
+import {
+  ORIGIN_SECURITY_ERROR_CODE,
+  validateSameOriginMutation,
+} from "@/lib/api/origin-security"
 import { updateSession } from "@/lib/supabase/middleware"
 
 export async function proxy(request: NextRequest) {
@@ -19,6 +23,31 @@ export async function proxy(request: NextRequest) {
   const pathWithSearch = `${pathname}${request.nextUrl.search}`
 
   requestHeaders.set("x-sadhana-pathname", pathWithSearch)
+
+  if (pathname.startsWith("/api/")) {
+    const originSecurity = validateSameOriginMutation(request)
+
+    if (!originSecurity.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ORIGIN_SECURITY_ERROR_CODE,
+            message: originSecurity.message,
+            details: {
+              reason: originSecurity.reason,
+            },
+          },
+        },
+        {
+          status: 403,
+          headers: {
+            "cache-control": "no-store",
+          },
+        }
+      )
+    }
+  }
 
   if (
     isMaintenanceModeEnabled() &&

@@ -1,19 +1,14 @@
-import { getQueryParams, successResponse, withApiRoute } from "@/lib/api"
-import { AdmissionsService } from "@/services/admissions.service"
-
 export const dynamic = "force-dynamic"
 
-export async function GET(request: Request) {
-  return withApiRoute(
-    request,
+export async function GET() {
+  return Response.json(
     {
-      route: "admissions.vacancy.public",
+      success: false,
+      error: {
+        code: "VACANCY_TRACKING_REMOVED",
+        message: "Vacancy tracking has been permanently removed from this launch.",
+      },
     },
-    async () => {
-      const service = AdmissionsService.createPublic()
-      const vacancy = await service.getPublicVacancy(getQueryParams(request))
-
-      return successResponse(vacancy, "Vacancy loaded.")
-    }
+    { status: 410 }
   )
 }

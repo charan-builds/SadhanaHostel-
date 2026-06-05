@@ -50,7 +50,15 @@ export class InvoiceStorageService {
       throw new RepositoryError(error.message, "INVOICE_SIGNED_URL_FAILED", error)
     }
 
-    return data
+    if (!data?.signedUrl) {
+      throw new RepositoryError(
+        "Invoice PDF signed URL could not be generated.",
+        "INVOICE_SIGNED_URL_FAILED",
+        data
+      )
+    }
+
+    return data.signedUrl
   }
 
   get bucketName() {

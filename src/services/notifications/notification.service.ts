@@ -11,6 +11,11 @@ import {
 } from "@/repositories/notifications.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
+import {
+  markAllNotificationsReadSchema,
+  markNotificationReadSchema,
+  notificationListSchema,
+} from "@/validations/notification.validation"
 
 import { EmailProvider } from "./email.provider"
 import { InAppProvider } from "./in-app.provider"
@@ -22,6 +27,7 @@ import type {
   NotificationSendInput,
 } from "./types"
 import { WhatsappProvider } from "./whatsapp.provider"
+import { AuthService } from "../auth.service"
 import { RealtimeService } from "../realtime"
 
 export type QueueNotificationInput = {
@@ -36,11 +42,13 @@ export type QueueNotificationInput = {
 }
 
 export class NotificationService {
+  private readonly authService: AuthService
   private readonly notificationsRepository: NotificationsRepository
   private readonly providers: Record<NotificationChannel, NotificationProvider>
   private readonly realtimeService: RealtimeService
 
   constructor(private readonly db: AppSupabaseClient) {
+    this.authService = new AuthService(db)
     this.notificationsRepository = new NotificationsRepository(db)
     this.realtimeService = new RealtimeService(db)
     this.providers = {
@@ -90,6 +98,59 @@ export class NotificationService {
     })
 
     return notification
+  }
+
+  async listForCurrentUser(input: unknown) {
+    const values = notificationListSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const hostelId = values.hostelId
+      ? this.authService.resolveHostelScope(context, values.organizationId, values.hostelId)
+      : undefined
+
+    return this.notificationsRepository.list({
+      ...values,
+      hostelId: hostelId ?? undefined,
+      recipientUserId: context.authUser.id,
+      channel: values.channel ?? "in_app",
+      pageSize: values.pageSize ?? 20,
+    })
+  }
+
+  async markRead(notificationId: string, input: unknown) {
+    const values = markNotificationReadSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    return this.notificationsRepository.markRead({
+      notificationId,
+      organizationId: values.organizationId,
+      recipientUserId: context.authUser.id,
+      actorUserId: context.authUser.id,
+    })
+  }
+
+  async markAllRead(input: unknown) {
+    const values = markAllNotificationsReadSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const hostelId = values.hostelId
+      ? this.authService.resolveHostelScope(context, values.organizationId, values.hostelId)
+      : undefined
+
+    return {
+      updated: await this.notificationsRepository.markAllRead({
+        organizationId: values.organizationId,
+        hostelId: hostelId ?? undefined,
+        recipientUserId: context.authUser.id,
+        actorUserId: context.authUser.id,
+      }),
+    }
   }
 
   async send(input: NotificationSendInput) {

@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   errorResponse,
   parseJsonBody,
   successResponse,
@@ -13,6 +14,8 @@ type ResidentCheckoutRouteContext = {
 
 export async function POST(request: Request, context: ResidentCheckoutRouteContext) {
   try {
+    assertSameOriginMutation(request)
+
     const { id } = await context.params
     const service = await ResidentsService.create()
     const resident = await service.checkoutResident({

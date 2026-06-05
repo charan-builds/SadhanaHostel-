@@ -8,6 +8,8 @@ import {
   type ResidentIdentityMode,
 } from "@/lib/resident-identity"
 import { tryNormalizePhoneNumber } from "@/lib/identity"
+import { assertNonProductionMutation } from "@/lib/operations/production-safety"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -27,6 +29,7 @@ import {
 } from "@/services/analytics/operational-metrics"
 
 import { AuthService } from "../auth.service"
+import { FinancialReconciliationService } from "./financial-reconciliation.service"
 
 type ScannerInput = {
   organizationId: string
@@ -40,17 +43,20 @@ type ConsistencyFindingDetail = NonNullable<ConsistencyFinding["details"]>[numbe
 
 export class ConsistencyService {
   private readonly authService: AuthService
-  private readonly repository: OperationsRepository
+  private readonly adminRepository: OperationsRepository
 
-  constructor(private readonly db: AppSupabaseClient) {
+  constructor(
+    private readonly db: AppSupabaseClient,
+    private readonly adminDb: AppSupabaseClient = db
+  ) {
     this.authService = new AuthService(db)
-    this.repository = new OperationsRepository(db)
+    this.adminRepository = new OperationsRepository(adminDb)
   }
 
   static async create() {
     const db = await createSupabaseServerClient()
 
-    return new ConsistencyService(db)
+    return new ConsistencyService(db, createSupabaseAdminClient())
   }
 
   async getReport(input: unknown) {
@@ -79,7 +85,7 @@ export class ConsistencyService {
 
     this.authService.requireHostelAccess(context, organizationId, hostelId)
 
-    return scanConsistency(this.repository, {
+    return scanConsistency(this.adminRepository, {
       organizationId,
       hostelId,
       actorUserId: context.authUser.id,
@@ -88,12 +94,15 @@ export class ConsistencyService {
 
   async repair(input: unknown) {
     const values = consistencyRepairSchema.parse(input)
+
+    assertNonProductionMutation("consistency_repair", { dryRun: values.dryRun })
+
     const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     if (values.dryRun) {
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -114,7 +123,7 @@ export class ConsistencyService {
     }
 
     if (!areOperationalRepairsEnabled()) {
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -131,12 +140,12 @@ export class ConsistencyService {
 
     if (values.action === "recalculate_occupancy" || values.action === "release_stale_allocations") {
       if (values.hostelId) {
-        const repair = await this.repository.repairOccupancyConsistency({
+        const repair = await this.adminRepository.repairOccupancyConsistency({
           organizationId: values.organizationId,
           hostelId: values.hostelId,
           actorUserId: context.authUser.id,
         })
-        const report = await scanConsistency(this.repository, {
+        const report = await scanConsistency(this.adminRepository, {
           organizationId: values.organizationId,
           hostelId: values.hostelId,
           actorUserId: context.authUser.id,
@@ -166,12 +175,18 @@ export class ConsistencyService {
     }
 
     if (values.action === "dedupe_invites" || values.action === "resync_auth_linkage") {
-      const repair = await this.repository.repairOnboardingAccessConsistency({
+      const repair = await this.adminRepository.repairOnboardingAccessConsistency({
         organizationId: values.organizationId,
         hostelId: values.hostelId ?? null,
         actorUserId: context.authUser.id,
       })
-      const report = await scanConsistency(this.repository, {
+      const identityModeRepair =
+        await this.adminRepository.resyncResidentIdentityModeMetadata({
+          organizationId: values.organizationId,
+          hostelId: values.hostelId ?? null,
+          actorUserId: context.authUser.id,
+        })
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -182,7 +197,8 @@ export class ConsistencyService {
         (repair?.activatedInvitesRevokedCount ?? 0) +
         (repair?.duplicateInvitesRevokedCount ?? 0) +
         (repair?.authProfilesSyncedCount ?? 0) +
-        (repair?.deadlockResidentsAdvancedCount ?? 0)
+        (repair?.deadlockResidentsAdvancedCount ?? 0) +
+        (identityModeRepair.identityModesSyncedCount ?? 0)
 
       return {
         repaired,
@@ -192,18 +208,19 @@ export class ConsistencyService {
           `${repair?.activatedInvitesRevokedCount ?? 0} stale invite(s) revoked, ` +
           `${repair?.duplicateInvitesRevokedCount ?? 0} duplicate invite(s) revoked, ` +
           `${repair?.authProfilesSyncedCount ?? 0} auth profile(s) resynced, ` +
+          `${identityModeRepair.identityModesSyncedCount ?? 0} identity mode(s) resynced, ` +
           `${repair?.deadlockResidentsAdvancedCount ?? 0} partial activation state(s) advanced.`,
         report,
       }
     }
 
     if (values.action === "reconcile_dues") {
-      const repair = await this.repository.reconcileInvalidDues({
+      const repair = await this.adminRepository.reconcileInvalidDues({
         organizationId: values.organizationId,
         hostelId: values.hostelId ?? null,
         actorUserId: context.authUser.id,
       })
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -223,12 +240,12 @@ export class ConsistencyService {
     }
 
     if (values.action === "repair_analytics") {
-      const repair = await this.repository.repairAnalyticsConsistency({
+      const repair = await this.adminRepository.repairAnalyticsConsistency({
         organizationId: values.organizationId,
         hostelId: values.hostelId ?? null,
         actorUserId: context.authUser.id,
       })
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -252,12 +269,12 @@ export class ConsistencyService {
         }
       }
 
-      const repair = await this.repository.repairTenantLinkageConsistency({
+      const repair = await this.adminRepository.repairTenantLinkageConsistency({
         organizationId: values.organizationId,
         hostelId: values.hostelId ?? null,
         actorUserId: context.authUser.id,
       })
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -289,8 +306,48 @@ export class ConsistencyService {
       }
     }
 
+    if (values.action === "repair_financial_reconciliation") {
+      const financialReconciliation = new FinancialReconciliationService(this.db, this.adminDb)
+      const invoiceRepair = await financialReconciliation.repair({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        action: "repair_all",
+        dryRun: false,
+      })
+      const receiptRepair = await financialReconciliation.regenerateMissingReceipts({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        dryRun: false,
+        limit: 500,
+      })
+      const report = await scanConsistency(this.adminRepository, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        actorUserId: context.authUser.id,
+        persist: true,
+      })
+      const repaired =
+        (invoiceRepair.repairs.monthlyFeeInvoices?.invoicesCreated ?? 0) +
+        (invoiceRepair.repairs.monthlyFeeInvoices?.paymentsLinked ?? 0) +
+        (invoiceRepair.repairs.advancePaymentInvoices?.invoicesCreated ?? 0) +
+        (invoiceRepair.repairs.advancePaymentInvoices?.paymentsLinked ?? 0) +
+        (invoiceRepair.repairs.receiptInvoiceLinks?.documentsLinked ?? 0) +
+        (invoiceRepair.repairs.missingInvoicePdfs?.pdfsGenerated ?? 0) +
+        receiptRepair.receiptsGenerated
+
+      return {
+        repaired,
+        dryRun: false,
+        message:
+          `Financial reconciliation repaired ${repaired} record/link operation(s): ` +
+          `${invoiceRepair.repairs.missingInvoicePdfs?.pdfsGenerated ?? 0} invoice PDF(s), ` +
+          `${receiptRepair.receiptsGenerated} missing receipt(s) generated.`,
+        report,
+      }
+    }
+
     if (values.action === "run_consistency_scan") {
-      const report = await scanConsistency(this.repository, {
+      const report = await scanConsistency(this.adminRepository, {
         organizationId: values.organizationId,
         hostelId: values.hostelId,
         actorUserId: context.authUser.id,
@@ -600,20 +657,20 @@ export async function scanConsistency(
   if (invoiceWithoutPdf > 0) {
     findings.push(
       finding(
-        "invoices.pdf_missing",
+        "finance.invoice_pdf_missing",
         "invoice",
         "high",
         "Invoices missing PDFs",
         "Invoice records without PDF documents can block resident downloads and audit exports.",
         invoiceWithoutPdf,
-        "review_manually",
+        "repair_financial_reconciliation",
         rowDetails(invoiceWithoutPdfRows, {
           tableName: "invoices",
           anomalyType: "invoice_pdf_missing",
           expectedState: "invoice has generated PDF document",
           actualState: "invoice pdf_document_id is missing",
-          repairAction: "review_manually",
-          recommendation: "Regenerate invoice PDFs before resident download or owner export.",
+          repairAction: "repair_financial_reconciliation",
+          recommendation: "Run financial reconciliation to regenerate missing invoice PDFs before resident download or owner export.",
         })
       )
     )
@@ -655,6 +712,7 @@ export async function scanConsistency(
     findings.push(...await detectCapacitySnapshotAnomalies(repository, input))
   }
   findings.push(...await detectInvalidDuesAnomalies(repository, input))
+  findings.push(...await detectFinancialIntegrityAnomalies(repository, input))
   findings.push(...await detectBusinessTenantLinkageAnomalies(repository, input))
   findings.push(...await detectSecurityAnomalies(repository, input))
 
@@ -1430,6 +1488,293 @@ async function detectInvalidDuesAnomalies(
         ),
       ]
     : []
+}
+
+async function detectFinancialIntegrityAnomalies(
+  repository: OperationsRepository,
+  input: ScannerInput
+): Promise<ConsistencyFinding[]> {
+  const [payments, feeRecords, invoices, receiptDocuments] = await Promise.all([
+    repository.list("payments", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select:
+        "id,organization_id,hostel_id,resident_id,status,amount,monthly_fee_record_id,invoice_id,is_advance,verified_at,created_at",
+      equals: { status: "verified" },
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("monthly_fee_records", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select:
+        "id,organization_id,hostel_id,resident_id,period_month,status,total_amount,paid_amount,balance_amount,created_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("invoices", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select:
+        "id,organization_id,hostel_id,resident_id,status,monthly_fee_record_id,total_amount,paid_amount,balance_amount,metadata,created_at",
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+    repository.list("documents", {
+      organizationId: input.organizationId,
+      hostelId: input.hostelId,
+      select: "id,organization_id,hostel_id,resident_id,payment_id,invoice_id,document_type,status,created_at",
+      equals: { document_type: "payment_receipt", status: "verified" },
+      deletedAtNull: true,
+      limit: 5000,
+    }),
+  ])
+  const findings: ConsistencyFinding[] = []
+  const receiptPaymentIds = new Set(
+    receiptDocuments
+      .map((document) => stringValue(document, "payment_id"))
+      .filter((id): id is string => Boolean(id))
+  )
+  const invoiceByFeeRecordId = new Map(
+    invoices
+      .map((invoice) => [stringValue(invoice, "monthly_fee_record_id"), invoice] as const)
+      .filter(([feeRecordId]) => Boolean(feeRecordId))
+  )
+  const paymentsByInvoiceId = new Map<string, Array<Record<string, unknown>>>()
+
+  for (const payment of payments) {
+    const invoiceId = stringValue(payment, "invoice_id")
+
+    if (!invoiceId) {
+      continue
+    }
+
+    const list = paymentsByInvoiceId.get(invoiceId) ?? []
+    list.push(payment)
+    paymentsByInvoiceId.set(invoiceId, list)
+  }
+
+  const verifiedPaymentsWithoutInvoice = payments.filter(
+    (payment) => !stringValue(payment, "invoice_id")
+  )
+  const verifiedPaymentsWithoutReceipt = payments.filter(
+    (payment) => {
+      const paymentId = stringValue(payment, "id")
+
+      return Boolean(paymentId && !receiptPaymentIds.has(paymentId))
+    }
+  )
+  const paidFeesWithoutInvoice = feeRecords.filter(
+    (feeRecord) =>
+      numberValue(feeRecord, "balance_amount") === 0 &&
+      !invoiceByFeeRecordId.has(stringValue(feeRecord, "id"))
+  )
+  const paidInvoiceMismatches = invoices.filter((invoice) => {
+    if (stringValue(invoice, "status") !== "paid") {
+      return false
+    }
+
+    const total = numberValue(invoice, "total_amount")
+    const invoiceId = stringValue(invoice, "id")
+    const linkedPayments = invoiceId ? (paymentsByInvoiceId.get(invoiceId) ?? []) : []
+    const linkedPaymentTotal = linkedPayments.reduce(
+      (sum, payment) => sum + numberValue(payment, "amount"),
+      0
+    )
+
+    return linkedPaymentTotal !== total
+  })
+  const negativeBalances = [
+    ...feeRecords.filter((feeRecord) => numberValue(feeRecord, "balance_amount") < 0),
+    ...invoices.filter((invoice) => numberValue(invoice, "balance_amount") < 0),
+  ]
+  const duplicateFeeRecords = duplicateRows(feeRecords, (feeRecord) =>
+    [
+      stringValue(feeRecord, "organization_id"),
+      stringValue(feeRecord, "resident_id"),
+      stringValue(feeRecord, "period_month"),
+    ].join(":")
+  )
+  const duplicateMonthlyFeeInvoices = duplicateRows(
+    invoices.filter((invoice) => stringValue(invoice, "monthly_fee_record_id")),
+    (invoice) =>
+      [
+        stringValue(invoice, "organization_id"),
+        stringValue(invoice, "monthly_fee_record_id"),
+      ].join(":")
+  )
+  const duplicateReceiptInvoices = duplicateRows(
+    invoices.filter((invoice) => {
+      const metadata = recordValue(invoice, "metadata")
+
+      return stringValue(metadata, "source") === "payment_receipt" && stringValue(metadata, "payment_id")
+    }),
+    (invoice) => {
+      const metadata = recordValue(invoice, "metadata")
+
+      return [
+        stringValue(invoice, "organization_id"),
+        stringValue(metadata, "payment_id"),
+      ].join(":")
+    }
+  )
+  const duplicateInvoices = [...duplicateMonthlyFeeInvoices, ...duplicateReceiptInvoices]
+
+  if (verifiedPaymentsWithoutInvoice.length > 0) {
+    findings.push(
+      finding(
+        "finance.verified_payment_missing_invoice",
+        "payment",
+        "critical",
+        "Verified payments are missing invoices",
+        "Every verified payment must link to an invoice before revenue, receipts, or reports can be trusted.",
+        verifiedPaymentsWithoutInvoice.length,
+        "repair_financial_reconciliation",
+        rowDetails(verifiedPaymentsWithoutInvoice.slice(0, 20), {
+          tableName: "payments",
+          anomalyType: "verified_payment_missing_invoice",
+          expectedState: "status verified and invoice_id populated",
+          actualState: "status verified and invoice_id null",
+          repairAction: "repair_financial_reconciliation",
+          recommendation: "Run financial reconciliation to create/link the missing invoice without duplicating existing invoices.",
+        })
+      )
+    )
+  }
+
+  if (verifiedPaymentsWithoutReceipt.length > 0) {
+    findings.push(
+      finding(
+        "finance.verified_payment_missing_receipt",
+        "payment",
+        "high",
+        "Verified payments are missing receipt documents",
+        "Resident-visible payment history and audit exports require a verified payment_receipt document per verified payment.",
+        verifiedPaymentsWithoutReceipt.length,
+        "repair_financial_reconciliation",
+        rowDetails(verifiedPaymentsWithoutReceipt.slice(0, 20), {
+          tableName: "payments",
+          anomalyType: "verified_payment_missing_receipt",
+          expectedState: "verified payment has a verified payment_receipt document",
+          actualState: "verified payment has no verified payment_receipt document",
+          repairAction: "repair_financial_reconciliation",
+          recommendation: "Run missing receipt regeneration after invoice reconciliation.",
+        })
+      )
+    )
+  }
+
+  if (paidFeesWithoutInvoice.length > 0) {
+    findings.push(
+      finding(
+        "finance.paid_fee_missing_invoice",
+        "invoice",
+        "critical",
+        "Paid monthly fee records are missing invoices",
+        "Paid fee records without invoices make reports disagree with the ledger.",
+        paidFeesWithoutInvoice.length,
+        "repair_financial_reconciliation",
+        rowDetails(paidFeesWithoutInvoice.slice(0, 20), {
+          tableName: "monthly_fee_records",
+          anomalyType: "paid_fee_missing_invoice",
+          expectedState: "balance_amount 0 and invoice exists",
+          actualState: "balance_amount 0 and invoice missing",
+          repairAction: "repair_financial_reconciliation",
+          recommendation: "Run financial reconciliation to create the monthly fee invoice atomically.",
+        })
+      )
+    )
+  }
+
+  if (paidInvoiceMismatches.length > 0) {
+    findings.push(
+      finding(
+        "finance.paid_invoice_payment_mismatch",
+        "invoice",
+        "critical",
+        "Paid invoice totals disagree with verified payments",
+        "Paid invoices must equal the sum of linked verified payments.",
+        paidInvoiceMismatches.length,
+        "review_manually",
+        rowDetails(paidInvoiceMismatches.slice(0, 20), {
+          tableName: "invoices",
+          anomalyType: "paid_invoice_payment_total_mismatch",
+          expectedState: "sum(linked verified payments) equals invoice total_amount",
+          actualState: "paid invoice total differs from linked verified payments",
+          repairAction: "review_manually",
+          recommendation: "Review the invoice, linked payments, and audit history before changing financial records.",
+        })
+      )
+    )
+  }
+
+  if (negativeBalances.length > 0) {
+    findings.push(
+      finding(
+        "finance.negative_balances",
+        "payment",
+        "critical",
+        "Financial records have negative balances",
+        "Negative balances indicate over-application or manual data corruption.",
+        negativeBalances.length,
+        "review_manually",
+        rowDetails(negativeBalances.slice(0, 20), {
+          tableName: "financial_records",
+          anomalyType: "negative_balance",
+          expectedState: "balance_amount is zero or positive",
+          actualState: "balance_amount is negative",
+          repairAction: "review_manually",
+          recommendation: "Review payment allocation and invoice/fee updates before correcting balances.",
+        })
+      )
+    )
+  }
+
+  if (duplicateFeeRecords.length > 0) {
+    findings.push(
+      finding(
+        "finance.duplicate_monthly_fee_records",
+        "payment",
+        "high",
+        "Duplicate monthly fee records exist",
+        "A resident should have at most one active monthly fee record per period.",
+        duplicateFeeRecords.length,
+        "review_manually",
+        rowDetails(duplicateFeeRecords.slice(0, 20), {
+          tableName: "monthly_fee_records",
+          anomalyType: "duplicate_monthly_fee_record",
+          expectedState: "one fee record per resident and period",
+          actualState: "multiple active fee records for the same resident period",
+          repairAction: "review_manually",
+          recommendation: "Review payment links and cancel only the duplicate unpaid/unreferenced record.",
+        })
+      )
+    )
+  }
+
+  if (duplicateInvoices.length > 0) {
+    findings.push(
+      finding(
+        "finance.duplicate_invoices",
+        "invoice",
+        "high",
+        "Duplicate invoices exist",
+        "Monthly fee records and payment receipt invoices must not have duplicate active invoices.",
+        duplicateInvoices.length,
+        "review_manually",
+        rowDetails(duplicateInvoices.slice(0, 20), {
+          tableName: "invoices",
+          anomalyType: "duplicate_invoice",
+          expectedState: "one active invoice for each fee record or payment receipt",
+          actualState: "multiple active invoices share the same source record",
+          repairAction: "review_manually",
+          recommendation: "Review invoice numbers, payments, PDFs, and audit history before cancelling duplicates.",
+        })
+      )
+    )
+  }
+
+  return findings
 }
 
 async function detectResidentAllocationAnomalies(
@@ -2422,6 +2767,37 @@ function numberValue(row: Record<string, unknown>, key: string) {
   const value = row[key]
 
   return typeof value === "number" ? value : Number(value ?? 0)
+}
+
+function recordValue(row: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = row[key]
+
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function duplicateRows(
+  rows: Array<Record<string, unknown>>,
+  keyFor: (row: Record<string, unknown>) => string
+) {
+  const byKey = new Map<string, Array<Record<string, unknown>>>()
+
+  rows.forEach((row) => {
+    const key = keyFor(row)
+
+    if (!key || key.includes("null")) {
+      return
+    }
+
+    const group = byKey.get(key) ?? []
+    group.push(row)
+    byKey.set(key, group)
+  })
+
+  return Array.from(byKey.values())
+    .filter((group) => group.length > 1)
+    .flat()
 }
 
 function getRowIdentityMode(row: Record<string, unknown>) {

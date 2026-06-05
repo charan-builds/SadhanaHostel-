@@ -2,6 +2,7 @@ import "server-only"
 
 import { databaseError, forbidden } from "@/lib/api/api-error"
 import { logger } from "@/lib/logger"
+import { assertNonProductionOperation } from "@/lib/operations/production-safety"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AuthService } from "@/services/auth.service"
@@ -47,6 +48,9 @@ export class DemoDataResetService {
 
   async reset(input: unknown): Promise<DemoDataResetReport> {
     const values = demoDataResetSchema.parse(input)
+
+    assertNonProductionOperation("demo_data_reset")
+
     const context = await this.authService.requireRole(["owner", "super_admin"])
 
     this.authService.requireHostelAccess(

@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import type { Route } from "next"
 import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
@@ -6,12 +8,22 @@ import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { localSeoLandingLinks, publicNavItems } from "@/constants/public-content"
+import {
+  trackContactAction,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 
 const quickLinks = publicNavItems.filter((item) =>
   ["/", "/about", "/rooms", "/facilities", "/gallery"].includes(item.href),
 )
 
-const importantLinks = publicNavItems.filter((item) => ["/contact", "/terms"].includes(item.href))
+const importantLinks = [
+  ...publicNavItems.filter((item) => ["/contact"].includes(item.href)),
+  { title: "Admissions", href: "/admissions" },
+  { title: "Fees", href: "/fees" },
+  { title: "Privacy", href: "/privacy" },
+  { title: "Terms", href: "/terms" },
+]
 
 export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
   const year = new Date().getFullYear()
@@ -45,6 +57,7 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
             <a
               href={callHref}
               className="flex w-fit items-center gap-3 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => trackContactAction("phone", "public_footer")}
             >
               <Phone className="size-4 text-primary" aria-hidden="true" />
               <span>{hostelConfig.contact.phone}</span>
@@ -54,6 +67,10 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
               target="_blank"
               rel="noreferrer"
               className="flex w-fit items-center gap-3 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => {
+                trackContactAction("whatsapp", "public_footer")
+                trackWhatsAppClick("public_footer")
+              }}
             >
               <MessageCircle className="size-4 text-primary" aria-hidden="true" />
               <span>{hostelConfig.contact.whatsapp}</span>
@@ -62,19 +79,32 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
 
           <div className="mt-6 flex flex-wrap gap-2">
             <Button asChild>
-              <a href={callHref}>
+              <a href={callHref} onClick={() => trackContactAction("phone", "public_footer_cta")}>
                 <Phone className="size-4" aria-hidden="true" />
                 Call
               </a>
             </Button>
             <Button asChild variant="outline">
-              <a href={whatsappHref} target="_blank" rel="noreferrer">
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  trackContactAction("whatsapp", "public_footer_cta")
+                  trackWhatsAppClick("public_footer_cta")
+                }}
+              >
                 <MessageCircle className="size-4" aria-hidden="true" />
                 WhatsApp
               </a>
             </Button>
             <Button asChild variant="outline">
-              <a href={mapSearchHref} target="_blank" rel="noreferrer">
+              <a
+                href={mapSearchHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => trackContactAction("map", "public_footer_cta")}
+              >
                 <Navigation className="size-4" aria-hidden="true" />
                 Navigate
               </a>

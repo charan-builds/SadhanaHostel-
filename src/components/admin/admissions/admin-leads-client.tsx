@@ -64,6 +64,7 @@ import { useAuth } from "@/lib/auth"
 import { formatDate, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
 import { cn } from "@/lib/utils"
+import { trackLeadSubmission } from "@/lib/analytics/google-analytics"
 import type { LeadRow, LeadStatus } from "@/types/admissions"
 
 const PAGE_SIZE = 12
@@ -671,6 +672,11 @@ function LeadDialog({
       toast.success("Lead updated.")
     } else {
       await createLead.mutateAsync(values)
+      trackLeadSubmission({
+        source: values.source,
+        form: "admin_lead_dialog",
+        resident_type: values.residentType,
+      })
       toast.success("Lead created.")
     }
 

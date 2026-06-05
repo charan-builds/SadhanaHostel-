@@ -1,16 +1,22 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import Link from "next/link"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
-import { Bell, LogOut, Search } from "lucide-react"
+import { Bell, CheckCheck, LogOut, Search } from "lucide-react"
 import { toast } from "sonner"
 
 import { AdminMobileSidebar } from "@/components/admin/layout/admin-mobile-sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,14 +26,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from "@/hooks"
 import { useAuth } from "@/lib/auth"
-import { humanizeEnum } from "@/lib/format"
+import { formatDateTime, humanizeEnum } from "@/lib/format"
 import { authSdk } from "@/sdk"
 
 export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
   const router = useRouter()
-  const { session, refreshSession } = useAuth()
+  const { organizationId, session, refreshSession } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const hostelId = session?.hostelIds[0]
+  const notifications = useNotifications(
+    organizationId
+      ? {
+          organizationId,
+          hostelId,
+          page: 1,
+          pageSize: 20,
+          channel: "in_app",
+        }
+      : undefined
+  )
+  const markRead = useMarkNotificationRead()
+  const markAllRead = useMarkAllNotificationsRead()
   const profile = session?.profile
   const displayName = profile?.full_name ?? session?.user?.email ?? "Admin"
   const displayEmail = profile?.email ?? session?.user?.email ?? "Signed in"
@@ -42,6 +64,8 @@ export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
         .join("") || "A",
     [displayName]
   )
+  const notificationRows = notifications.data?.data ?? []
+  const unreadCount = notificationRows.filter((notification) => !notification.read_at).length
 
   async function logout() {
     setIsLoggingOut(true)
@@ -77,10 +101,20 @@ export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button asChild variant="outline" size="icon" aria-label="Operational alerts">
-            <Link href={"/admin/alerts" as Route}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="relative"
+            aria-label={`Open notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+            onClick={() => setNotificationsOpen(true)}
+          >
               <Bell className="size-4" aria-hidden="true" />
-            </Link>
+              {unreadCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              ) : null}
           </Button>
 
           <DropdownMenu>
@@ -121,6 +155,88 @@ export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
           </DropdownMenu>
         </div>
       </div>
+      <Sheet open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader className="text-left">
+            <SheetTitle>Notifications</SheetTitle>
+            <SheetDescription>
+              Payments, invoices, receipts, reminders, and operational events.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <Badge variant="secondary">{unreadCount} unread</Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!organizationId || markAllRead.isPending || unreadCount === 0}
+              onClick={() => {
+                if (!organizationId) {
+                  return
+                }
+
+                void markAllRead.mutateAsync({ organizationId, hostelId }).then(() => {
+                  toast.success("All notifications marked read.")
+                })
+              }}
+            >
+              <CheckCheck className="size-4" aria-hidden="true" />
+              Mark All Read
+            </Button>
+          </div>
+          <div className="mt-5 grid gap-3">
+            {notifications.isLoading ? (
+              <div className="grid gap-3">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-20 rounded-lg border bg-muted/50" />
+                ))}
+              </div>
+            ) : notificationRows.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+                No notifications yet.
+              </div>
+            ) : (
+              notificationRows.map((notification) => (
+                <article
+                  key={notification.id}
+                  className="rounded-lg border bg-card p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!notification.read_at ? (
+                          <span className="size-2 rounded-full bg-primary" aria-label="Unread" />
+                        ) : null}
+                        <h3 className="text-sm font-semibold">{notification.title}</h3>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {formatDateTime(notification.created_at)}
+                      </p>
+                    </div>
+                    {!notification.read_at && organizationId ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={markRead.isPending}
+                        onClick={() => {
+                          void markRead.mutateAsync({
+                            notificationId: notification.id,
+                            input: { organizationId },
+                          })
+                        }}
+                      >
+                        Mark Read
+                      </Button>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </header>
   )
 }

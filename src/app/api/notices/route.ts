@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   createdResponse,
   errorResponse,
   getQueryParams,
@@ -22,6 +23,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginMutation(request)
+
     const service = await NoticesService.create()
     const notice = await service.createNotice(await parseJsonBody(request))
 

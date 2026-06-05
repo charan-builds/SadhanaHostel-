@@ -4,8 +4,10 @@ import type {
   AutomationRunResult,
   ConsistencyReport,
   DemoDataResetReport,
+  FinancialReconciliationRepairReport,
   IdentityReconciliationReport,
   IdentityRepairResult,
+  MissingReceiptRepairReport,
 } from "@/types/operations"
 import type {
   AutomationDashboardQueryInput,
@@ -14,8 +16,10 @@ import type {
   ConsistencyRepairInput,
   ConsistencyReportQueryInput,
   DemoDataResetInput,
+  FinancialReconciliationRepairInput,
   IdentityReconciliationQueryInput,
   IdentityRepairInput,
+  MissingReceiptRegenerationInput,
 } from "@/validations/operations.validation"
 
 export const operationsSdk = {
@@ -71,6 +75,21 @@ export const operationsSdk = {
   repairIdentities(input: IdentityRepairInput) {
     return apiClient.post<IdentityRepairResult, IdentityRepairInput>(
       "/api/operations/identity-repair",
+      input,
+      { retry: 0 }
+    )
+  },
+
+  repairFinancialReconciliation(input: FinancialReconciliationRepairInput) {
+    return apiClient.post<
+      FinancialReconciliationRepairReport,
+      FinancialReconciliationRepairInput
+    >("/api/operations/financial-reconciliation/repair", input, { retry: 0 })
+  },
+
+  regenerateMissingReceipts(input: MissingReceiptRegenerationInput) {
+    return apiClient.post<MissingReceiptRepairReport, MissingReceiptRegenerationInput>(
+      "/api/operations/financial-reconciliation/receipts",
       input,
       { retry: 0 }
     )

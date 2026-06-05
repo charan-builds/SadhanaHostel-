@@ -25,7 +25,7 @@ export default async function FacilitiesPage() {
           name: "Hostel facilities in Pulivendula",
           description: facilitiesDescription,
           path: "/facilities",
-          image: "/images/image.png",
+          image: "/images/hostel-courtyard-clean.webp",
         })}
       />
       <FacilitiesPageContent facilities={cms.facilities} galleryItems={cms.galleryItems} />

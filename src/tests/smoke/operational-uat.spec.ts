@@ -35,6 +35,7 @@ test.describe("operational route protection", () => {
     "/admin/dashboard",
     "/admin/settings",
     "/admin/settings/staff-access",
+    "/admin/finance",
     "/admin/finance/payment-security",
     "/admin/gallery",
     "/admin/website",

@@ -17,6 +17,7 @@ describe("payment API routes", () => {
   afterEach(() => {
     vi.resetModules()
     vi.doUnmock("@/services/payments.service")
+    vi.unstubAllEnvs()
   })
 
   it("creates UPI payment records through PaymentsService", async () => {
@@ -102,6 +103,43 @@ describe("payment API routes", () => {
       organizationId: TEST_ORGANIZATION_ID,
       paymentId: PAYMENT_ID,
     })
+  })
+
+  it("blocks cross-site cookie payment verification before PaymentsService", async () => {
+    const verifyPayment = vi.fn()
+
+    vi.doMock("@/services/payments.service", () => ({
+      PaymentsService: {
+        create: vi.fn().mockResolvedValue({ verifyPayment }),
+      },
+    }))
+
+    const { POST } = await import("@/app/api/payments/verify/route")
+    const response = await POST(
+      createJsonRequest(
+        "/api/payments/verify",
+        {
+          organizationId: TEST_ORGANIZATION_ID,
+          paymentId: PAYMENT_ID,
+        },
+        {
+          headers: {
+            cookie: "sb-test-auth-token=token",
+            origin: "https://attacker.example",
+            "sec-fetch-site": "cross-site",
+          },
+        }
+      )
+    )
+    const body = await readApiResponse(response)
+
+    expect(response.status).toBe(403)
+    expect(body.success).toBe(false)
+    if (body.success) {
+      throw new Error("Expected CSRF failure response.")
+    }
+    expect(body.error.code).toBe("CSRF_ORIGIN_BLOCKED")
+    expect(verifyPayment).not.toHaveBeenCalled()
   })
 
   it("routes payment rejection through PaymentsService", async () => {
@@ -249,6 +287,44 @@ describe("payment API routes", () => {
 
     expect(response.status).toBe(200)
     expect(testPaymentSettings).toHaveBeenCalledWith(payload)
+  })
+
+  it("rejects payment settings tests in production at the API layer", async () => {
+    vi.stubEnv("LAUNCH_MODE", "production")
+    vi.stubEnv("NEXT_PUBLIC_LAUNCH_MODE", "production")
+
+    const testPaymentSettings = vi.fn()
+
+    vi.doMock("@/services/payments.service", () => ({
+      PaymentsService: {
+        create: vi.fn().mockResolvedValue({ testPaymentSettings }),
+      },
+    }))
+
+    const { POST } = await import("@/app/api/payments/settings/test/route")
+    const payload = {
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      paymentMethod: "upi",
+      accountName: "Sadhana Boys Hostel",
+      upiId: "sadhana@upi",
+      isActive: true,
+      supportsManualVerification: true,
+      requireUtr: true,
+      requireScreenshot: true,
+      allowPartialPayment: true,
+      allowAdvancePayment: true,
+      autoExpirePendingPayments: true,
+      minPaymentAmount: 1,
+      utrRegex: "^[A-Z0-9][A-Z0-9._/-]{5,63}$",
+      duplicateDetectionStrictness: "strict",
+    }
+    const response = await POST(createJsonRequest("/api/payments/settings/test", payload))
+    const body = await readApiResponse(response)
+
+    expect(response.status).toBe(403)
+    expect(body.success).toBe(false)
+    expect(testPaymentSettings).not.toHaveBeenCalled()
   })
 
   it("uploads payment QR images through PaymentsService", async () => {

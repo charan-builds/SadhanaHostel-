@@ -1,4 +1,15 @@
 import { Client } from "pg"
+import { loadEnvConfig } from "@next/env"
+
+loadEnvConfig(process.cwd())
+
+const STORAGE_BUCKETS = [
+  "resident-documents",
+  "payment-screenshots",
+  "payment-qr-codes",
+  "invoices",
+  "gallery-images",
+] as const
 
 type ValidationCheck = {
   name: string
@@ -128,6 +139,74 @@ async function main() {
       `
     )
   )
+  checks.push(
+    await validate(
+      client,
+      "expected storage buckets exist",
+      `
+        with expected(id) as (
+          select unnest($1::text[])
+        )
+        select count(*)::int as violations
+        from expected
+        left join storage.buckets buckets on buckets.id = expected.id
+        where buckets.id is null
+      `,
+      [STORAGE_BUCKETS]
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "document storage objects exist",
+      `
+        select count(*)::int as violations
+        from public.documents documents
+        left join storage.objects objects
+          on objects.bucket_id = documents.bucket_name
+         and objects.name = documents.storage_path
+        where documents.deleted_at is null
+          and documents.bucket_name = any($1::text[])
+          and objects.id is null
+      `,
+      [STORAGE_BUCKETS]
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "invoice PDF storage objects exist",
+      `
+        select count(*)::int as violations
+        from public.invoices invoices
+        join public.documents documents on documents.id = invoices.pdf_document_id
+        left join storage.objects objects
+          on objects.bucket_id = documents.bucket_name
+         and objects.name = documents.storage_path
+        where invoices.deleted_at is null
+          and documents.deleted_at is null
+          and documents.document_type = 'invoice_pdf'
+          and objects.id is null
+      `
+    )
+  )
+  checks.push(
+    await validate(
+      client,
+      "payment screenshot storage objects exist",
+      `
+        select count(*)::int as violations
+        from public.documents documents
+        left join storage.objects objects
+          on objects.bucket_id = documents.bucket_name
+         and objects.name = documents.storage_path
+        where documents.deleted_at is null
+          and documents.document_type = 'payment_receipt'
+          and documents.bucket_name = 'payment-screenshots'
+          and objects.id is null
+      `
+    )
+  )
 
   await client.end()
 
@@ -141,9 +220,10 @@ async function main() {
 async function validate(
   client: Client,
   name: string,
-  sql: string
+  sql: string,
+  params: unknown[] = []
 ): Promise<ValidationCheck> {
-  const result = await client.query<{ violations: number }>(sql)
+  const result = await client.query<{ violations: number }>(sql, params)
   const violations = result.rows[0]?.violations ?? 0
 
   return {

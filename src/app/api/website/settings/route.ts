@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   errorResponse,
   getQueryParams,
   parseJsonBody,
@@ -22,6 +23,8 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    assertSameOriginMutation(request)
+
     const service = await WebsiteService.create()
     const setting = await service.updateSetting(await parseJsonBody(request))
 

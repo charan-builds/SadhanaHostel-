@@ -1,4 +1,5 @@
 import { parseJsonBody, successResponse, withApiRoute } from "@/lib/api"
+import { assertNonProductionOperation } from "@/lib/operations/production-safety"
 import { DemoDataResetService } from "@/services/operations"
 
 export const dynamic = "force-dynamic"
@@ -8,8 +9,12 @@ export async function POST(request: Request) {
     request,
     { route: "operations.demo-data-reset" },
     async () => {
+      const body = await parseJsonBody(request)
+
+      assertNonProductionOperation("demo_data_reset")
+
       const service = await DemoDataResetService.create()
-      const result = await service.reset(await parseJsonBody(request))
+      const result = await service.reset(body)
 
       return successResponse(
         result,

@@ -7,6 +7,8 @@ import {
   getOrSetCache,
 } from "@/lib/cache"
 import { hostelModules } from "@/config/hostel-modules"
+import { escapeCsvCell } from "@/lib/csv"
+import { normalizeDateBoundary } from "@/lib/date-range"
 import { measureAsync } from "@/lib/performance"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AnalyticsRepository } from "@/repositories/analytics.repository"
@@ -23,7 +25,6 @@ import {
   buildResidentLifecycleSummary,
   isResidentEligibleForAnalytics,
   isResidentEligibleForBilling,
-  isResidentEligibleForOccupancy,
 } from "./analytics/operational-metrics"
 
 const DASHBOARD_CACHE_TTL_MS = 0
@@ -201,8 +202,6 @@ export class AnalyticsService {
     const today = now.toISOString().slice(0, 10)
     const [
       residentLifecycleRows,
-      capacity,
-      activeAllocations,
       monthlyRevenue,
       pendingDuesRecords,
       pendingPayments,
@@ -213,8 +212,6 @@ export class AnalyticsService {
       recentLeaves,
     ] = await Promise.all([
       this.analyticsRepository.listResidentLifecycleRows(organizationId, hostelId),
-      this.analyticsRepository.getRoomCapacity(organizationId, hostelId),
-      this.analyticsRepository.listActiveRoomAllocationsForOccupancy(organizationId, hostelId),
       this.analyticsRepository.getVerifiedRevenue(
         organizationId,
         monthStart.toISOString(),
@@ -230,22 +227,12 @@ export class AnalyticsService {
       this.analyticsRepository.listRecentLeaves(organizationId, hostelId),
     ])
     const residentLifecycle = buildResidentLifecycleSummary(residentLifecycleRows)
-    const occupancyEligibleResidentIds = new Set(
-      residentLifecycleRows
-        .filter(isResidentEligibleForOccupancy)
-        .map((resident) => resident.id)
-        .filter((residentId): residentId is string => Boolean(residentId))
-    )
     const billingEligibleResidentIds = new Set(
       residentLifecycleRows
         .filter(isResidentEligibleForBilling)
         .map((resident) => resident.id)
         .filter((residentId): residentId is string => Boolean(residentId))
     )
-    const occupiedBeds = activeAllocations.filter(
-      (allocation) =>
-        allocation.resident_id && occupancyEligibleResidentIds.has(allocation.resident_id)
-    ).length
     const pendingDues = sum(
       pendingDuesRecords
         .filter((record) => billingEligibleResidentIds.has(record.resident_id))
@@ -256,17 +243,10 @@ export class AnalyticsService {
       pendingDues,
       pendingPayments,
     }
-    const vacantBeds = Math.max(0, capacity - occupiedBeds)
 
     return {
       totalResidents: residentLifecycle.registeredResidents,
       residentLifecycle,
-      occupancy: {
-        occupiedBeds,
-        capacity,
-        vacantBeds,
-        occupancyRate: capacity === 0 ? 0 : Number(((occupiedBeds / capacity) * 100).toFixed(2)),
-      },
       finance,
       operations: {
         activeLeaves,
@@ -287,9 +267,14 @@ export class AnalyticsService {
     hostelId?: string
   ) {
     const months = buildMonthBuckets(fromDate, toDate)
-    const [capacity, payments, rawFeeRecords, allocations, leaves, residents] =
+    const [
+      payments,
+      rawFeeRecords,
+      leaves,
+      residentGrowthRows,
+      residentLifecycleRows,
+    ] =
       await Promise.all([
-        this.analyticsRepository.getRoomCapacity(organizationId, hostelId),
         this.analyticsRepository.listPaymentsInRange(
           organizationId,
           fromDate,
@@ -297,12 +282,6 @@ export class AnalyticsService {
           hostelId
         ),
         this.analyticsRepository.listFeeRecordsInRange(
-          organizationId,
-          fromDate,
-          toDate,
-          hostelId
-        ),
-        this.analyticsRepository.listRoomAllocationsInRange(
           organizationId,
           fromDate,
           toDate,
@@ -320,8 +299,11 @@ export class AnalyticsService {
           toDate,
           hostelId
         ),
+        this.analyticsRepository.listResidentLifecycleRows(organizationId, hostelId),
       ])
-    const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
+    const operationalResidents = residentLifecycleRows.filter(
+      isResidentEligibleForAnalytics
+    )
     const analyticsEligibleResidentIds = new Set(
       operationalResidents
         .map((resident) => resident.id)
@@ -333,9 +315,14 @@ export class AnalyticsService {
 
     const paymentTrends = months.map((month) => {
       const monthPayments = payments.filter(
-        (payment) => monthKey(payment.verified_at ?? payment.created_at) === month.key
+        (payment) => monthKey(payment.created_at) === month.key
       )
-      const verified = monthPayments.filter((payment) => payment.status === "verified")
+      const verified = payments.filter(
+        (payment) =>
+          payment.status === "verified" &&
+          payment.verified_at &&
+          monthKey(payment.verified_at) === month.key
+      )
 
       return {
         month: month.key,
@@ -358,27 +345,6 @@ export class AnalyticsService {
       }
     })
 
-    const occupancyTrends = months.map((month) => {
-      const occupied = allocations.filter(
-        (allocation) =>
-          allocation.resident_id &&
-          analyticsEligibleResidentIds.has(allocation.resident_id) &&
-          allocationOverlapsMonth(
-            allocation.allocated_from,
-            allocation.allocated_to,
-            month.start,
-            month.end
-          )
-      ).length
-
-      return {
-        month: month.key,
-        occupied,
-        capacity,
-        occupancyRate: capacity === 0 ? 0 : Number(((occupied / capacity) * 100).toFixed(2)),
-      }
-    })
-
     const leaveFrequency = months.map((month) => {
       const monthLeaves = leaves.filter((leave) => monthKey(leave.created_at) === month.key)
 
@@ -392,7 +358,7 @@ export class AnalyticsService {
     })
 
     const residentGrowth = months.map((month) => {
-      const created = residents.filter(
+      const created = residentGrowthRows.filter(
         (resident) => monthKey(resident.created_at) === month.key
       )
       const activeCreated = created.filter(isResidentEligibleForAnalytics)
@@ -409,7 +375,6 @@ export class AnalyticsService {
         fromDate,
         toDate,
       },
-      occupancyTrends,
       paymentTrends,
       feeTrends,
       revenueForecast: buildRevenueForecast(feeTrends),
@@ -428,57 +393,34 @@ export class AnalyticsService {
     const months = buildMonthBuckets(fromDate, toDate)
     const now = new Date()
     const [
-      capacitySnapshot,
-      rooms,
-      allocations,
       residents,
       reservations,
       payments,
       feeRecords,
     ] = await Promise.all([
-      this.analyticsRepository.getHostelCapacitySnapshot(organizationId, hostelId),
-      this.analyticsRepository.listOwnerRooms(organizationId, hostelId),
-      this.analyticsRepository.listOwnerAllocations(organizationId, hostelId),
       this.analyticsRepository.listOwnerResidents(organizationId, hostelId),
       this.analyticsRepository.listOwnerReservations(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listPaymentsInRange(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listOwnerFeeRecords(organizationId, fromDate, toDate, hostelId),
     ])
 
-    const activeRooms = rooms.filter((room) => room.status === "active")
     const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
-    const analyticsEligibleResidentIds = new Set(
-      operationalResidents
-        .map((resident) => resident.id)
-        .filter((residentId): residentId is string => Boolean(residentId))
-    )
     const billingEligibleResidentIds = new Set(
       residents
         .filter(isResidentEligibleForBilling)
         .map((resident) => resident.id)
         .filter((residentId): residentId is string => Boolean(residentId))
     )
-    const activeAllocations = allocations.filter(
-      (allocation) =>
-        allocation.status === "active" &&
-        allocation.resident_id &&
-        analyticsEligibleResidentIds.has(allocation.resident_id)
-    )
     const billingFeeRecords = feeRecords.filter((record) =>
       billingEligibleResidentIds.has(record.resident_id)
     )
-    const configuredBeds = activeRooms.reduce((total, room) => total + room.capacity, 0)
-    const totalBeds = configuredBeds || capacitySnapshot?.total_beds || 0
-    const occupiedBeds =
-      activeAllocations.length
-    const reservedBeds =
-      capacitySnapshot?.reserved_beds ??
-      reservations
-        .filter((reservation) => ["reserved", "confirmed"].includes(reservation.status))
-        .reduce((total, reservation) => total + reservation.reserved_bed_count, 0)
-    const maintenanceBlockedBeds = capacitySnapshot?.maintenance_blocked_beds ?? 0
-    const availableBeds = Math.max(0, totalBeds - occupiedBeds)
-    const verifiedPayments = payments.filter((payment) => payment.status === "verified")
+    const verifiedPayments = payments.filter(
+      (payment) =>
+        payment.status === "verified" &&
+        payment.verified_at &&
+        payment.verified_at >= fromDate &&
+        payment.verified_at <= toDate
+    )
     const pendingFeeRecords = billingFeeRecords.filter((record) =>
       ["pending", "partial", "overdue"].includes(record.status)
     )
@@ -495,15 +437,12 @@ export class AnalyticsService {
       isDateInRange(resident.checkout_on, fromDate, toDate)
     ).length
     const joinedResidents = operationalResidents.filter((resident) => resident.joined_on)
-    const roomUtilization = buildRoomUtilization(activeRooms, activeAllocations)
     const monthly = months.map((month) =>
       buildMonthlyOwnerBucket(month, {
-        totalBeds,
         residents: operationalResidents,
         reservations,
         payments,
         feeRecords: billingFeeRecords,
-        allocations: activeAllocations,
       })
     )
     const financeMonthly = hostelModules.startupFinanceZero
@@ -538,21 +477,10 @@ export class AnalyticsService {
       )
     )
     const revenueForecast = buildOwnerRevenueForecast(financeMonthly)
-    const occupancyForecast = buildOwnerOccupancyForecast({
-      currentOccupied: occupiedBeds,
-      totalBeds,
-      monthly: financeMonthly,
-      residents: operationalResidents,
-      fromDate: now.toISOString(),
-    })
     const insights = buildOwnerInsights({
-      availableBeds,
-      totalBeds,
-      occupiedBeds,
       pendingDues,
       overdueRecords: hostelModules.startupFinanceZero ? 0 : overdueRecords.length,
       unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
-      roomUtilization,
       onboardingIncomplete: Math.max(0, residents.length - completedOnboarding),
       paymentConversion,
     })
@@ -560,23 +488,17 @@ export class AnalyticsService {
     return {
       range: { fromDate, toDate },
       summary: {
-        occupancyRate: percent(occupiedBeds, totalBeds),
         revenue,
         billed,
         pendingDues,
         unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
+        totalResidents: residents.length,
+        activeResidents: operationalResidents.length,
+        billingResidents: billingEligibleResidentIds.size,
         monthlyGrowth: calculateGrowth(financeMonthly.map((item) => item.newResidents)),
         paymentConversion,
         residentChurn: percent(checkedOutInRange, Math.max(residents.length, 1)),
         averageStayDurationDays,
-      },
-      capacity: {
-        totalBeds,
-        occupiedBeds,
-        reservedBeds,
-        maintenanceBlockedBeds,
-        availableBeds,
-        lastCalculatedAt: capacitySnapshot?.last_calculated_at ?? null,
       },
       onboarding: {
         totalResidents: residents.length,
@@ -588,11 +510,8 @@ export class AnalyticsService {
       },
       duesAging: hostelModules.startupFinanceZero ? [] : buildDuesAging(pendingFeeRecords, now),
       trends: financeMonthly,
-      roomUtilization,
       forecasts: {
-        occupancy: occupancyForecast,
         revenue: revenueForecast,
-        expectedVacancies: occupancyForecast.expectedVacancies,
       },
       insights,
       generatedAt: new Date().toISOString(),
@@ -613,19 +532,7 @@ function normalizeAnalyticsRange(fromDate?: string, toDate?: string) {
 }
 
 function parseAnalyticsBoundary(value: string, boundary: "start" | "end") {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z"
-
-    return new Date(`${value}${suffix}`)
-  }
-
-  const parsed = new Date(value)
-
-  if (boundary === "end") {
-    parsed.setUTCHours(23, 59, 59, 999)
-  }
-
-  return parsed
+  return new Date(normalizeDateBoundary(value, boundary))
 }
 
 function buildMonthBuckets(fromDate: string, toDate: string) {
@@ -651,15 +558,6 @@ function buildMonthBuckets(fromDate: string, toDate: string) {
 
 function monthKey(value: string) {
   return value.slice(0, 7)
-}
-
-function allocationOverlapsMonth(
-  allocatedFrom: string,
-  allocatedTo: string | null,
-  monthStart: string,
-  monthEnd: string
-) {
-  return allocatedFrom <= monthEnd && (!allocatedTo || allocatedTo >= monthStart)
 }
 
 function sum(values: number[]) {
@@ -690,42 +588,9 @@ function buildRevenueForecast(
   }
 }
 
-function buildRoomUtilization(
-  rooms: Array<{
-    id: string
-    room_number: string
-    room_type: string
-    capacity: number
-    base_monthly_fee: number
-    status: string
-  }>,
-  allocations: Array<{ room_id: string; status: string }>
-) {
-  return rooms.map((room) => {
-    const occupied = allocations.filter(
-      (allocation) => allocation.room_id === room.id && allocation.status === "active"
-    ).length
-    const utilizationRate = percent(occupied, room.capacity)
-
-    return {
-      roomId: room.id,
-      roomNumber: room.room_number,
-      roomType: room.room_type,
-      capacity: room.capacity,
-      occupied,
-      available: Math.max(0, room.capacity - occupied),
-      utilizationRate,
-      revenuePotential: Number((room.base_monthly_fee * room.capacity).toFixed(2)),
-      status: room.status,
-      underperforming: room.status === "active" && room.capacity > 0 && utilizationRate < 50,
-    }
-  })
-}
-
 function buildMonthlyOwnerBucket(
   month: { key: string; start: string; end: string },
   data: {
-    totalBeds: number
     residents: Array<{ created_at: string; joined_on: string | null; checkout_on: string | null }>
     reservations: Array<{ created_at: string; status: string; advance_amount: number }>
     payments: Array<{ amount: number; status: string; created_at: string; verified_at: string | null }>
@@ -736,11 +601,16 @@ function buildMonthlyOwnerBucket(
       balance_amount: number
       status: string
     }>
-    allocations: Array<{ allocated_from: string; allocated_to: string | null; status: string }>
   }
 ) {
   const monthPayments = data.payments.filter(
-    (payment) => monthKey(payment.verified_at ?? payment.created_at) === month.key
+    (payment) => monthKey(payment.created_at) === month.key
+  )
+  const monthVerifiedPayments = data.payments.filter(
+    (payment) =>
+      payment.status === "verified" &&
+      payment.verified_at &&
+      monthKey(payment.verified_at) === month.key
   )
   const monthFeeRecords = data.feeRecords.filter(
     (record) => monthKey(record.period_month) === month.key
@@ -748,20 +618,10 @@ function buildMonthlyOwnerBucket(
   const monthReservations = data.reservations.filter(
     (reservation) => monthKey(reservation.created_at) === month.key
   )
-  const occupied = data.allocations.filter(
-    (allocation) =>
-      allocation.status === "active" &&
-      allocationOverlapsMonth(allocation.allocated_from, allocation.allocated_to, month.start, month.end)
-  ).length
-
   return {
     month: month.key,
-    occupancyRate: percent(occupied, data.totalBeds),
-    occupiedBeds: occupied,
     revenue: sum(
-      monthPayments
-        .filter((payment) => payment.status === "verified")
-        .map((payment) => payment.amount)
+      monthVerifiedPayments.map((payment) => payment.amount)
     ),
     billed: sum(monthFeeRecords.map((record) => record.total_amount)),
     dues: sum(monthFeeRecords.map((record) => record.balance_amount)),
@@ -832,55 +692,12 @@ function buildOwnerRevenueForecast(
   }
 }
 
-function buildOwnerOccupancyForecast(input: {
-  currentOccupied: number
-  totalBeds: number
-  monthly: Array<{ newResidents: number; churnedResidents: number; confirmedReservations: number }>
-  residents: Array<{ checkout_on: string | null }>
-  fromDate: string
-}) {
-  const recent = input.monthly.slice(-3)
-  const expectedJoins = Math.round(
-    average(recent.map((item) => item.newResidents + item.confirmedReservations))
-  )
-  const expectedChurn = Math.round(average(recent.map((item) => item.churnedResidents)))
-  const next30Days = new Date(input.fromDate)
-  next30Days.setUTCDate(next30Days.getUTCDate() + 30)
-  const expectedCheckouts = input.residents.filter(
-    (resident) =>
-      resident.checkout_on &&
-      resident.checkout_on >= input.fromDate.slice(0, 10) &&
-      resident.checkout_on <= next30Days.toISOString().slice(0, 10)
-  ).length
-  const forecastOccupied = Math.max(
-    0,
-    Math.min(input.totalBeds, input.currentOccupied + expectedJoins - expectedChurn - expectedCheckouts)
-  )
-
-  return {
-    horizonDays: 30,
-    expectedJoins,
-    expectedChurn: expectedChurn + expectedCheckouts,
-    forecastOccupiedBeds: forecastOccupied,
-    forecastOccupancyRate: percent(forecastOccupied, input.totalBeds),
-    expectedVacancies: Math.max(0, input.totalBeds - forecastOccupied),
-  }
-}
-
 function buildOwnerInsights(input: {
-  availableBeds: number
-  totalBeds: number
-  occupiedBeds: number
   pendingDues: number
   overdueRecords: number
   unpaidResidents: number
   paymentConversion: number
   onboardingIncomplete: number
-  roomUtilization: Array<{
-    roomNumber: string
-    utilizationRate: number
-    underperforming: boolean
-  }>
 }) {
   const insights: Array<{
     severity: "critical" | "warning" | "info" | "success"
@@ -888,25 +705,6 @@ function buildOwnerInsights(input: {
     description: string
     action: string
   }> = []
-  const occupancyRate = percent(input.occupiedBeds, input.totalBeds)
-  const underperformingRooms = input.roomUtilization.filter((room) => room.underperforming)
-
-  if (input.availableBeds <= 5 && input.totalBeds > 0) {
-    insights.push({
-      severity: "critical",
-      title: "Capacity risk",
-      description: `${input.availableBeds} student vacancies are available. Admissions should prioritize lead follow-up and room occupancy.`,
-      action: "Review vacancy and upcoming students leaving.",
-    })
-  } else if (occupancyRate < 70 && input.totalBeds > 0) {
-    insights.push({
-      severity: "warning",
-      title: "Occupancy below target",
-      description: `Current occupancy is ${occupancyRate}%. Lead follow-up and room pricing may need attention.`,
-      action: "Review reservation trends and underused rooms.",
-    })
-  }
-
   if (input.overdueRecords > 0 || input.pendingDues > 0) {
     insights.push({
       severity: input.overdueRecords > 0 ? "critical" : "warning",
@@ -925,15 +723,6 @@ function buildOwnerInsights(input: {
     })
   }
 
-  if (underperformingRooms.length > 0) {
-    insights.push({
-      severity: "info",
-      title: "Rooms underperforming",
-      description: `${underperformingRooms.length} active rooms are below 50% utilization.`,
-      action: "Review room allocation and pricing.",
-    })
-  }
-
   if (input.paymentConversion < 80 && input.paymentConversion > 0) {
     insights.push({
       severity: "warning",
@@ -947,7 +736,7 @@ function buildOwnerInsights(input: {
     insights.push({
       severity: "success",
       title: "Operations look stable",
-      description: "No critical occupancy, dues, onboarding, or room-utilization risks were detected.",
+      description: "No critical dues, onboarding, or payment risks were detected.",
       action: "Keep monitoring weekly trends.",
     })
   }
@@ -961,21 +750,23 @@ function buildOwnerAnalyticsCsv(
   const rows: string[][] = [
     ["Metric", "Value"],
     ["Generated At", dashboard.generatedAt],
-    ["Occupancy Rate", `${dashboard.summary.occupancyRate}%`],
+    ["Total Residents", String(dashboard.summary.totalResidents)],
+    ["Active Residents", String(dashboard.summary.activeResidents)],
+    ["Billing Residents", String(dashboard.summary.billingResidents)],
     ["Revenue", String(dashboard.summary.revenue)],
+    ["Billed", String(dashboard.summary.billed)],
     ["Pending Dues", String(dashboard.summary.pendingDues)],
     ["Unpaid Residents", String(dashboard.summary.unpaidResidents)],
     ["Payment Conversion", `${dashboard.summary.paymentConversion}%`],
     ["Resident Churn", `${dashboard.summary.residentChurn}%`],
     ["Average Stay Days", String(dashboard.summary.averageStayDurationDays)],
     [],
-    ["Month", "Revenue", "Billed", "Dues", "Occupancy", "Reservations", "New Residents"],
+    ["Month", "Revenue", "Billed", "Dues", "Reservations", "New Residents"],
     ...dashboard.trends.map((trend) => [
       trend.month,
       String(trend.revenue),
       String(trend.billed),
       String(trend.dues),
-      `${trend.occupancyRate}%`,
       String(trend.reservations),
       String(trend.newResidents),
     ]),
@@ -1012,12 +803,14 @@ async function buildOwnerAnalyticsPdf(
   y -= 32
 
   const summary = [
-    ["Occupancy", `${dashboard.summary.occupancyRate}%`],
+    ["Total Residents", String(dashboard.summary.totalResidents)],
+    ["Active Residents", String(dashboard.summary.activeResidents)],
+    ["Billing Residents", String(dashboard.summary.billingResidents)],
     ["Revenue", `INR ${dashboard.summary.revenue}`],
+    ["Billed", `INR ${dashboard.summary.billed}`],
     ["Pending Dues", `INR ${dashboard.summary.pendingDues}`],
     ["Unpaid Residents", String(dashboard.summary.unpaidResidents)],
     ["Payment Conversion", `${dashboard.summary.paymentConversion}%`],
-    ["Expected Vacancies", String(dashboard.forecasts.expectedVacancies)],
   ]
 
   for (const [label, value] of summary) {
@@ -1048,7 +841,7 @@ async function buildOwnerAnalyticsPdf(
 
   for (const trend of dashboard.trends.slice(-8)) {
     page.drawText(
-      `${trend.month}: Revenue INR ${trend.revenue}, Occupancy ${trend.occupancyRate}%, Dues INR ${trend.dues}`,
+      `${trend.month}: Revenue INR ${trend.revenue}, Billed INR ${trend.billed}, Dues INR ${trend.dues}`,
       { x: 48, y, size: 9, font }
     )
     y -= 14
@@ -1114,11 +907,5 @@ function isDateInRange(value: string | null, fromDate: string, toDate: string) {
 }
 
 function csvEscape(value: unknown) {
-  const normalized = value === undefined || value === null ? "" : String(value)
-
-  if (!/[",\n\r]/.test(normalized)) {
-    return normalized
-  }
-
-  return `"${normalized.replace(/"/g, "\"\"")}"`
+  return escapeCsvCell(value)
 }

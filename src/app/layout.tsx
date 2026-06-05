@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { AppProviders } from "@/components/providers/app-providers";
+import { analyticsConfig } from "@/config/analytics";
 import { absoluteUrl, getSiteUrl, localSeoKeywords } from "@/lib/seo";
 import "./globals.css";
 
@@ -8,11 +10,11 @@ const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   title: {
-    default: "Sadhana Boys Hostel Pulivendula | Student & Employee Hostel",
-    template: "%s | Sadhana Boys Hostel Pulivendula",
+    default: "Sadhana Boys Hostel | Tirupati Region Student & Employee Hostel",
+    template: "%s | Sadhana Boys Hostel",
   },
   description:
-    "Sadhana Boys Hostel in Pulivendula offers student rooms, employee accommodation, food, WiFi, CCTV, water facilities, parking support, and clear monthly pricing.",
+    "Sadhana Boys Hostel serves students and employees searching for boys hostel accommodation in the Tirupati region with food, WiFi, CCTV, water facilities, parking support, and clear monthly pricing.",
   applicationName: "Sadhana Boys Hostel",
   keywords: localSeoKeywords,
   authors: [{ name: "Sadhana Boys Hostel" }],
@@ -42,9 +44,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Sadhana Boys Hostel Pulivendula | Student & Employee Hostel",
+    title: "Sadhana Boys Hostel | Tirupati Region Student & Employee Hostel",
     description:
-      "Safe, neat, and affordable boys hostel accommodation for students and working professionals in Pulivendula.",
+      "Safe, neat, and affordable boys hostel accommodation for students and working professionals searching in the Tirupati region.",
     url: "/",
     siteName: "Sadhana Boys Hostel",
     locale: "en_IN",
@@ -60,9 +62,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Sadhana Boys Hostel Pulivendula",
+    title: "Sadhana Boys Hostel Tirupati Region",
     description:
-      "Student and employee hostel in Pulivendula with food, WiFi, CCTV, water, and parking support.",
+      "Student and employee hostel accommodation with food, WiFi, CCTV, water, and parking support.",
     images: [absoluteUrl("/images/hostel-exterior-wide.webp")],
   },
 };
@@ -77,6 +79,9 @@ export default function RootLayout({
       <body className="min-h-full">
         <AppProviders>{children}</AppProviders>
       </body>
+      {analyticsConfig.isGoogleAnalyticsEnabled ? (
+        <GoogleAnalytics gaId={analyticsConfig.gaMeasurementId} />
+      ) : null}
     </html>
   );
 }

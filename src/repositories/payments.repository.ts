@@ -1,5 +1,6 @@
 import type { PostgrestError } from "@supabase/supabase-js"
 
+import { normalizeDateRange } from "@/lib/date-range"
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
 
 import {
@@ -16,6 +17,8 @@ export type MonthlyFeeRecordRow = Tables<"monthly_fee_records">
 export type PaymentStatus = Database["public"]["Enums"]["payment_status_enum"]
 export type PaymentMethod = Database["public"]["Enums"]["payment_method_enum"]
 export type FeeRecordStatus = Database["public"]["Enums"]["fee_record_status_enum"]
+export type InvoiceFinalizationStatus =
+  Database["public"]["Enums"]["invoice_finalization_status_enum"]
 
 export type ListPaymentsFilters = PaginationParams & {
   organizationId: string
@@ -25,6 +28,7 @@ export type ListPaymentsFilters = PaginationParams & {
   method?: PaymentMethod
   fromDate?: string
   toDate?: string
+  dateBasis?: "activity" | "revenue"
 }
 
 export type ListFeeRecordsFilters = PaginationParams & {
@@ -40,13 +44,15 @@ export class PaymentsRepository {
 
   async list(filters: ListPaymentsFilters): Promise<PaginatedResult<PaymentRow>> {
     const { page, pageSize, from, to } = normalizePagination(filters)
+    const dateColumn = filters.dateBasis === "revenue" ? "verified_at" : "created_at"
+    const range = normalizeDateRange(filters)
 
     let query = this.db
       .from("payments")
       .select("*", { count: "exact" })
       .eq("organization_id", filters.organizationId)
       .is("deleted_at", null)
-      .order("created_at", { ascending: false })
+      .order(dateColumn, { ascending: false })
 
     if (filters.hostelId) {
       query = query.eq("hostel_id", filters.hostelId)
@@ -64,12 +70,16 @@ export class PaymentsRepository {
       query = query.eq("method", filters.method)
     }
 
-    if (filters.fromDate) {
-      query = query.gte("created_at", filters.fromDate)
+    if (filters.dateBasis === "revenue") {
+      query = query.eq("status", "verified").not("verified_at", "is", null)
     }
 
-    if (filters.toDate) {
-      query = query.lte("created_at", filters.toDate)
+    if (range.fromDate) {
+      query = query.gte(dateColumn, range.fromDate)
+    }
+
+    if (range.toDate) {
+      query = query.lte(dateColumn, range.toDate)
     }
 
     const { data, error, count } = await query.range(from, to)
@@ -198,6 +208,29 @@ export class PaymentsRepository {
     return data
   }
 
+  async listVerifiedPaymentsMissingInvoices(organizationId: string, hostelId?: string) {
+    let query = this.db
+      .from("payments")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .is("invoice_id", null)
+      .is("deleted_at", null)
+      .order("verified_at", { ascending: false })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.limit(500)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to list verified payments missing invoices.")
+    }
+
+    return data ?? []
+  }
+
   async verify(
     paymentId: string,
     organizationId: string,
@@ -271,6 +304,117 @@ export class PaymentsRepository {
     }
 
     return data
+  }
+
+  async markInvoiceFinalizationInProgress(
+    paymentId: string,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    const current = await this.getById(paymentId, organizationId)
+    const { data, error } = await this.db
+      .from("payments")
+      .update({
+        invoice_finalization_status: "in_progress",
+        invoice_finalization_attempts:
+          (current?.invoice_finalization_attempts ?? 0) + 1,
+        invoice_finalization_error: null,
+        updated_by: actorUserId,
+      })
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to start payment invoice finalization.")
+    }
+
+    return data
+  }
+
+  async markInvoiceFinalizationSucceeded(
+    paymentId: string,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    const { data, error } = await this.db
+      .from("payments")
+      .update({
+        invoice_finalization_status: "succeeded",
+        invoice_finalization_error: null,
+        invoice_finalized_at: new Date().toISOString(),
+        updated_by: actorUserId,
+      })
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .not("invoice_id", "is", null)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to complete payment invoice finalization.")
+    }
+
+    return data
+  }
+
+  async markInvoiceFinalizationFailed(
+    paymentId: string,
+    organizationId: string,
+    errorMessage: string,
+    actorUserId: string
+  ) {
+    const { data, error } = await this.db
+      .from("payments")
+      .update({
+        invoice_finalization_status: "failed",
+        invoice_finalization_error: errorMessage.slice(0, 1000),
+        updated_by: actorUserId,
+      })
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to mark payment invoice finalization failed.")
+    }
+
+    return data
+  }
+
+  async listPaymentsNeedingInvoiceFinalization(
+    organizationId: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("payments")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .in("invoice_finalization_status", ["pending", "failed"])
+      .is("deleted_at", null)
+      .order("verified_at", { ascending: true })
+      .limit(500)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to list payments needing invoice finalization.")
+    }
+
+    return data ?? []
   }
 
   async listFeeRecords(

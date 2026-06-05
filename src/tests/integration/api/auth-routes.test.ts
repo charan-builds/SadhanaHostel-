@@ -39,6 +39,43 @@ describe("auth API routes", () => {
     })
   })
 
+  it("blocks cross-site cookie login requests before AuthService", async () => {
+    const login = vi.fn()
+
+    vi.doMock("@/services/auth.service", () => ({
+      AuthService: {
+        create: vi.fn().mockResolvedValue({ login }),
+      },
+    }))
+
+    const { POST } = await import("@/app/api/auth/login/route")
+    const response = await POST(
+      createJsonRequest(
+        "/api/auth/login",
+        {
+          email: "admin.test@sadhanahostel.example",
+          password: "password123",
+        },
+        {
+          headers: {
+            cookie: "sb-test-auth-token=token",
+            origin: "https://attacker.example",
+            "sec-fetch-site": "cross-site",
+          },
+        }
+      )
+    )
+    const body = await readApiResponse(response)
+
+    expect(response.status).toBe(403)
+    expect(body.success).toBe(false)
+    if (body.success) {
+      throw new Error("Expected CSRF failure response.")
+    }
+    expect(body.error.code).toBe("CSRF_ORIGIN_BLOCKED")
+    expect(login).not.toHaveBeenCalled()
+  })
+
   it("loads the current session through AuthService", async () => {
     const getSessionOverview = vi.fn().mockResolvedValue({
       authenticated: false,

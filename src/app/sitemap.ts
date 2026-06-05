@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next"
 import { hostelImages } from "@/constants/hostel-images"
 import { absoluteUrl } from "@/lib/seo"
 
-const publicSiteContentLastModified = new Date("2026-06-02T00:00:00.000Z")
+const publicSiteContentLastModified = new Date("2026-06-05T00:00:00.000Z")
 
 const publicRoutes: Array<{
   path: string
@@ -18,6 +18,27 @@ const publicRoutes: Array<{
     priority: 1,
     lastModified: publicSiteContentLastModified,
     images: [hostelImages.hero, hostelImages.exterior, hostelImages.gate],
+  },
+  {
+    path: "/tirupati-boys-hostel",
+    changeFrequency: "weekly",
+    priority: 0.99,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.exterior, hostelImages.gate],
+  },
+  {
+    path: "/hostel-near-colleges-tirupati",
+    changeFrequency: "weekly",
+    priority: 0.97,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.uploadedRooms, hostelImages.exterior],
+  },
+  {
+    path: "/student-accommodation-tirupati",
+    changeFrequency: "weekly",
+    priority: 0.97,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.uploadedRooms, hostelImages.exterior],
   },
   {
     path: "/pulivendula-boys-hostel",
@@ -39,6 +60,27 @@ const publicRoutes: Array<{
     priority: 0.94,
     lastModified: publicSiteContentLastModified,
     images: [hostelImages.exterior, hostelImages.gate],
+  },
+  {
+    path: "/rooms",
+    changeFrequency: "weekly",
+    priority: 0.92,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.uploadedRooms, hostelImages.exterior],
+  },
+  {
+    path: "/fees",
+    changeFrequency: "weekly",
+    priority: 0.91,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.exterior],
+  },
+  {
+    path: "/admissions",
+    changeFrequency: "weekly",
+    priority: 0.91,
+    lastModified: publicSiteContentLastModified,
+    images: [hostelImages.gate],
   },
   {
     path: "/contact",
@@ -78,6 +120,12 @@ const publicRoutes: Array<{
     path: "/support",
     changeFrequency: "monthly",
     priority: 0.45,
+    lastModified: publicSiteContentLastModified,
+  },
+  {
+    path: "/privacy",
+    changeFrequency: "yearly",
+    priority: 0.3,
     lastModified: publicSiteContentLastModified,
   },
   {

@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   createdResponse,
   errorResponse,
   getQueryParams,
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginMutation(request)
+
     const service = await WebsiteService.create()
     const item = await service.createGalleryItem(await parseJsonBody(request))
 

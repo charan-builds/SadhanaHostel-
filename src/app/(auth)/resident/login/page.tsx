@@ -9,6 +9,7 @@ import { GlobalLoader } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { hostelConfig } from "@/constants/hostel"
 import { getPublicCmsContent } from "@/lib/cms/public-cms"
+import { getPublishedBrandLogoUrl } from "@/lib/public-brand-logo"
 import { pickBrandLogo } from "@/lib/public-gallery"
 
 export const metadata: Metadata = {
@@ -17,13 +18,17 @@ export const metadata: Metadata = {
 }
 
 export default async function ResidentLoginPage() {
-  const cms = await getPublicCmsContent()
+  const [cms, settingsLogoUrl] = await Promise.all([
+    getPublicCmsContent(),
+    getPublishedBrandLogoUrl(),
+  ])
+  const logoUrl = settingsLogoUrl ?? pickBrandLogo(cms.galleryItems)
 
   return (
     <AuthShell
       title="Resident portal"
       description="Use your phone number and temporary password, or an invite link, to access resident services."
-      logoUrl={pickBrandLogo(cms.galleryItems)}
+      logoUrl={logoUrl}
     >
       <Suspense fallback={<GlobalLoader label="Loading resident login..." />}>
         <LoginForm expectedArea="resident" />

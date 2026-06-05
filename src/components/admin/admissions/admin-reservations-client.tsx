@@ -74,6 +74,7 @@ import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
 import { useRealtimeAdmissions } from "@/lib/realtime"
 import { cn } from "@/lib/utils"
+import { trackRoomEnquirySubmission } from "@/lib/analytics/google-analytics"
 import type { LeadRow, ReservationRow, ReservationStatus } from "@/types/admissions"
 import type { Tables } from "@/types/database"
 
@@ -691,6 +692,11 @@ function CreateReservationDialog({
       reservedUntil: new Date(reservedUntil).toISOString(),
       advanceAmount: Number(formData.get("advanceAmount") ?? 0),
       notes: emptyToUndefined(formData.get("notes")),
+    })
+    trackRoomEnquirySubmission({
+      source: "admin_reservation_dialog",
+      reserved_bed_count: Number(formData.get("reservedBedCount") ?? 1),
+      has_room_preference: emptyToUndefined(formData.get("reservedRoomId")) ? true : false,
     })
     toast.success("Reservation created and capacity held.")
     onOpenChange(false)

@@ -59,6 +59,31 @@ GET /api/v1/search?organizationId=<uuid>&query=<term>&types=residents,payments
 
 Search is tenant-scoped and rate-limited.
 
+## Google Analytics 4
+
+GA4 is loaded once from the root App Router layout with `@next/third-parties/google`.
+
+Production setting:
+
+```text
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-39K0JSVGSZ
+```
+
+The app does not send manual `page_view` events. GA4 page views and client-side route changes are handled by the Google tag plus GA4 Enhanced Measurement history-change tracking. Keep "Page changes based on browser history events" enabled in the GA4 web stream.
+
+Tracked custom events:
+
+- `contact_action`
+- `whatsapp_click`
+- `resident_registration`
+- `resident_login`
+- `admin_login`
+- `general_login`
+- `lead_submission`
+- `room_enquiry_submission`
+
+Do not add a separate GTM container or raw `gtag.js` snippet unless this root integration is removed first.
+
 ## Realtime
 
 Realtime events use tenant-scoped channels:

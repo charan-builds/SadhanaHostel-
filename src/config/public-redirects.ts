@@ -21,5 +21,35 @@ export async function publicRedirects(): Promise<PublicRedirect[]> {
       destination: "/pulivendula-boys-hostel",
       permanent: true,
     },
+    {
+      source: "/pricing",
+      destination: "/fees",
+      permanent: true,
+    },
+    {
+      source: "/join",
+      destination: "/admissions",
+      permanent: true,
+    },
+    {
+      source: "/apply",
+      destination: "/admissions",
+      permanent: true,
+    },
+    {
+      source: "/tirupati-hostel",
+      destination: "/tirupati-boys-hostel",
+      permanent: true,
+    },
+    {
+      source: "/boys-hostel-tirupati",
+      destination: "/tirupati-boys-hostel",
+      permanent: true,
+    },
+    {
+      source: "/student-hostel-tirupati",
+      destination: "/student-accommodation-tirupati",
+      permanent: true,
+    },
   ]
 }

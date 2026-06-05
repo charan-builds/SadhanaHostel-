@@ -14,12 +14,12 @@ import type {
 
 export const publicNavItems: PublicNavItem[] = [
   { title: "Home", href: "/" },
-  { title: "About", href: "/about" },
+  { title: "Rooms", href: "/rooms" },
+  { title: "Fees", href: "/fees" },
+  { title: "Admissions", href: "/admissions" },
   { title: "Facilities", href: "/facilities" },
   { title: "Gallery", href: "/gallery" },
   { title: "Contact", href: "/contact" },
-  { title: "Support", href: "/support" },
-  { title: "Terms", href: "/terms" },
 ]
 
 export const localSeoLandingLinks = [
@@ -37,6 +37,21 @@ export const localSeoLandingLinks = [
     title: "Employee hostel in Pulivendula",
     href: "/employee-hostel-pulivendula",
     description: `Employee accommodation with ₹${HOSTEL_FEES.employee}/month pricing and parking support.`,
+  },
+  {
+    title: "Boys hostel in Tirupati",
+    href: "/tirupati-boys-hostel",
+    description: "Tirupati student and family search page for boys hostel accommodation, fees, and admission details.",
+  },
+  {
+    title: "Hostel near colleges in Tirupati",
+    href: "/hostel-near-colleges-tirupati",
+    description: "College-focused hostel search page for students comparing rooms, food, WiFi, and monthly fees.",
+  },
+  {
+    title: "Student accommodation in Tirupati",
+    href: "/student-accommodation-tirupati",
+    description: `Student accommodation search page with monthly fee guidance from ₹${HOSTEL_FEES.student}.`,
   },
 ] as const
 

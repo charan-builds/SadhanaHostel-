@@ -1,8 +1,14 @@
+"use client"
+
 import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapEmbedHref, mapSearchHref, whatsappHref } from "@/constants/hostel"
+import {
+  trackContactAction,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 
 export function ContactPageContent() {
   return (
@@ -35,7 +41,11 @@ export function ContactPageContent() {
                     </span>
                   </span>
                 </p>
-                <a href={callHref} className="flex w-fit items-center gap-3 hover:text-slate-950">
+                <a
+                  href={callHref}
+                  className="flex w-fit items-center gap-3 hover:text-slate-950"
+                  onClick={() => trackContactAction("phone", "contact_page_details")}
+                >
                   <Phone className="size-5 text-blue-700" aria-hidden="true" />
                   {hostelConfig.contact.phone}
                 </a>
@@ -44,6 +54,10 @@ export function ContactPageContent() {
                   target="_blank"
                   rel="noreferrer"
                   className="flex w-fit items-center gap-3 hover:text-slate-950"
+                  onClick={() => {
+                    trackContactAction("whatsapp", "contact_page_details")
+                    trackWhatsAppClick("contact_page_details")
+                  }}
                 >
                   <MessageCircle className="size-5 text-blue-700" aria-hidden="true" />
                   {hostelConfig.contact.whatsapp}
@@ -51,19 +65,32 @@ export function ContactPageContent() {
               </div>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <Button asChild>
-                  <a href={callHref}>
+                  <a href={callHref} onClick={() => trackContactAction("phone", "contact_page_cta")}>
                     <Phone className="size-4" aria-hidden="true" />
                     Call
                   </a>
                 </Button>
                 <Button asChild variant="outline">
-                  <a href={whatsappHref} target="_blank" rel="noreferrer">
+                  <a
+                    href={whatsappHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => {
+                      trackContactAction("whatsapp", "contact_page_cta")
+                      trackWhatsAppClick("contact_page_cta")
+                    }}
+                  >
                     <MessageCircle className="size-4" aria-hidden="true" />
                     WhatsApp
                   </a>
                 </Button>
                 <Button asChild variant="outline">
-                  <a href={mapSearchHref} target="_blank" rel="noreferrer">
+                  <a
+                    href={mapSearchHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => trackContactAction("map", "contact_page_cta")}
+                  >
                     <Navigation className="size-4" aria-hidden="true" />
                     Navigate
                   </a>
@@ -88,7 +115,12 @@ export function ContactPageContent() {
                   <p className="mt-1 text-sm text-slate-600">{hostelConfig.location.note}</p>
                 </div>
                 <Button asChild variant="outline" size="sm">
-                  <a href={mapSearchHref} target="_blank" rel="noreferrer">
+                  <a
+                    href={mapSearchHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => trackContactAction("map", "contact_page_map")}
+                  >
                     <Navigation className="size-4" aria-hidden="true" />
                     Navigate
                   </a>

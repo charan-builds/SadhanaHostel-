@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { ADMIN_PORTAL_ROLES, AUTH_REDIRECTS, RESIDENT_ROLES } from "@/constants/auth"
 import { authSdk, type SessionOverview } from "@/sdk"
 import { useAuth, resolveHomeRoute } from "@/lib/auth"
+import { trackLogin } from "@/lib/analytics/google-analytics"
 import { FrontendApiError } from "@/lib/api-client"
 import { isResidentLimitedAccessPath } from "@/lib/auth/resident-onboarding-access"
 
@@ -77,6 +78,7 @@ export function LoginForm({ expectedArea }: { expectedArea?: LoginArea }) {
         return
       }
 
+      trackLogin(expectedArea ?? "general")
       setSession(nextSession)
       toast.success("Welcome back.")
       router.replace(resolveRedirect(nextSession, nextPath, expectedArea) as Route)

@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import type { Route } from "next"
 import {
@@ -19,6 +21,10 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
+import {
+  trackContactAction,
+  trackWhatsAppClick,
+} from "@/lib/analytics/google-analytics"
 
 const recoveryTopics = [
   {
@@ -60,13 +66,23 @@ export function SupportCenterContent() {
         actions={
           <>
             <Button asChild>
-              <a href={whatsappHref} target="_blank" rel="noreferrer">
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  trackContactAction("whatsapp", "support_center_header")
+                  trackWhatsAppClick("support_center_header")
+                }}
+              >
                 <MessageCircle className="size-4" aria-hidden="true" />
                 WhatsApp support
               </a>
             </Button>
             <Button asChild variant="outline">
-              <a href={callHref}>Call admin</a>
+              <a href={callHref} onClick={() => trackContactAction("phone", "support_center_header")}>
+                Call admin
+              </a>
             </Button>
           </>
         }
@@ -105,7 +121,15 @@ export function SupportCenterContent() {
               <Link href={"/contact" as Route}>Send inquiry</Link>
             </Button>
             <Button asChild variant="outline">
-              <a href={whatsappHref} target="_blank" rel="noreferrer">
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  trackContactAction("whatsapp", "support_center_access")
+                  trackWhatsAppClick("support_center_access")
+                }}
+              >
                 Message {hostelConfig.shortName}
               </a>
             </Button>

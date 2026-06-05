@@ -6,6 +6,7 @@ import { ADMIN_PORTAL_ROLES, type AppRole } from "@/constants/auth"
 import { badRequest, forbidden } from "@/lib/api/api-error"
 import { normalizeOptionalPhoneNumber } from "@/lib/identity"
 import { logger } from "@/lib/logger"
+import { assertNonProductionMutation } from "@/lib/operations/production-safety"
 import {
   getResidentMetadataAuthLoginEmail,
   normalizeEmailCandidate,
@@ -63,11 +64,36 @@ type UserRoleIdentityRow = Pick<
   "user_id" | "organization_id" | "hostel_id" | "role" | "status" | "deleted_at"
 >
 
+type ResidentInviteIdentityRow = {
+  id: string
+  organization_id: string
+  hostel_id: string | null
+  resident_id: string | null
+  status: string | null
+  used_at: string | null
+  revoked_at: string | null
+  expires_at: string
+}
+
+type UntypedIdentityQuery = {
+  select(columns: string): UntypedIdentityQuery
+  eq(column: string, value: unknown): UntypedIdentityQuery
+  then<TResult1 = { data: unknown[] | null; error: { message?: string } | null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[] | null; error: { message?: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): PromiseLike<TResult1 | TResult2>
+}
+
+type UntypedIdentityDb = {
+  from(table: string): UntypedIdentityQuery
+}
+
 type IdentitySnapshot = {
   authUsers: User[]
   residents: ResidentIdentityRow[]
   publicUsers: PublicUserIdentityRow[]
   roles: UserRoleIdentityRow[]
+  invites: ResidentInviteIdentityRow[]
 }
 
 type AuthDeletionDecision = {
@@ -114,6 +140,9 @@ export class IdentityReconciliationService {
 
   async repair(input: unknown): Promise<IdentityRepairResult> {
     const values = identityRepairSchema.parse(input)
+
+    assertNonProductionMutation("identity_repair", { dryRun: values.dryRun })
+
     const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(
@@ -338,6 +367,12 @@ export class IdentityReconciliationService {
         .filter((resident) => resident.user_id)
         .map((resident) => [resident.user_id as string, resident])
     )
+    const activeInviteResidentIds = new Set(
+      snapshot.invites
+        .filter(isActiveInvite)
+        .map((invite) => invite.resident_id)
+        .filter((residentId): residentId is string => Boolean(residentId))
+    )
     const residentsByPhone = groupByNormalizedPhone(snapshot.residents)
     const authUsersByPhone = groupAuthByNormalizedPhone(snapshot.authUsers)
     const authByAlias = groupAuthByAlias(snapshot.authUsers)
@@ -363,7 +398,10 @@ export class IdentityReconciliationService {
             safeAutoRepair: false,
           })
         }
-      } else if (hasActiveOnboardingAccess(resident)) {
+      } else if (
+        hasActiveOnboardingAccess(resident) &&
+        !activeInviteResidentIds.has(resident.id)
+      ) {
         findings.push({
           id: `resident-without-auth:${resident.id}`,
           category: "resident_without_auth",
@@ -583,11 +621,12 @@ export class IdentityReconciliationService {
     organizationId: string
     hostelId?: string | null
   }): Promise<IdentitySnapshot> {
-    const [authUsers, residents, publicUsers, roles] = await Promise.all([
+    const [authUsers, residents, publicUsers, roles, invites] = await Promise.all([
       listAuthUsers(this.adminDb),
       this.listResidents(input),
       this.listPublicUsers(input.organizationId),
       this.listUserRoles(input.organizationId),
+      this.listInvites(input),
     ])
 
     const relevantAuthUsers = authUsers.filter((user) => {
@@ -599,6 +638,7 @@ export class IdentityReconciliationService {
       residents,
       publicUsers,
       roles,
+      invites,
     }
   }
 
@@ -622,6 +662,29 @@ export class IdentityReconciliationService {
     }
 
     return (data ?? []) as ResidentIdentityRow[]
+  }
+
+  private async listInvites(input: {
+    organizationId: string
+    hostelId?: string | null
+  }) {
+    const db = this.adminDb as unknown as UntypedIdentityDb
+    let query = db
+      .from("resident_invites")
+      .select("id,organization_id,hostel_id,resident_id,status,used_at,revoked_at,expires_at")
+      .eq("organization_id", input.organizationId)
+
+    if (input.hostelId) {
+      query = query.eq("hostel_id", input.hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw badRequest("Unable to load resident invite identity records.")
+    }
+
+    return (data ?? []) as unknown as ResidentInviteIdentityRow[]
   }
 
   private async listPublicUsers(organizationId: string) {
@@ -997,6 +1060,18 @@ function hasActiveOnboardingAccess(resident: ResidentIdentityRow) {
     resident.onboarding_status === "profile_incomplete" ||
     resident.onboarding_status === "documents_pending" ||
     resident.onboarding_status === "verification_pending"
+  )
+}
+
+function isActiveInvite(invite: ResidentInviteIdentityRow) {
+  const expiresAt = Date.parse(invite.expires_at)
+
+  return Boolean(
+    invite.status === "pending" &&
+      !invite.used_at &&
+      !invite.revoked_at &&
+      Number.isFinite(expiresAt) &&
+      expiresAt > Date.now()
   )
 }
 

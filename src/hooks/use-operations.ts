@@ -11,8 +11,10 @@ import type {
   ConsistencyRepairInput,
   ConsistencyReportQueryInput,
   DemoDataResetInput,
+  FinancialReconciliationRepairInput,
   IdentityReconciliationQueryInput,
   IdentityRepairInput,
+  MissingReceiptRegenerationInput,
 } from "@/validations/operations.validation"
 
 export function useAutomationDashboard(params: AutomationDashboardQueryInput) {
@@ -147,6 +149,38 @@ export function useRepairIdentities() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.staffAccess.all(scope) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.support.alerts(scope) })
+    },
+  })
+}
+
+export function useRepairFinancialReconciliation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: FinancialReconciliationRepairInput) =>
+      operationsSdk.repairFinancialReconciliation(input),
+    onSuccess: (_result, input) => {
+      const scope = { organizationId: input.organizationId, hostelId: input.hostelId }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.operations.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(scope) })
+    },
+  })
+}
+
+export function useRegenerateMissingReceipts() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: MissingReceiptRegenerationInput) =>
+      operationsSdk.regenerateMissingReceipts(input),
+    onSuccess: (_result, input) => {
+      const scope = { organizationId: input.organizationId, hostelId: input.hostelId }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.operations.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(scope) })
     },
   })
 }

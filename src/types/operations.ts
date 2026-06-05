@@ -17,6 +17,7 @@ export type ConsistencyRepairAction =
   | "release_stale_allocations"
   | "resync_auth_linkage"
   | "repair_analytics"
+  | "repair_financial_reconciliation"
   | "reconcile_dues"
   | "generate_fees"
   | "run_consistency_scan"
@@ -192,4 +193,34 @@ export type IdentityRepairResult = {
   repairedResidents: number
   warnings: string[]
   report: IdentityReconciliationReport
+}
+
+export type FinancialReconciliationCounts = {
+  verified_payments_missing_invoice: number
+  verified_payments_missing_receipt: number
+  paid_zero_balance_fee_records_missing_invoice: number
+  verified_receipt_documents_missing_invoice_link: number
+  paid_invoice_payment_total_mismatch: number
+}
+
+export type FinancialReconciliationRepairReport = {
+  dryRun: boolean
+  organizationId: string
+  hostelId?: string | null
+  before: FinancialReconciliationCounts
+  after: FinancialReconciliationCounts
+  repairs: Record<string, unknown>
+  message: string
+}
+
+export type MissingReceiptRepairReport = {
+  dryRun: boolean
+  organizationId: string
+  hostelId?: string | null
+  before: FinancialReconciliationCounts
+  after: FinancialReconciliationCounts
+  candidates: number
+  receiptsGenerated: number
+  skippedExisting: number
+  message: string
 }

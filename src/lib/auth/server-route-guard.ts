@@ -86,7 +86,7 @@ export async function requireProtectedRoute(area: ProtectedRouteArea) {
   return context
 }
 
-function getAdminRouteRequiredPermission(requestedPath: string): PermissionKey | null {
+export function getAdminRouteRequiredPermission(requestedPath: string): PermissionKey | null {
   const pathname = requestedPath.split("?")[0]
 
   if (
@@ -98,16 +98,15 @@ function getAdminRouteRequiredPermission(requestedPath: string): PermissionKey |
   }
 
   if (
-    pathname.startsWith("/admin/finance/payment-security") ||
     pathname.startsWith("/admin/website") ||
     pathname.startsWith("/admin/gallery")
   ) {
-    return pathname.startsWith("/admin/finance/payment-security")
-      ? "finance.manage"
-      : "cms.manage"
+    return "cms.manage"
   }
 
-  if (pathname.startsWith("/admin/payments")) return "finance.manage"
+  if (pathname.startsWith("/admin/finance") || pathname.startsWith("/admin/payments")) {
+    return "finance.manage"
+  }
   if (pathname.startsWith("/admin/reports")) return "reports.export"
   if (pathname.startsWith("/admin/owner-dashboard")) return "analytics.view"
 

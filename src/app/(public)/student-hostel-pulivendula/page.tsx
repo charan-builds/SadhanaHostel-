@@ -44,7 +44,7 @@ export const metadata: Metadata = createPublicMetadata({
     "boys hostel for students Pulivendula",
     "3500 student hostel Pulivendula",
   ],
-  image: "/images/image copy.png",
+  image: "/images/hostel-courtyard-clean.webp",
 })
 
 export default function StudentHostelPulivendulaPage() {
@@ -55,7 +55,7 @@ export default function StudentHostelPulivendulaPage() {
           name: "Student hostel in Pulivendula",
           description: pageDescription,
           path: "/student-hostel-pulivendula",
-          image: "/images/image copy.png",
+          image: "/images/hostel-courtyard-clean.webp",
         })}
       />
       <JsonLd

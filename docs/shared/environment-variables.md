@@ -40,6 +40,7 @@ Backend responsibilities:
 | `NEXT_PUBLIC_APP_URL` | Client/server | Yes in staging/production | Canonical public app URL used for sitemap, robots, invite links, and SEO metadata |
 | `NEXT_PUBLIC_LAUNCH_MODE` | Client/server | Yes in staging/production | Public launch mode. Use `production` only for the live domain that should be indexed |
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | Client/server | Production SEO optional | Google Search Console HTML meta verification token for the live public domain |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | Client/server | Production analytics optional | Google Analytics 4 measurement ID for the live public domain, for example `G-39K0JSVGSZ` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Later | Privileged server operations |
 | `CASHFREE_APP_ID` | Server only | Later | Cashfree app ID |
 | `CASHFREE_SECRET_KEY` | Server only | Later | Cashfree secret |
@@ -69,9 +70,11 @@ NEXT_PUBLIC_APP_URL=https://<production-domain>
 NEXT_PUBLIC_LAUNCH_MODE=production
 LAUNCH_MODE=production
 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=<google-search-console-meta-token>
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-39K0JSVGSZ
 ```
 
 Leave `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` empty in local/staging unless that exact property is intentionally verified. Preview/staging domains should not be indexed.
+Leave `NEXT_PUBLIC_GA_MEASUREMENT_ID` empty outside production unless staging traffic should intentionally appear in GA4.
 
 ## Environment Rules
 

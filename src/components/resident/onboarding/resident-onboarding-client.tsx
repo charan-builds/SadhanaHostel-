@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
+import { trackResidentRegistration } from "@/lib/analytics/google-analytics"
 import { FrontendApiError } from "@/lib/api-client"
 import { HOSTEL_RULES, HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
@@ -179,6 +180,10 @@ export function ResidentOnboardingClient() {
 
     try {
       await submitOnboarding.mutateAsync({ organizationId, rulesAccepted: true })
+      trackResidentRegistration({
+        source: "resident_onboarding",
+        status: "completed",
+      })
       await onboarding.refetch()
       toast.success("Onboarding complete. Your dashboard is ready.")
     } catch (error) {

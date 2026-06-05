@@ -64,6 +64,8 @@ export function isMaintenanceExemptPath(pathname: string) {
     pathname.startsWith("/api/health/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
+    pathname === "/icon" ||
+    pathname === "/apple-icon" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml"
   )

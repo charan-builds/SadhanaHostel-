@@ -1,5 +1,6 @@
 import type { PostgrestError } from "@supabase/supabase-js"
 
+import { getResidentIdentityMode } from "@/lib/resident-identity"
 import type { Json, TablesInsert } from "@/types/database"
 import type { ConsistencyFinding } from "@/types/operations"
 import type { ResidentLifecycleRepairResult } from "@/types/residents"
@@ -512,6 +513,84 @@ export class OperationsRepository {
     } | null
   }
 
+  async resyncResidentIdentityModeMetadata(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId?: string | null
+    limit?: number
+  }) {
+    const [residents, users] = await Promise.all([
+      this.list("residents", {
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        select: "id,organization_id,hostel_id,user_id,email,phone,deleted_at",
+        isNotNull: ["user_id"],
+        deletedAtNull: true,
+        limit: input.limit ?? 500,
+      }),
+      this.list("users", {
+        organizationId: input.organizationId,
+        select: "id,organization_id,metadata,deleted_at",
+        deletedAtNull: true,
+        limit: input.limit ?? 500,
+      }),
+    ])
+    const userById = new Map(
+      users
+        .filter((user) => typeof user.id === "string")
+        .map((user) => [user.id as string, user])
+    )
+    let syncedCount = 0
+
+    for (const resident of residents) {
+      const userId = stringValue(resident.user_id)
+      const residentId = stringValue(resident.id)
+      const hostelId = stringValue(resident.hostel_id)
+      const user = userId ? userById.get(userId) : null
+
+      if (!user || !residentId) {
+        continue
+      }
+
+      const metadata = recordValue(user.metadata)
+      const expectedMode = getExpectedResidentIdentityMode(resident, metadata)
+
+      if (
+        metadata.resident_identity_mode === expectedMode &&
+        metadata.resident_id === residentId &&
+        metadata.hostel_id === hostelId
+      ) {
+        continue
+      }
+
+      const { data, error } = await this.operationsDb()
+        .from("users")
+        .update({
+          metadata: {
+            ...metadata,
+            resident_id: residentId,
+            hostel_id: hostelId,
+            resident_identity_mode: expectedMode,
+            last_auth_linkage_resync_at: new Date().toISOString(),
+          },
+          updated_by: input.actorUserId ?? null,
+        })
+        .eq("id", userId)
+        .eq("organization_id", input.organizationId)
+        .is("deleted_at", null)
+        .select("id")
+        .range(0, 0)
+
+      if (error) {
+        throwRepositoryError(error, "Unable to resync resident identity mode metadata.")
+      }
+
+      syncedCount += Array.isArray(data) ? data.length : 0
+    }
+
+    return { identityModesSyncedCount: syncedCount }
+  }
+
   async repairResidentLifecycle(input: {
     organizationId: string
     residentId: string
@@ -585,4 +664,33 @@ export class OperationsRepository {
   private operationsDb() {
     return this.db as unknown as GenericOperationsDb
   }
+}
+
+function getExpectedResidentIdentityMode(
+  resident: Record<string, unknown>,
+  userMetadata: Record<string, unknown>
+) {
+  if (
+    userMetadata.phone_password_login_strategy === "internal_email_alias" &&
+    stringValue(resident.phone)
+  ) {
+    return "phone_only"
+  }
+
+  return getResidentIdentityMode({
+    email: stringValue(resident.email),
+    phone: stringValue(resident.phone),
+  })
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null
 }

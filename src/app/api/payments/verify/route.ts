@@ -1,10 +1,17 @@
-import { errorResponse, parseJsonBody, successResponse } from "@/lib/api"
+import {
+  assertSameOriginMutation,
+  errorResponse,
+  parseJsonBody,
+  successResponse,
+} from "@/lib/api"
 import { PaymentsService } from "@/services/payments.service"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginMutation(request)
+
     const service = await PaymentsService.create()
     const payment = await service.verifyPayment(await parseJsonBody(request))
 

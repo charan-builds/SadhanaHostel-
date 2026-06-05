@@ -24,7 +24,6 @@ import type { ReportType } from "@/validations/report.validation"
 const reportTypes: Array<{ type: ReportType; title: string; description: string }> = [
   { type: "payments", title: "Payments", description: "Payment and fee export." },
   { type: "residents", title: "Residents", description: "Resident profile export." },
-  { type: "occupancy", title: "Occupancy", description: "Room occupancy export." },
   { type: "leaves", title: "Leaves", description: "Leave request export." },
 ]
 
@@ -92,8 +91,8 @@ export function AdminReportsClient() {
         <div className="grid gap-4 md:grid-cols-4">
           <ReportMetric label="Residents" value={metrics?.totalResidents ?? 0} />
           <ReportMetric
-            label="Occupancy"
-            value={`${metrics?.occupancy.occupancyRate ?? 0}%`}
+            label="Active residents"
+            value={metrics?.residentLifecycle.activeResidents ?? 0}
           />
           <ReportMetric
             label="Monthly revenue"
@@ -110,7 +109,7 @@ export function AdminReportsClient() {
         <CardHeader>
           <CardTitle>Reports</CardTitle>
           <CardDescription>
-            Export tenant-scoped CSV reports for finance, residents, occupancy, and leaves.
+            Export tenant-scoped CSV reports for finance, residents, and leaves.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">

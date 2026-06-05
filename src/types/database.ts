@@ -1568,6 +1568,10 @@ export type Database = {
           hostel_id: string
           id: string
           idempotency_key: string | null
+          invoice_finalization_attempts: number
+          invoice_finalization_error: string | null
+          invoice_finalization_status: Database["public"]["Enums"]["invoice_finalization_status_enum"]
+          invoice_finalized_at: string | null
           invoice_id: string | null
           is_active: boolean
           is_advance: boolean
@@ -1603,6 +1607,10 @@ export type Database = {
           hostel_id: string
           id?: string
           idempotency_key?: string | null
+          invoice_finalization_attempts?: number
+          invoice_finalization_error?: string | null
+          invoice_finalization_status?: Database["public"]["Enums"]["invoice_finalization_status_enum"]
+          invoice_finalized_at?: string | null
           invoice_id?: string | null
           is_active?: boolean
           is_advance?: boolean
@@ -1638,6 +1646,10 @@ export type Database = {
           hostel_id?: string
           id?: string
           idempotency_key?: string | null
+          invoice_finalization_attempts?: number
+          invoice_finalization_error?: string | null
+          invoice_finalization_status?: Database["public"]["Enums"]["invoice_finalization_status_enum"]
+          invoice_finalized_at?: string | null
           invoice_id?: string | null
           is_active?: boolean
           is_advance?: boolean
@@ -2753,6 +2765,12 @@ export type Database = {
         | "paid"
         | "overdue"
         | "cancelled"
+      invoice_finalization_status_enum:
+        | "not_required"
+        | "pending"
+        | "in_progress"
+        | "succeeded"
+        | "failed"
       leave_status_enum:
         | "pending"
         | "approved"
@@ -2789,6 +2807,7 @@ export type Database = {
         | "partially_refunded"
       resident_status_enum:
         | "draft"
+        | "pending_finance"
         | "active"
         | "suspended"
         | "checked_out"
@@ -2981,6 +3000,13 @@ export const Constants = {
         "overdue",
         "cancelled",
       ],
+      invoice_finalization_status_enum: [
+        "not_required",
+        "pending",
+        "in_progress",
+        "succeeded",
+        "failed",
+      ],
       leave_status_enum: [
         "pending",
         "approved",
@@ -3021,6 +3047,7 @@ export const Constants = {
       ],
       resident_status_enum: [
         "draft",
+        "pending_finance",
         "active",
         "suspended",
         "checked_out",

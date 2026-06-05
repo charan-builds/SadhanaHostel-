@@ -1,6 +1,8 @@
 "use client"
 
-import { FileText } from "lucide-react"
+import Link from "next/link"
+import type { Route } from "next"
+import { ArrowUpRight, FileText } from "lucide-react"
 
 import { DataTableShell } from "@/components/shared/data-table-shell"
 import { LoadingState } from "@/components/shared/loading-state"
@@ -8,6 +10,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { ResponsiveContainer } from "@/components/shared/responsive-container"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -17,20 +20,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAuth } from "@/lib/auth"
-import { formatCurrency, formatDate } from "@/lib/format"
-import { useLeaves, usePayments, useResident } from "@/hooks"
+import { formatDate } from "@/lib/format"
+import { useLeaves, useResident } from "@/hooks"
 
 export function ResidentDetailClient({ residentId }: { residentId: string }) {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const resident = useResident(residentId, organizationId ?? undefined)
-  const payments = usePayments({
-    organizationId: organizationId ?? "",
-    hostelId,
-    residentId,
-    page: 1,
-    pageSize: 20,
-  })
   const leaves = useLeaves({
     organizationId: organizationId ?? "",
     hostelId,
@@ -61,15 +57,25 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title={resident.data.full_name}
-        description="Resident profile, fee status, documents, payments, and leave history from production APIs."
+        description="Resident identity, admission details, contact information, documents, and leave history."
         badge={resident.data.resident_type}
-        actions={<StatusBadge status={resident.data.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={resident.data.status} />
+            <Button asChild variant="outline">
+              <Link href={`/admin/finance?residentId=${residentId}` as Route}>
+                Open Finance Profile
+                <ArrowUpRight className="size-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        }
       />
 
       <section className="grid gap-4 md:grid-cols-4">
         <DetailCard label="Admission" value={resident.data.admission_number} />
         <DetailCard label="Phone" value={resident.data.phone ?? "-"} />
-        <DetailCard label="Monthly Fee" value={formatCurrency(resident.data.monthly_fee_amount)} />
+        <DetailCard label="Joined" value={formatDate(resident.data.joined_on)} />
         <DetailCard label="Aadhaar" value={resident.data.aadhaar_document_id ? "Uploaded" : "Pending"} />
       </section>
 
@@ -92,37 +98,6 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
           </div>
         </div>
       </section>
-
-      <DataTableShell title="Payment History" description="Latest payment records for this resident.">
-        {payments.isLoading ? (
-          <LoadingState variant="table" />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.data?.data.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell>{payment.transaction_id ?? payment.manual_reference ?? payment.id.slice(0, 8)}</TableCell>
-                  <TableCell>{formatCurrency(payment.amount)}</TableCell>
-                  <TableCell className="capitalize">{payment.method.replace("_", " ")}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={payment.status} />
-                  </TableCell>
-                  <TableCell>{formatDate(payment.created_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </DataTableShell>
 
       <DataTableShell title="Leave History" description="Leave requests for this resident.">
         {leaves.isLoading ? (

@@ -4,6 +4,7 @@ import {
   createPaymentSchema,
   generateMonthlyFeeSchema,
   paymentSettingsSchema,
+  recordInPersonPaymentSchema,
   submitUpiPaymentSchema,
   verifyPaymentSchema,
 } from "@/validations/payment.validation"
@@ -64,6 +65,22 @@ describe("payment validation", () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it("allows owner counter collections by cash, UPI, or bank transfer", () => {
+    for (const method of ["cash", "upi", "bank_transfer"] as const) {
+      const result = recordInPersonPaymentSchema.parse({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: "00000000-0000-4000-8000-000000000052",
+        amount: 3500,
+        method,
+        manualReference: method === "cash" ? "CASH-BOOK-12" : "UPI-TXN-001",
+      })
+
+      expect(result.method).toBe(method)
+    }
   })
 
   it("validates payment verification input", () => {
@@ -168,7 +185,34 @@ describe("payment validation", () => {
       residentId: RESIDENT_ID,
       periodMonth: "2026-05-20",
       dueDate: "2026-05-10",
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it("strips room allocation and caller-controlled base amount from manual monthly fee generation input", () => {
+    const result = generateMonthlyFeeSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      roomAllocationId: "00000000-0000-4000-8000-000000000061",
+      periodMonth: "2026-05-01",
+      dueDate: "2026-05-10",
       baseAmount: 6500,
+    })
+
+    expect("roomAllocationId" in result).toBe(false)
+    expect("baseAmount" in result).toBe(false)
+  })
+
+  it("requires an audited reason when manual monthly fee adjustments are supplied", () => {
+    const result = generateMonthlyFeeSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      periodMonth: "2026-05-01",
+      dueDate: "2026-05-10",
+      discountAmount: 100,
     })
 
     expect(result.success).toBe(false)

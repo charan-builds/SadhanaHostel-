@@ -1,6 +1,6 @@
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
-import { RoomsRepository } from "@/repositories/rooms.repository"
+import { billingDayFromJoinedOn, buildBillingDateForMonth } from "@/lib/finance/billing-date"
 
 import type { JobDefinition, OrganizationJobPayload } from "./types"
 
@@ -21,7 +21,6 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
     ].join(":"),
   async run(payload, context) {
     const residentsRepository = new ResidentsRepository(context.db)
-    const roomsRepository = new RoomsRepository(context.db)
     const paymentsRepository = new PaymentsRepository(context.db)
     const residents = await residentsRepository.listActiveForBilling(
       payload.organizationId,
@@ -42,25 +41,17 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
         continue
       }
 
-      const allocation = await roomsRepository.getActiveAllocationForResidentInHostel(
-        resident.id,
-        payload.organizationId,
-        resident.hostel_id
+      const baseAmount = resident.monthly_fee_amount
+      const dueDate = buildBillingDateForMonth(
+        payload.periodMonth,
+        billingDayFromJoinedOn(resident.joined_on)
       )
-
-      if (!allocation) {
-        skipped += 1
-        continue
-      }
-
-      const baseAmount = allocation?.monthly_fee_amount ?? resident.monthly_fee_amount
-      const dueDate = buildDueDate(payload.periodMonth)
 
       await paymentsRepository.createFeeRecord({
         organization_id: payload.organizationId,
         hostel_id: resident.hostel_id,
         resident_id: resident.id,
-        room_allocation_id: allocation?.id,
+        room_allocation_id: null,
         period_month: payload.periodMonth,
         due_date: dueDate,
         base_amount: baseAmount,
@@ -90,8 +81,4 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
       },
     }
   },
-}
-
-function buildDueDate(periodMonth: string) {
-  return `${periodMonth.slice(0, 7)}-10`
 }

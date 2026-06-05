@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { ResidentPasswordResetRequestForm } from "@/components/auth/resident-password-reset-request-form"
 import { getPublicCmsContent } from "@/lib/cms/public-cms"
+import { getPublishedBrandLogoUrl } from "@/lib/public-brand-logo"
 import { pickBrandLogo } from "@/lib/public-gallery"
 
 export const metadata: Metadata = {
@@ -11,13 +12,17 @@ export const metadata: Metadata = {
 }
 
 export default async function ResidentPasswordResetPage() {
-  const cms = await getPublicCmsContent()
+  const [cms, settingsLogoUrl] = await Promise.all([
+    getPublicCmsContent(),
+    getPublishedBrandLogoUrl(),
+  ])
+  const logoUrl = settingsLogoUrl ?? pickBrandLogo(cms.galleryItems)
 
   return (
     <AuthShell
       title="Request password reset"
       description="Enter your registered phone number. Admin will verify the request before issuing temporary access."
-      logoUrl={pickBrandLogo(cms.galleryItems)}
+      logoUrl={logoUrl}
     >
       <ResidentPasswordResetRequestForm />
     </AuthShell>

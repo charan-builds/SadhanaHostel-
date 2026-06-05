@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   createdResponse,
   errorResponse,
   getQueryParams,
@@ -22,6 +23,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginMutation(request)
+
     const service = await ResidentsService.create()
     const resident = await service.createResident(await parseJsonBody(request))
 

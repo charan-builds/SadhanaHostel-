@@ -15,12 +15,17 @@ import {
   ClipboardCheck,
   CreditCard,
   GalleryHorizontalEnd,
+  Gauge,
   Globe,
+  History,
+  IndianRupee,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
   Megaphone,
   Plus,
+  ReceiptText,
+  RefreshCcw,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -44,6 +49,11 @@ export type AdminNavigationItem = {
   title: string
   href: string
   icon: LucideIcon
+  children?: Array<{
+    title: string
+    href: string
+    icon: LucideIcon
+  }>
 }
 
 export const adminNavigationItems: AdminNavigationItem[] = [
@@ -51,8 +61,20 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
   { title: "Residents", href: "/admin/residents", icon: Users },
+  {
+    title: "Finance",
+    href: "/admin/finance",
+    icon: IndianRupee,
+    children: [
+      { title: "Dashboard", href: "/admin/finance", icon: Gauge },
+      { title: "Collections", href: "/admin/finance/collections", icon: ClipboardCheck },
+      { title: "Followups", href: "/admin/finance/followups", icon: History },
+      { title: "Receipts", href: "/admin/finance/receipts", icon: ReceiptText },
+      { title: "Reconciliation", href: "/admin/finance/reconciliation", icon: RefreshCcw },
+      { title: "Payment Security", href: "/admin/finance/payment-security", icon: ShieldCheck },
+    ],
+  },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
-  { title: "Payment Security", href: "/admin/finance/payment-security", icon: ShieldCheck },
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
   { title: "Notices", href: "/admin/notices", icon: ClipboardList },
   { title: "Website CMS", href: "/admin/website", icon: Globe },
@@ -313,6 +335,29 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
                   <span className="absolute right-1 top-1 size-2 rounded-full bg-destructive shadow-[0_0_12px_var(--destructive)]" />
                 ) : null}
               </Link>
+              {item.children && isActive && !collapsed ? (
+                <div className="ml-4 mt-1 grid gap-1 border-l border-sidebar-border pl-3">
+                  {item.children.map((child) => {
+                    const ChildIcon = child.icon
+                    const childActive = pathname === child.href
+
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href as Route}
+                        aria-current={childActive ? "page" : undefined}
+                        className={cn(
+                          "group flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-sidebar-foreground/58 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/40",
+                          childActive && "bg-white/[0.08] text-sidebar-foreground"
+                        )}
+                      >
+                        <ChildIcon className="size-3.5" aria-hidden="true" />
+                        <span className="truncate">{child.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              ) : null}
               </motion.div>
             )
           })}

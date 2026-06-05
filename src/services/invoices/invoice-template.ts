@@ -120,6 +120,28 @@ export function createPaymentReceiptInvoiceTemplateData(input: {
   }
 }
 
+export function createGenericInvoiceTemplateData(input: {
+  organization: OrganizationRow
+  hostel: HostelRow
+  resident: ResidentRow
+  invoice: InvoiceRow
+}): InvoiceTemplateData {
+  return {
+    organization: input.organization,
+    hostel: input.hostel,
+    resident: input.resident,
+    invoice: input.invoice,
+    lineItems: [
+      {
+        description: `Hostel invoice - ${input.invoice.invoice_number}`,
+        amount: input.invoice.subtotal_amount,
+      },
+    ],
+    footerNote:
+      "This is a system-generated hostel invoice. Please contact hostel administration for corrections.",
+  }
+}
+
 export function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",

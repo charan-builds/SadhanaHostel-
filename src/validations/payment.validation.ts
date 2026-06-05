@@ -80,6 +80,7 @@ export const paymentListSchema = paginationSchema.extend({
   method: z.enum(Constants.public.Enums.payment_method_enum).optional(),
   fromDate: isoDateSchema.optional(),
   toDate: isoDateSchema.optional(),
+  dateBasis: z.enum(["activity", "revenue"]).default("activity"),
 })
 
 export const createPaymentSchema = z.object({
@@ -110,7 +111,7 @@ export const recordInPersonPaymentSchema = z
     residentId: uuidSchema,
     monthlyFeeRecordId: uuidSchema.optional(),
     amount: moneySchema,
-    method: z.enum(["cash", "bank_transfer"]).default("cash"),
+    method: z.enum(["cash", "upi", "bank_transfer"]).default("cash"),
     idempotencyKey: z.string().trim().min(8).max(256).optional(),
     manualReference: z.string().trim().max(120).optional().or(z.literal("")),
     notes: z.string().trim().max(1000).optional().or(z.literal("")),
@@ -139,6 +140,12 @@ export const verifyPaymentSchema = z.object({
   paymentId: uuidSchema,
   organizationId: uuidSchema,
   idempotencyKey: z.string().trim().min(8).max(256).optional(),
+})
+
+export const reconcilePaymentInvoicesSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 })
 
 export const rejectPaymentSchema = z.object({
@@ -223,22 +230,41 @@ export const generateMonthlyFeeSchema = z.object({
   organizationId: uuidSchema,
   hostelId: uuidSchema,
   residentId: uuidSchema,
-  roomAllocationId: uuidSchema.optional(),
   periodMonth: z.string().regex(/^\d{4}-\d{2}-01$/, "Use first day of fee month."),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD due date."),
-  baseAmount: moneySchema,
   discountAmount: moneySchema.default(0),
   penaltyAmount: moneySchema.default(0),
   adjustmentAmount: moneySchema.default(0),
   advanceAdjustmentAmount: moneySchema.default(0),
+  adjustmentReason: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(1000).optional(),
+}).superRefine((value, context) => {
+  const hasAdjustment =
+    value.discountAmount > 0 ||
+    value.penaltyAmount > 0 ||
+    value.adjustmentAmount > 0 ||
+    value.advanceAdjustmentAmount > 0
+
+  if (hasAdjustment && !value.adjustmentReason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["adjustmentReason"],
+      message: "Adjustment reason is required when changing the resident monthly fee.",
+    })
+  }
 })
 
-export type PaymentListInput = z.infer<typeof paymentListSchema>
+type ParsedPaymentListInput = z.infer<typeof paymentListSchema>
+export type PaymentListInput = Omit<
+  ParsedPaymentListInput,
+  "dateBasis" | "page" | "pageSize"
+> &
+  Partial<Pick<ParsedPaymentListInput, "dateBasis" | "page" | "pageSize">>
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>
 export type SubmitUpiPaymentInput = z.infer<typeof submitUpiPaymentSchema>
 export type RecordInPersonPaymentInput = z.infer<typeof recordInPersonPaymentSchema>
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>
+export type ReconcilePaymentInvoicesInput = z.infer<typeof reconcilePaymentInvoicesSchema>
 export type RejectPaymentInput = z.infer<typeof rejectPaymentSchema>
 export type PaymentSettingsQueryInput = z.infer<typeof paymentSettingsQuerySchema>
 export type PaymentSettingsInput = z.infer<typeof paymentSettingsSchema>

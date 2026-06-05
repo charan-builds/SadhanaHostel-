@@ -1,5 +1,6 @@
 import "server-only"
 
+import { sanitizeCsvCell } from "@/lib/csv"
 import type { ReportDefinition, ReportRow } from "./types"
 
 export class ExcelExportService {
@@ -53,7 +54,7 @@ function renderCell(value: ReportRow[string]) {
     return `<Cell><Data ss:Type="String">${value ? "Yes" : "No"}</Data></Cell>`
   }
 
-  return `<Cell><Data ss:Type="String">${xmlEscape(value === null ? "" : String(value ?? ""))}</Data></Cell>`
+  return `<Cell><Data ss:Type="String">${xmlEscape(sanitizeCsvCell(value))}</Data></Cell>`
 }
 
 function xmlEscape(value: string) {

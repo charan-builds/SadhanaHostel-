@@ -33,12 +33,6 @@ export type DashboardAnalytics = {
     archivedResidents: number
     pendingVerification: number
   }
-  occupancy: {
-    occupiedBeds: number
-    capacity: number
-    vacantBeds: number
-    occupancyRate: number
-  }
   finance: {
     monthlyRevenue: number
     pendingDues: number
@@ -60,7 +54,6 @@ export type AdvancedAnalytics = {
     fromDate: string
     toDate: string
   }
-  occupancyTrends: unknown[]
   paymentTrends: unknown[]
   feeTrends: unknown[]
   revenueForecast: {
@@ -79,23 +72,17 @@ export type OwnerAnalytics = {
     toDate: string
   }
   summary: {
-    occupancyRate: number
     revenue: number
     billed: number
     pendingDues: number
     unpaidResidents: number
+    totalResidents: number
+    activeResidents: number
+    billingResidents: number
     monthlyGrowth: number
     paymentConversion: number
     residentChurn: number
     averageStayDurationDays: number
-  }
-  capacity: {
-    totalBeds: number
-    occupiedBeds: number
-    reservedBeds: number
-    maintenanceBlockedBeds: number
-    availableBeds: number
-    lastCalculatedAt: string | null
   }
   onboarding: {
     totalResidents: number
@@ -110,8 +97,6 @@ export type OwnerAnalytics = {
   }>
   trends: Array<{
     month: string
-    occupancyRate: number
-    occupiedBeds: number
     revenue: number
     billed: number
     dues: number
@@ -122,34 +107,13 @@ export type OwnerAnalytics = {
     reservationAdvance: number
     paymentConversion: number
   }>
-  roomUtilization: Array<{
-    roomId: string
-    roomNumber: string
-    roomType: string
-    capacity: number
-    occupied: number
-    available: number
-    utilizationRate: number
-    revenuePotential: number
-    status: string
-    underperforming: boolean
-  }>
   forecasts: {
-    occupancy: {
-      horizonDays: number
-      expectedJoins: number
-      expectedChurn: number
-      forecastOccupiedBeds: number
-      forecastOccupancyRate: number
-      expectedVacancies: number
-    }
     revenue: {
       nextMonthExpectedBilling: number
       expectedCollectionRate: number
       expectedCollectedRevenue: number
       riskAdjustedPendingDues: number
     }
-    expectedVacancies: number
   }
   insights: Array<{
     severity: "critical" | "warning" | "info" | "success"

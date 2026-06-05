@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { ResidentsService } from "@/services/residents.service"
@@ -7,7 +7,6 @@ import {
   paymentFixture,
   residentFixture,
   RESIDENT_ID,
-  ROOM_ID,
   TEST_HOSTEL_ID,
   TEST_ORGANIZATION_ID,
 } from "@/tests/fixtures"
@@ -27,7 +26,16 @@ function createServiceHarness() {
     findAdmissionDuplicate: vi.fn().mockResolvedValue(null),
     deactivate: vi.fn(),
     checkout: vi.fn(),
-    update: vi.fn(),
+    update: vi.fn().mockImplementation((residentId, organizationId, values) =>
+      Promise.resolve(
+        residentFixture({
+          id: residentId,
+          organization_id: organizationId,
+          hostel_id: TEST_HOSTEL_ID,
+          ...values,
+        })
+      )
+    ),
   }
   const residentInviteService = {
     createResidentInvite: vi.fn().mockResolvedValue({
@@ -84,6 +92,13 @@ function createServiceHarness() {
     getById: vi.fn(),
     updateInvoiceLink: vi.fn(),
     updateFeeRecord: vi.fn(),
+    verify: vi.fn(),
+  }
+  const uploadsRepository = {
+    findLatestPaymentProof: vi.fn().mockResolvedValue(null),
+    uploadObject: vi.fn().mockResolvedValue(null),
+    createDocument: vi.fn().mockResolvedValue({ id: "admission-proof-id" }),
+    updateDocument: vi.fn().mockResolvedValue({ id: "admission-proof-id" }),
   }
   const realtimeService = {
     paymentStatusChanged: vi.fn(),
@@ -99,15 +114,9 @@ function createServiceHarness() {
     residentInviteService: residentInviteService as never,
     operationsRepository: operationsRepository as never,
     paymentsRepository: paymentsRepository as never,
+    uploadsRepository: uploadsRepository as never,
     realtimeService: realtimeService as never,
     invoicesService: invoicesService as never,
-  })
-  const roomsRepository = {
-    allocateRoomAtomic: vi.fn(),
-  }
-
-  Object.assign(service, {
-    roomsRepository,
   })
 
   return {
@@ -116,8 +125,8 @@ function createServiceHarness() {
     residentsRepository,
     residentInviteService,
     operationsRepository,
-    roomsRepository,
     paymentsRepository,
+    uploadsRepository,
     realtimeService,
     invoicesService,
   }
@@ -156,7 +165,11 @@ function monthlyFeeRecordFixture(overrides: Record<string, unknown> = {}) {
 }
 
 describe("ResidentsService", () => {
-  it("creates a quick draft resident with a preferred room without consuming occupancy", async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("creates a quick draft resident without storing room assignment metadata", async () => {
     const harness = createServiceHarness()
     const draftResident = residentFixture({ status: "draft", joined_on: null })
 
@@ -173,9 +186,6 @@ describe("ResidentsService", () => {
         residentType: "student",
         monthlyFeeAmount: 6500,
         securityDepositAmount: 0,
-        roomId: ROOM_ID,
-        bedLabel: "B",
-        allocatedFrom: "2026-06-01",
       })
     ).resolves.toMatchObject({ resident: draftResident })
 
@@ -183,15 +193,19 @@ describe("ResidentsService", () => {
       expect.objectContaining({
         status: "draft",
         metadata: expect.objectContaining({
-          requested_room_assignment: {
-            room_id: ROOM_ID,
-            bed_label: "B",
-            allocated_from: "2026-06-01",
-          },
+          admission_flow: "quick_admin_create",
+          profile_completion_required: true,
+          whatsapp_onboarding_ready: true,
         }),
       })
     )
-    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
+    expect(harness.residentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({
+          requested_room_assignment: expect.anything(),
+        }),
+      })
+    )
     expect(harness.residentInviteService.createResidentInvite).toHaveBeenCalledWith({
       organizationId: TEST_ORGANIZATION_ID,
       residentId: draftResident.id,
@@ -200,7 +214,7 @@ describe("ResidentsService", () => {
     })
   })
 
-  it("does not roll back a draft resident when a preferred room is supplied", async () => {
+  it("does not require a room assignment to create a draft resident", async () => {
     const harness = createServiceHarness()
     const draftResident = residentFixture({ status: "draft", joined_on: null })
 
@@ -217,12 +231,9 @@ describe("ResidentsService", () => {
         residentType: "student",
         monthlyFeeAmount: 6500,
         securityDepositAmount: 0,
-        roomId: ROOM_ID,
-        allocatedFrom: "2026-06-01",
       })
     ).resolves.toMatchObject({ resident: draftResident })
 
-    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
     expect(harness.residentsRepository.deactivate).not.toHaveBeenCalled()
   })
 
@@ -261,7 +272,6 @@ describe("ResidentsService", () => {
         }),
       })
     )
-    expect(harness.roomsRepository.allocateRoomAtomic).not.toHaveBeenCalled()
   })
 
   it("records previous monthly paid and unpaid status during quick admission", async () => {
@@ -289,21 +299,24 @@ describe("ResidentsService", () => {
       monthly_fee_record_id: "fee-record-may",
       amount: HOSTEL_FEES.student,
       method: "cash",
-      status: "verified",
+      status: "pending",
       invoice_id: null,
     })
     const mayPaymentWithInvoice = paymentFixture({
       ...mayPayment,
+      status: "verified",
       invoice_id: "invoice-fee-1",
     })
 
     harness.residentsRepository.create.mockResolvedValue(draftResident)
     harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.residentsRepository.update.mockResolvedValue(draftResident)
     harness.paymentsRepository.createFeeRecord
       .mockResolvedValueOnce(mayRecord)
       .mockResolvedValueOnce(juneRecord)
     harness.paymentsRepository.create.mockResolvedValue(mayPayment)
-    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(mayPaymentWithInvoice)
+    harness.paymentsRepository.verify.mockResolvedValue(mayPaymentWithInvoice)
+    harness.paymentsRepository.getById.mockResolvedValue(mayPaymentWithInvoice)
 
     await expect(
       harness.service.createResident({
@@ -357,19 +370,172 @@ describe("ResidentsService", () => {
         monthly_fee_record_id: "fee-record-may",
         amount: HOSTEL_FEES.student,
         method: "cash",
-        status: "verified",
+        status: "pending",
         idempotency_key: `resident-admission-opening-month-${draftResident.id}-2026-05-01`,
       })
     )
-    expect(harness.paymentsRepository.updateFeeRecord).toHaveBeenCalledWith(
-      "fee-record-may",
-      TEST_ORGANIZATION_ID,
+    expect(harness.uploadsRepository.createDocument).toHaveBeenCalledWith(
       expect.objectContaining({
-        paid_amount: HOSTEL_FEES.student,
-        balance_amount: 0,
-        status: "paid",
+        payment_id: "payment-may",
+        document_type: "payment_receipt",
+        status: "pending",
       })
     )
+    expect(harness.paymentsRepository.verify).toHaveBeenCalledWith(
+      "payment-may",
+      TEST_ORGANIZATION_ID,
+      adminAuthContext().authUser.id,
+      `resident-admission-opening-month-${draftResident.id}-2026-05-01`
+    )
+    expect(harness.uploadsRepository.updateDocument).toHaveBeenCalledWith(
+      "admission-proof-id",
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        status: "verified",
+      })
+    )
+    expect(harness.paymentsRepository.updateFeeRecord).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.updateInvoiceLink).not.toHaveBeenCalled()
+  })
+
+  it("marks admission pending_finance when payment creation fails", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({ status: "pending_finance" })
+    const feeRecord = monthlyFeeRecordFixture()
+
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.residentsRepository.update.mockResolvedValue(
+      residentFixture({ id: draftResident.id, status: "pending_finance" })
+    )
+    harness.paymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
+    harness.paymentsRepository.create.mockRejectedValue(new Error("payment insert failed"))
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Finance Pending Resident",
+        phone: "+91 90000 01015",
+        residentType: "student",
+        monthlyFeeAmount: HOSTEL_FEES.student,
+        firstMonthFeeStatus: "paid",
+        firstMonthFeeAmount: HOSTEL_FEES.student,
+      })
+    ).rejects.toThrow("payment insert failed")
+
+    expect(harness.residentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "pending_finance",
+        metadata: expect.objectContaining({
+          admission_finance_status: "pending",
+        }),
+      })
+    )
+    expect(harness.residentsRepository.update).toHaveBeenCalledWith(
+      draftResident.id,
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        status: "pending_finance",
+        metadata: expect.objectContaining({
+          admission_finance_status: "failed",
+          admission_finance_error: "payment insert failed",
+        }),
+      })
+    )
+    expect(harness.residentInviteService.createResidentInvite).not.toHaveBeenCalled()
+  })
+
+  it("marks admission pending_finance when receipt storage fails", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({ status: "pending_finance" })
+    const feeRecord = monthlyFeeRecordFixture()
+    const pendingPayment = paymentFixture({
+      monthly_fee_record_id: feeRecord.id,
+      status: "pending",
+      invoice_id: null,
+    })
+
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.paymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
+    harness.paymentsRepository.create.mockResolvedValue(pendingPayment)
+    harness.uploadsRepository.uploadObject.mockRejectedValue(new Error("storage failed"))
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Storage Pending Resident",
+        phone: "+91 90000 01016",
+        residentType: "student",
+        monthlyFeeAmount: HOSTEL_FEES.student,
+        firstMonthFeeStatus: "paid",
+        firstMonthFeeAmount: HOSTEL_FEES.student,
+      })
+    ).rejects.toThrow("storage failed")
+
+    expect(harness.residentsRepository.update).toHaveBeenCalledWith(
+      draftResident.id,
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        status: "pending_finance",
+        metadata: expect.objectContaining({
+          admission_finance_error: "storage failed",
+        }),
+      })
+    )
+    expect(harness.residentInviteService.createResidentInvite).not.toHaveBeenCalled()
+  })
+
+  it("marks admission pending_finance when invoice generation fails", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({ status: "pending_finance" })
+    const feeRecord = monthlyFeeRecordFixture()
+    const pendingPayment = paymentFixture({
+      monthly_fee_record_id: feeRecord.id,
+      status: "pending",
+      invoice_id: null,
+    })
+    const verifiedPayment = paymentFixture({
+      ...pendingPayment,
+      status: "verified",
+      invoice_id: null,
+    })
+
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.paymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
+    harness.paymentsRepository.create.mockResolvedValue(pendingPayment)
+    harness.paymentsRepository.verify.mockResolvedValue(verifiedPayment)
+    harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice.mockRejectedValue(
+      new Error("invoice failed")
+    )
+
+    await expect(
+      harness.service.createResident({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        fullName: "Invoice Pending Resident",
+        phone: "+91 90000 01017",
+        residentType: "student",
+        monthlyFeeAmount: HOSTEL_FEES.student,
+        firstMonthFeeStatus: "paid",
+        firstMonthFeeAmount: HOSTEL_FEES.student,
+      })
+    ).rejects.toThrow("invoice failed")
+
+    expect(harness.residentsRepository.update).toHaveBeenCalledWith(
+      draftResident.id,
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        status: "pending_finance",
+        metadata: expect.objectContaining({
+          admission_finance_error: "invoice failed",
+        }),
+      })
+    )
+    expect(harness.residentInviteService.createResidentInvite).not.toHaveBeenCalled()
   })
 
   it("returns operational duplicate guidance before insert", async () => {
@@ -478,5 +644,32 @@ describe("ResidentsService", () => {
       actorUserId: adminAuthContext().authUser.id,
       dryRun: false,
     })
+  })
+
+  it("blocks mutating resident lifecycle repair in production before auth or RPC calls", async () => {
+    vi.stubEnv("LAUNCH_MODE", "production")
+    vi.stubEnv("NEXT_PUBLIC_LAUNCH_MODE", "production")
+
+    const harness = createServiceHarness()
+    const resident = {
+      ...residentFixture({
+        status: "draft",
+        user_id: null,
+      }),
+      onboarding_status: "invited",
+    }
+
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+
+    await expect(
+      harness.service.repairResidentLifecycle({
+        residentId: resident.id,
+        organizationId: TEST_ORGANIZATION_ID,
+        dryRun: false,
+      })
+    ).rejects.toThrow(/resident lifecycle repair is blocked in production/i)
+
+    expect(harness.authService.requirePermission).not.toHaveBeenCalled()
+    expect(harness.operationsRepository.repairResidentLifecycle).not.toHaveBeenCalled()
   })
 })

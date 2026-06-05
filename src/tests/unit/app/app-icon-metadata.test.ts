@@ -27,11 +27,6 @@ describe("app icon metadata", () => {
     expect(output.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          src: "/favicon.ico",
-          sizes: "any",
-          type: "image/x-icon",
-        }),
-        expect.objectContaining({
           src: "/icon",
           sizes: "192x192",
           type: "image/png",
@@ -40,6 +35,13 @@ describe("app icon metadata", () => {
           src: "/apple-icon",
           sizes: "180x180",
           type: "image/png",
+        }),
+      ])
+    )
+    expect(output.icons).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          src: "/favicon.ico",
         }),
       ])
     )

@@ -21,8 +21,9 @@ export const reportsSdk = {
     const token = await getCurrentAccessToken()
     const requestId = createRequestId()
     const path = `/api/v1/reports/${type}`
+    const format = params.format ?? "csv"
     const headers = new Headers({
-      accept: params.format === "xlsx" ? "application/vnd.ms-excel" : "text/csv",
+      accept: format === "xlsx" ? "application/vnd.ms-excel" : "text/csv",
       "x-request-id": requestId,
     })
 
@@ -44,7 +45,7 @@ export const reportsSdk = {
 
     return {
       blob: await response.blob(),
-      fileName: getFileName(response.headers.get("content-disposition"), type, params.format),
+      fileName: getFileName(response.headers.get("content-disposition"), type, format),
       contentType: response.headers.get("content-type") ?? "application/octet-stream",
     }
   },

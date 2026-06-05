@@ -2,6 +2,9 @@ import "server-only"
 
 import { runJob, type JobDefinition, jobRegistry } from "@/jobs"
 import { cronRegistry } from "@/jobs/scheduler/cron-registry"
+import { forbidden } from "@/lib/api/api-error"
+import { assertNonProductionMutation } from "@/lib/operations/production-safety"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OperationsRepository } from "@/repositories/operations.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
@@ -15,6 +18,7 @@ import {
   automationRunSchema,
   automationSettingsSchema,
 } from "@/validations/operations.validation"
+import { financeAutomationRunSchema } from "@/validations/finance.validation"
 
 import { AuthService } from "../auth.service"
 import { scanConsistency } from "./consistency.service"
@@ -23,7 +27,10 @@ export class AutomationService {
   private readonly authService: AuthService
   private readonly repository: OperationsRepository
 
-  constructor(private readonly db: AppSupabaseClient) {
+  constructor(
+    private readonly db: AppSupabaseClient,
+    private readonly adminDb: AppSupabaseClient = db
+  ) {
     this.authService = new AuthService(db)
     this.repository = new OperationsRepository(db)
   }
@@ -31,7 +38,7 @@ export class AutomationService {
   static async create() {
     const db = await createSupabaseServerClient()
 
-    return new AutomationService(db)
+    return new AutomationService(db, createSupabaseAdminClient())
   }
 
   async getDashboard(input: unknown): Promise<AutomationDashboard> {
@@ -104,8 +111,34 @@ export class AutomationService {
 
   async run(input: unknown): Promise<AutomationRunResult> {
     const values = automationRunSchema.parse(input)
+
+    if (isDestructiveAutomationJobName(values.name)) {
+      assertNonProductionMutation("automation_destructive_job", {
+        dryRun: values.dryRun,
+      })
+    }
+
     const context = await this.authService.requirePermission("settings.manage")
 
+    return this.runWithAuthorizedContext(values, context)
+  }
+
+  async runFinanceSafe(input: unknown): Promise<AutomationRunResult> {
+    const values = financeAutomationRunSchema.parse(input)
+
+    if (!isFinanceSafeAutomationJobName(values.name)) {
+      throw forbidden("This automation job is not available from Finance.")
+    }
+
+    const context = await this.authService.requirePermission("finance.manage")
+
+    return this.runWithAuthorizedContext(values, context)
+  }
+
+  private async runWithAuthorizedContext(
+    values: ReturnType<typeof automationRunSchema.parse>,
+    context: Awaited<ReturnType<AuthService["requirePermission"]>>
+  ): Promise<AutomationRunResult> {
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
     const setting = await this.repository.getAutomationSetting({
@@ -157,7 +190,7 @@ export class AutomationService {
 
     const job = jobRegistry[values.name] as JobDefinition<Record<string, unknown>>
     const result = await runJob(job, payload, {
-      db: this.db,
+      db: this.adminDb,
       requestedBy: context.authUser.id,
       organizationId: values.organizationId,
     })
@@ -171,6 +204,13 @@ export class AutomationService {
 
   async updateSettings(input: unknown) {
     const values = automationSettingsSchema.parse(input)
+
+    if (isDestructiveAutomationJobName(values.name)) {
+      assertNonProductionMutation("automation_destructive_job_settings", {
+        dryRun: !values.enabled || values.dryRunOnly,
+      })
+    }
+
     const context = await this.authService.requirePermission("settings.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
@@ -230,12 +270,21 @@ function buildJobConfigs(settings: Array<{
       schedule: setting?.cron_schedule ?? cron?.schedule ?? "manual",
       enabled: setting?.enabled ?? true,
       dryRunSupported: true,
-      destructive:
-        job.name.includes("cleanup") ||
-        job.name.includes("expiry") ||
-        job.name.includes("reconciliation"),
+      destructive: isDestructiveAutomationJobName(job.name),
     }
   })
+}
+
+export function isDestructiveAutomationJobName(name: string) {
+  return (
+    name.includes("cleanup") ||
+    name.includes("expiry") ||
+    name.includes("reconciliation")
+  )
+}
+
+export function isFinanceSafeAutomationJobName(name: string) {
+  return name === "monthly_fee_generation" || name === "payment_reminder"
 }
 
 function fallbackDescription(name: string) {

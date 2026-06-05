@@ -62,6 +62,7 @@ import {
 } from "@/hooks"
 import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
+import { sanitizeCsvCell } from "@/lib/csv"
 import { formatCurrency, formatDateTime } from "@/lib/format"
 import type { Tables } from "@/types/database"
 
@@ -223,7 +224,7 @@ export function AdminPaymentsClient() {
           payment.status,
           payment.created_at,
         ]
-          .map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`)
+          .map((value) => `"${sanitizeCsvCell(value).replaceAll("\"", "\"\"")}"`)
           .join(",")
       ),
     ].join("\n")

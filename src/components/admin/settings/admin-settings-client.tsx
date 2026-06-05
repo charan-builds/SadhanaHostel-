@@ -450,8 +450,14 @@ export function AdminSettingsClient() {
               <Field form={organizationForm} name="postalCode" label="Postal code" />
               <Field form={organizationForm} name="country" label="Country" />
               <Field form={organizationForm} name="timezone" label="Timezone" />
-              <Field form={organizationForm} name="logoUrl" label="Logo URL" />
-              <Field form={organizationForm} name="faviconUrl" label="Favicon URL" />
+              <BrandImageField form={organizationForm} name="logoUrl" label="Brand logo URL" />
+              <BrandImageField
+                form={organizationForm}
+                name="faviconUrl"
+                label="Browser tab logo URL"
+                previewClassName="size-10 rounded-md"
+                imageClassName="object-contain"
+              />
               <Field form={organizationForm} name="primaryColor" label="Brand color" />
               <div className="md:col-span-2">
                 <Button disabled={updateOrganization.isPending} className="gap-2">
@@ -885,6 +891,47 @@ function Field<
     <div className="grid gap-2">
       <Label htmlFor={String(name)}>{label}</Label>
       <Input id={String(name)} type={type} aria-invalid={Boolean(error)} {...form.register(name)} />
+      {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
+    </div>
+  )
+}
+
+function BrandImageField<
+  TFieldValues extends FieldValues,
+  TTransformedValues extends FieldValues | undefined = undefined,
+>({
+  form,
+  name,
+  label,
+  previewClassName = "size-12 rounded-lg",
+  imageClassName = "object-cover",
+}: {
+  form: UseFormReturn<TFieldValues, unknown, TTransformedValues>
+  name: Path<TFieldValues>
+  label: string
+  previewClassName?: string
+  imageClassName?: string
+}) {
+  const error = form.formState.errors[name]?.message
+  const rawValue = form.watch(name)
+  const previewUrl = typeof rawValue === "string" ? rawValue.trim() : ""
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={String(name)}>{label}</Label>
+      <Input id={String(name)} type="url" aria-invalid={Boolean(error)} {...form.register(name)} />
+      {previewUrl ? (
+        <div className="flex min-h-16 items-center gap-3 rounded-lg border bg-muted/30 p-3">
+          <span
+            className={`flex shrink-0 items-center justify-center overflow-hidden border bg-background ${previewClassName}`}
+          >
+            {/* Remote admin-provided branding URLs are previewed directly in this client form. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt="" className={`size-full ${imageClassName}`} />
+          </span>
+          <span className="min-w-0 truncate text-sm text-muted-foreground">{previewUrl}</span>
+        </div>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{String(error)}</p> : null}
     </div>
   )

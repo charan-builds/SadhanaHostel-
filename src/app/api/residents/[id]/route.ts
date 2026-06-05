@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   errorResponse,
   getQueryParams,
   parseJsonBody,
@@ -27,6 +28,8 @@ export async function GET(request: Request, context: ResidentRouteContext) {
 
 export async function PATCH(request: Request, context: ResidentRouteContext) {
   try {
+    assertSameOriginMutation(request)
+
     const { id } = await context.params
     const service = await ResidentsService.create()
     const resident = await service.updateResident({
@@ -42,6 +45,8 @@ export async function PATCH(request: Request, context: ResidentRouteContext) {
 
 export async function DELETE(request: Request, context: ResidentRouteContext) {
   try {
+    assertSameOriginMutation(request)
+
     const { id } = await context.params
     const { organizationId } = getQueryParams(request)
     const service = await ResidentsService.create()

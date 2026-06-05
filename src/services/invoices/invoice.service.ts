@@ -32,6 +32,7 @@ import {
   prepareInvoiceDownloadToken,
 } from "./invoice-storage"
 import {
+  createGenericInvoiceTemplateData,
   createMonthlyFeeInvoiceTemplateData,
   createPaymentReceiptInvoiceTemplateData,
   type InvoiceTemplateData,
@@ -52,6 +53,17 @@ export type PrepareInvoiceDraftInput = {
   periodMonth?: string
   generatedByUserId?: string | null
   source?: "monthly_fee" | "payment_receipt" | "manual" | "adjustment"
+}
+
+export type MissingInvoicePdfRepairResult = {
+  dryRun: boolean
+  candidates: number
+  pdfsGenerated: number
+  skipped: number
+  failures: Array<{
+    invoiceId: string
+    error: string
+  }>
 }
 
 export class InvoiceFoundationService {
@@ -213,6 +225,29 @@ export class InvoicesService {
     const resolvedOrganization = assertFound(organization, "Organization not found.")
     const resolvedHostel = assertFound(hostel, "Hostel not found.")
     const resolvedResident = assertFound(resident, "Resident not found.")
+
+    if (payment.invoice_id) {
+      const linkedInvoice = assertFound(
+        await this.adminInvoicesRepository.getById(
+          payment.invoice_id,
+          payment.organization_id
+        ),
+        "Payment invoice not found."
+      )
+
+      return this.ensureInvoicePdfFromTemplate(
+        linkedInvoice,
+        createPaymentReceiptInvoiceTemplateData({
+          organization: resolvedOrganization,
+          hostel: resolvedHostel,
+          resident: resolvedResident,
+          invoice: linkedInvoice,
+          payment,
+        }),
+        actorUserId
+      )
+    }
+
     const existingInvoice = await this.invoicesRepository.findReceiptByPaymentId(
       payment.id,
       payment.organization_id
@@ -324,6 +359,59 @@ export class InvoicesService {
     return this.ensureMonthlyFeeInvoicePdf(invoice, invoiceContext, actorUserId)
   }
 
+  async repairMissingInvoicePdfs(input: {
+    organizationId: string
+    hostelId?: string | null
+    actorUserId: string
+    dryRun?: boolean
+    limit?: number
+  }): Promise<MissingInvoicePdfRepairResult> {
+    const invoices = await this.adminInvoicesRepository.listMissingPdfInvoices({
+      organizationId: input.organizationId,
+      hostelId: input.hostelId ?? null,
+      limit: input.limit ?? 100,
+    })
+
+    if (input.dryRun) {
+      return {
+        dryRun: true,
+        candidates: invoices.length,
+        pdfsGenerated: 0,
+        skipped: 0,
+        failures: [],
+      }
+    }
+
+    let pdfsGenerated = 0
+    let skipped = 0
+    const failures: MissingInvoicePdfRepairResult["failures"] = []
+
+    for (const invoice of invoices) {
+      try {
+        const repaired = await this.ensureExistingInvoicePdf(invoice, input.actorUserId)
+
+        if (repaired.pdf_document_id) {
+          pdfsGenerated += 1
+        } else {
+          skipped += 1
+        }
+      } catch (error) {
+        failures.push({
+          invoiceId: invoice.id,
+          error: error instanceof Error ? error.message : "Unknown PDF regeneration error",
+        })
+      }
+    }
+
+    return {
+      dryRun: false,
+      candidates: invoices.length,
+      pdfsGenerated,
+      skipped,
+      failures,
+    }
+  }
+
   async createSignedDownloadUrl(input: unknown) {
     const values = invoiceDownloadSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -415,6 +503,82 @@ export class InvoicesService {
     )
   }
 
+  private async ensureExistingInvoicePdf(invoice: InvoiceRow, actorUserId: string) {
+    const [organization, hostel, resident] = await Promise.all([
+      this.adminInvoicesRepository.getOrganization(invoice.organization_id),
+      this.adminInvoicesRepository.getHostel(invoice.hostel_id, invoice.organization_id),
+      this.adminInvoicesRepository.getResident(invoice.resident_id, invoice.organization_id),
+    ])
+    const resolvedOrganization = assertFound(organization, "Organization not found.")
+    const resolvedHostel = assertFound(hostel, "Hostel not found.")
+    const resolvedResident = assertFound(resident, "Resident not found.")
+
+    if (invoice.monthly_fee_record_id) {
+      const feeRecord = assertFound(
+        await this.adminInvoicesRepository.getFeeRecord(
+          invoice.monthly_fee_record_id,
+          invoice.organization_id
+        ),
+        "Monthly fee record not found."
+      )
+
+      return this.ensureMonthlyFeeInvoicePdf(
+        invoice,
+        {
+          organization: resolvedOrganization,
+          hostel: resolvedHostel,
+          resident: resolvedResident,
+          feeRecord,
+        },
+        actorUserId
+      )
+    }
+
+    const payment = await this.resolveInvoicePayment(invoice)
+
+    if (payment?.status === "verified") {
+      return this.ensureInvoicePdfFromTemplate(
+        invoice,
+        createPaymentReceiptInvoiceTemplateData({
+          organization: resolvedOrganization,
+          hostel: resolvedHostel,
+          resident: resolvedResident,
+          invoice,
+          payment,
+        }),
+        actorUserId
+      )
+    }
+
+    return this.ensureInvoicePdfFromTemplate(
+      invoice,
+      createGenericInvoiceTemplateData({
+        organization: resolvedOrganization,
+        hostel: resolvedHostel,
+        resident: resolvedResident,
+        invoice,
+      }),
+      actorUserId
+    )
+  }
+
+  private async resolveInvoicePayment(invoice: InvoiceRow) {
+    const metadata = recordFromUnknown(invoice.metadata)
+    const metadataPaymentId = stringFromRecord(metadata, "payment_id")
+
+    if (metadataPaymentId) {
+      return this.adminInvoicesRepository.getPaymentById(
+        metadataPaymentId,
+        invoice.organization_id
+      )
+    }
+
+    return this.adminInvoicesRepository.findPaymentByInvoiceId(
+      invoice.id,
+      invoice.organization_id
+    )
+  }
+
   private async ensureInvoicePdfFromTemplate(
     invoice: InvoiceRow,
     templateData: InvoiceTemplateData,
@@ -479,4 +643,18 @@ export class InvoicesService {
       updated_by: actorUserId,
     })
   }
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
+}
+
+function stringFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+
+  return typeof value === "string" && value.trim() ? value : null
 }

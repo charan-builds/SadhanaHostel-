@@ -87,6 +87,17 @@ export const queryKeys = {
       return [...queryKeys.payments.all(scope), "ledger", residentId] as const
     },
   },
+  finance: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "finance"] as const
+    },
+    dashboard(scope: TenantScope) {
+      return [...queryKeys.finance.all(scope), "dashboard"] as const
+    },
+    followups(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.finance.all(scope), "followups", filters] as const
+    },
+  },
   platform: {
     setupStatus: ["platform", "setup-status"] as const,
     organization: ["platform", "organization"] as const,
@@ -150,6 +161,14 @@ export const queryKeys = {
     },
     list(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.notices.all(scope), "list", filters] as const
+    },
+  },
+  notifications: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "notifications"] as const
+    },
+    list(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.notifications.all(scope), "list", filters] as const
     },
   },
   analytics: {

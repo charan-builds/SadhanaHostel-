@@ -17,8 +17,10 @@ export type NotificationStatus = Database["public"]["Enums"]["notification_statu
 export type ListNotificationsFilters = PaginationParams & {
   organizationId: string
   hostelId?: string
+  recipientUserId?: string
   status?: NotificationStatus
   channel?: NotificationChannel
+  unreadOnly?: boolean
 }
 
 export class NotificationsRepository {
@@ -73,12 +75,20 @@ export class NotificationsRepository {
       query = query.eq("hostel_id", filters.hostelId)
     }
 
+    if (filters.recipientUserId) {
+      query = query.eq("recipient_user_id", filters.recipientUserId)
+    }
+
     if (filters.status) {
       query = query.eq("status", filters.status)
     }
 
     if (filters.channel) {
       query = query.eq("channel", filters.channel)
+    }
+
+    if (filters.unreadOnly) {
+      query = query.is("read_at", null)
     }
 
     const { data, error, count } = await query.range(from, to)
@@ -91,6 +101,66 @@ export class NotificationsRepository {
       data: data ?? [],
       meta: createPaginationMeta(count, page, pageSize),
     }
+  }
+
+  async markRead(input: {
+    notificationId: string
+    organizationId: string
+    recipientUserId: string
+    actorUserId: string
+  }) {
+    const now = new Date().toISOString()
+    const { data, error } = await this.db
+      .from("notifications")
+      .update({
+        read_at: now,
+        status: "read",
+        updated_by: input.actorUserId,
+      })
+      .eq("id", input.notificationId)
+      .eq("organization_id", input.organizationId)
+      .eq("recipient_user_id", input.recipientUserId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to mark notification read.")
+    }
+
+    return data
+  }
+
+  async markAllRead(input: {
+    organizationId: string
+    hostelId?: string
+    recipientUserId: string
+    actorUserId: string
+  }) {
+    const now = new Date().toISOString()
+    let query = this.db
+      .from("notifications")
+      .update({
+        read_at: now,
+        status: "read",
+        updated_by: input.actorUserId,
+      })
+      .eq("organization_id", input.organizationId)
+      .eq("recipient_user_id", input.recipientUserId)
+      .is("read_at", null)
+      .is("deleted_at", null)
+
+    if (input.hostelId) {
+      query = query.eq("hostel_id", input.hostelId)
+    }
+
+    const { data, error } = await query.select("id")
+
+    if (error) {
+      throwRepositoryError(error, "Unable to mark notifications read.")
+    }
+
+    return data?.length ?? 0
   }
 
   async listDueQueued(limit = 50) {

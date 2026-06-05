@@ -22,6 +22,7 @@ function createServiceHarness() {
     getCurrentContext: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
     requireHostelAccess: vi.fn(),
+    resolveHostelScope: vi.fn((_context, _organizationId, hostelId?: string) => hostelId),
   }
   const paymentSettingsRepository = {
     getActive: vi.fn(),
@@ -29,14 +30,21 @@ function createServiceHarness() {
   }
   const paymentsRepository = {
     getById: vi.fn(),
+    create: vi.fn(),
     verify: vi.fn(),
     reject: vi.fn(),
     createResidentUpiDraft: vi.fn(),
     finalizeSubmission: vi.fn(),
     updateInvoiceLink: vi.fn(),
+    markInvoiceFinalizationInProgress: vi.fn().mockResolvedValue(null),
+    markInvoiceFinalizationSucceeded: vi.fn(),
+    markInvoiceFinalizationFailed: vi.fn().mockResolvedValue(null),
+    listPaymentsNeedingInvoiceFinalization: vi.fn(),
+    findByIdempotencyKey: vi.fn(),
     findFeeRecordByResidentPeriod: vi.fn(),
     createFeeRecord: vi.fn(),
     updateFeeRecord: vi.fn(),
+    getFeeRecordById: vi.fn(),
     listFeeRecords: vi.fn(),
     listResidentPayments: vi.fn(),
     listResidentInvoices: vi.fn(),
@@ -49,14 +57,13 @@ function createServiceHarness() {
   const uploadsRepository = {
     findLatestPaymentProof: vi.fn(),
     uploadObject: vi.fn(),
+    createDocument: vi.fn(),
     createSignedUrl: vi.fn(),
+    updateDocument: vi.fn(),
   }
   const residentsRepository = {
     getById: vi.fn().mockResolvedValue(null),
     getByUserId: vi.fn().mockResolvedValue(null),
-  }
-  const roomsRepository = {
-    getActiveAllocationForResidentInHostel: vi.fn(),
   }
   const realtimeService = {
     paymentStatusChanged: vi.fn().mockResolvedValue(null),
@@ -81,7 +88,6 @@ function createServiceHarness() {
     systemPaymentsRepository,
     uploadsRepository,
     residentsRepository,
-    roomsRepository,
     realtimeService,
     notificationService,
     uploadsService,
@@ -97,8 +103,8 @@ function createServiceHarness() {
     uploadsRepository,
     uploadsService,
     residentsRepository,
-    roomsRepository,
     invoicesService,
+    notificationService,
   }
 }
 
@@ -181,6 +187,7 @@ function monthlyFeeRecordFixture(
 describe("PaymentsService", () => {
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
   })
 
   it("reconciles an already verified payment by ensuring receipt invoice linkage", async () => {
@@ -196,6 +203,7 @@ describe("PaymentsService", () => {
       id: linked.invoice_id,
     })
     harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
 
     await expect(
       harness.service.verifyPayment({
@@ -234,6 +242,7 @@ describe("PaymentsService", () => {
       id: linked.invoice_id,
     })
     harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
 
     await expect(
       harness.service.verifyPayment({
@@ -260,6 +269,107 @@ describe("PaymentsService", () => {
     )
   })
 
+  it("keeps atomically linked receipt invoices instead of relinking after verification", async () => {
+    const harness = createServiceHarness()
+    const linked = paymentFixture({
+      status: "verified",
+      is_advance: true,
+      invoice_id: "00000000-0000-4000-8000-000000000188",
+    })
+
+    harness.paymentsRepository.getById.mockResolvedValueOnce(paymentFixture()).mockResolvedValue(linked)
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue({
+      resident_id: paymentFixture().resident_id,
+    })
+    harness.paymentsRepository.verify.mockResolvedValue(linked)
+    harness.invoicesService.generatePaymentReceiptInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).resolves.toEqual(linked)
+
+    expect(harness.paymentsRepository.verify).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      adminAuthContext().authUser.id,
+      undefined
+    )
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).toHaveBeenCalledWith({
+      payment: linked,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(harness.paymentsRepository.updateInvoiceLink).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.markInvoiceFinalizationSucceeded).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      adminAuthContext().authUser.id
+    )
+  })
+
+  it("fails payment verification when receipt invoice generation fails", async () => {
+    const harness = createServiceHarness()
+    const verified = paymentFixture({ status: "verified", is_advance: true })
+    const invoiceError = new Error("invoice storage unavailable")
+
+    harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue({
+      resident_id: paymentFixture().resident_id,
+    })
+    harness.paymentsRepository.verify.mockResolvedValue(verified)
+    harness.invoicesService.generatePaymentReceiptInvoice.mockRejectedValue(invoiceError)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).rejects.toThrow("invoice storage unavailable")
+
+    expect(harness.paymentsRepository.updateInvoiceLink).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.markInvoiceFinalizationFailed).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      "invoice storage unavailable",
+      adminAuthContext().authUser.id
+    )
+  })
+
+  it("fails finalization when verification still leaves invoice_id null", async () => {
+    const harness = createServiceHarness()
+    const verified = paymentFixture({ status: "verified", is_advance: true, invoice_id: null })
+
+    harness.paymentsRepository.getById.mockResolvedValue(paymentFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue({
+      resident_id: paymentFixture().resident_id,
+    })
+    harness.paymentsRepository.verify.mockResolvedValue(verified)
+    harness.invoicesService.generatePaymentReceiptInvoice.mockResolvedValue({
+      id: "00000000-0000-4000-8000-000000000189",
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(verified)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).rejects.toThrow("Verified payment must be linked to an invoice")
+
+    expect(harness.paymentsRepository.markInvoiceFinalizationFailed).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      "Verified payment must be linked to an invoice before finalization succeeds.",
+      adminAuthContext().authUser.id
+    )
+    expect(harness.paymentsRepository.markInvoiceFinalizationSucceeded).not.toHaveBeenCalled()
+  })
+
   it("reconciles an already verified monthly payment by linking its invoice PDF", async () => {
     const harness = createServiceHarness()
     const verified = paymentFixture({
@@ -278,6 +388,7 @@ describe("PaymentsService", () => {
       id: linked.invoice_id,
     })
     harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
 
     await expect(
       harness.service.verifyPayment({
@@ -319,6 +430,206 @@ describe("PaymentsService", () => {
     })
 
     expect(harness.paymentsRepository.verify).not.toHaveBeenCalled()
+  })
+
+  it("generates manual monthly fees from resident monthly fee amount", async () => {
+    const harness = createServiceHarness()
+    const resident = residentFixture({ monthly_fee_amount: 7250 })
+    const created = monthlyFeeRecordFixture({
+      base_amount: 7250,
+      total_amount: 7350,
+      balance_amount: 7350,
+      penalty_amount: 100,
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+    harness.paymentsRepository.findFeeRecordByResidentPeriod.mockResolvedValue(null)
+    harness.paymentsRepository.createFeeRecord.mockResolvedValue(created)
+
+    await expect(
+      harness.service.generateMonthlyFee({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        periodMonth: "2026-06-01",
+        dueDate: "2026-06-10",
+        penaltyAmount: 100,
+        adjustmentReason: "Late payment penalty approved by finance.",
+      })
+    ).resolves.toEqual(created)
+
+    expect(harness.paymentsRepository.createFeeRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        base_amount: 7250,
+        total_amount: 7350,
+        balance_amount: 7350,
+        metadata: expect.objectContaining({
+          derived_from_resident_monthly_fee_amount: true,
+          resident_monthly_fee_amount: 7250,
+          adjustment_reason: "Late payment penalty approved by finance.",
+        }),
+      })
+    )
+  })
+
+  it("marks in-person receipt proof verified only after payment verification succeeds", async () => {
+    const harness = createServiceHarness()
+    const pendingPayment = paymentFixture({
+      method: "cash",
+      status: "pending",
+      monthly_fee_record_id: FEE_RECORD_ID,
+    })
+    const verified = paymentFixture({
+      ...pendingPayment,
+      status: "verified",
+      verified_at: "2026-06-04T12:00:00.000Z",
+    })
+    const linked = paymentFixture({
+      ...verified,
+      invoice_id: "00000000-0000-4000-8000-000000000177",
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(residentFixture())
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(null)
+    harness.paymentsRepository.create.mockResolvedValue(pendingPayment)
+    harness.paymentsRepository.listResidentPayments.mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
+    })
+    harness.paymentsRepository.getFeeRecordById.mockResolvedValue(monthlyFeeRecordFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue(null)
+    harness.uploadsRepository.createDocument.mockResolvedValue({
+      id: "manual-proof-id",
+      status: "pending",
+    })
+    harness.paymentsRepository.verify.mockResolvedValue(verified)
+    harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
+
+    await expect(
+      harness.service.recordInPersonPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: FEE_RECORD_ID,
+        amount: 6500,
+        method: "cash",
+        idempotencyKey: "manual-payment-test",
+      })
+    ).resolves.toEqual(linked)
+
+    expect(harness.uploadsRepository.createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "pending",
+        verified_by: null,
+        verified_at: null,
+      })
+    )
+    expect(harness.uploadsRepository.updateDocument).toHaveBeenCalledWith(
+      "manual-proof-id",
+      TEST_ORGANIZATION_ID,
+      expect.objectContaining({
+        status: "verified",
+      })
+    )
+    expect(harness.uploadsRepository.updateDocument.mock.invocationCallOrder[0]).toBeGreaterThan(
+      harness.paymentsRepository.verify.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("records UPI counter collections with searchable references and finalized invoices", async () => {
+    const harness = createServiceHarness()
+    const pendingPayment = paymentFixture({
+      method: "upi",
+      status: "pending",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      amount: 3500,
+      is_partial: true,
+      manual_reference: "upi-counter-123",
+      transaction_id: "upi-counter-123",
+    })
+    const verified = paymentFixture({
+      ...pendingPayment,
+      status: "verified",
+      verified_at: "2026-06-04T12:00:00.000Z",
+    })
+    const linked = paymentFixture({
+      ...verified,
+      invoice_id: "00000000-0000-4000-8000-000000000178",
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(residentFixture())
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(null)
+    harness.paymentsRepository.create.mockResolvedValue(pendingPayment)
+    harness.paymentsRepository.listResidentPayments.mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
+    })
+    harness.paymentsRepository.getFeeRecordById.mockResolvedValue(monthlyFeeRecordFixture())
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue(null)
+    harness.uploadsRepository.createDocument.mockResolvedValue({
+      id: "manual-upi-proof-id",
+      status: "pending",
+    })
+    harness.paymentsRepository.verify.mockResolvedValue(verified)
+    harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice.mockResolvedValue({
+      id: linked.invoice_id,
+    })
+    harness.paymentsRepository.updateInvoiceLink.mockResolvedValue(linked)
+    harness.paymentsRepository.markInvoiceFinalizationSucceeded.mockResolvedValue(linked)
+
+    await expect(
+      harness.service.recordInPersonPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: FEE_RECORD_ID,
+        amount: 3500,
+        method: "upi",
+        isPartial: true,
+        manualReference: "upi-counter-123",
+        notes: "Counter UPI collection",
+        idempotencyKey: "manual-upi-payment-test",
+      })
+    ).resolves.toEqual(linked)
+
+    expect(harness.paymentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "upi",
+        status: "pending",
+        amount: 3500,
+        is_partial: true,
+        transaction_id: "upi-counter-123",
+        manual_reference: "upi-counter-123",
+        metadata: expect.objectContaining({
+          collection_workflow: "finance_collection_center",
+          collection_method: "upi",
+          manual_entry: true,
+        }),
+      })
+    )
+    expect(harness.paymentsRepository.verify).toHaveBeenCalledWith(
+      PAYMENT_ID,
+      TEST_ORGANIZATION_ID,
+      adminAuthContext().authUser.id,
+      "manual-upi-payment-test"
+    )
+    expect(harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice).toHaveBeenCalledWith({
+      payment: verified,
+      actorUserId: adminAuthContext().authUser.id,
+    })
+    expect(harness.notificationService.queue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "in_app",
+        message: expect.objectContaining({
+          title: "Payment received",
+          templateKey: "payment_received",
+        }),
+      })
+    )
   })
 
   it("rejects pending manual payments through the atomic repository function", async () => {
@@ -375,6 +686,35 @@ describe("PaymentsService", () => {
     )
   })
 
+  it("blocks payment settings test generation in production before auth", async () => {
+    vi.stubEnv("LAUNCH_MODE", "production")
+    vi.stubEnv("NEXT_PUBLIC_LAUNCH_MODE", "production")
+
+    const harness = createServiceHarness()
+
+    await expect(
+      harness.service.testPaymentSettings({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        paymentMethod: "upi",
+        accountName: "Sadhana Boys Hostel",
+        upiId: "sadhana@upi",
+        isActive: true,
+        supportsManualVerification: true,
+        requireUtr: true,
+        requireScreenshot: true,
+        allowPartialPayment: true,
+        allowAdvancePayment: true,
+        autoExpirePendingPayments: true,
+        minPaymentAmount: 1,
+        utrRegex: "^[A-Z0-9][A-Z0-9._/-]{5,63}$",
+        duplicateDetectionStrictness: "strict",
+      })
+    ).rejects.toThrow(/test payment generation is blocked in production/i)
+
+    expect(harness.authService.requirePermission).not.toHaveBeenCalled()
+  })
+
   it("returns operational QR preview guidance when signed URL creation fails", async () => {
     const harness = createServiceHarness()
     const setting = paymentSettingFixture()
@@ -404,7 +744,7 @@ describe("PaymentsService", () => {
     )
   })
 
-  it("creates resident ledger dues through the system repository after ownership is verified", async () => {
+  it("keeps resident ledger reads pure after ownership is verified", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-06-04T12:00:00.000Z"))
 
@@ -426,12 +766,6 @@ describe("PaymentsService", () => {
     harness.authService.getCurrentContext.mockResolvedValue(context)
     harness.residentsRepository.getByUserId.mockResolvedValue(resident)
     harness.residentsRepository.getById.mockResolvedValue(resident)
-    harness.systemPaymentsRepository.findFeeRecordByResidentPeriod.mockResolvedValue(null)
-    harness.systemPaymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
-    harness.roomsRepository.getActiveAllocationForResidentInHostel.mockResolvedValue({
-      id: "00000000-0000-4000-8000-000000000061",
-      monthly_fee_amount: 5000,
-    })
     harness.paymentsRepository.listFeeRecords.mockResolvedValue({
       data: [feeRecord],
       meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
@@ -447,27 +781,19 @@ describe("PaymentsService", () => {
     })
 
     expect(harness.paymentsRepository.createFeeRecord).not.toHaveBeenCalled()
-    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        organization_id: TEST_ORGANIZATION_ID,
-        hostel_id: TEST_HOSTEL_ID,
-        resident_id: RESIDENT_ID,
-        period_month: "2026-06-01",
-        due_date: "2026-06-01",
-        base_amount: 5000,
-        total_amount: 5000,
-        balance_amount: 5000,
-        status: "pending",
-        created_by: context.authUser.id,
-        updated_by: context.authUser.id,
-      })
-    )
-    expect(ledger.billing.generatedCurrentDue).toBe(true)
+    expect(harness.paymentsRepository.create).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.findFeeRecordByResidentPeriod).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.createFeeRecord).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.updateFeeRecord).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generateMonthlyFeeInvoice).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).not.toHaveBeenCalled()
+    expect(harness.uploadsRepository.createDocument).not.toHaveBeenCalled()
+    expect(ledger.billing.generatedCurrentDue).toBe(false)
     expect(ledger.billing.nextDueDate).toBe("2026-07-01")
     expect(ledger.totals.currentDue).toBe(5000)
   })
 
-  it("catches up missed monthly dues from the joined month before selecting the payable due", async () => {
+  it("does not catch up missed monthly dues from a ledger read", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-06-04T12:00:00.000Z"))
 
@@ -491,37 +817,13 @@ describe("PaymentsService", () => {
         generated_for_initial_collection: true,
       },
     })
-    const mayDue = monthlyFeeRecordFixture({
-      id: "00000000-0000-4000-8000-000000000142",
-      period_month: "2026-05-01",
-      due_date: "2026-05-01",
-      base_amount: 5000,
-      total_amount: 5000,
-      balance_amount: 5000,
-    })
-    const juneDue = monthlyFeeRecordFixture({
-      id: "00000000-0000-4000-8000-000000000143",
-      period_month: "2026-06-01",
-      due_date: "2026-06-01",
-      base_amount: 5000,
-      total_amount: 5000,
-      balance_amount: 5000,
-    })
 
     harness.authService.getCurrentContext.mockResolvedValue(context)
     harness.residentsRepository.getByUserId.mockResolvedValue(resident)
     harness.residentsRepository.getById.mockResolvedValue(resident)
-    harness.systemPaymentsRepository.findFeeRecordByResidentPeriod
-      .mockResolvedValueOnce(aprilPaid)
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
-    harness.systemPaymentsRepository.createFeeRecord
-      .mockResolvedValueOnce(mayDue)
-      .mockResolvedValueOnce(juneDue)
-    harness.roomsRepository.getActiveAllocationForResidentInHostel.mockResolvedValue(null)
     harness.paymentsRepository.listFeeRecords.mockResolvedValue({
-      data: [juneDue, mayDue, aprilPaid],
-      meta: { page: 1, pageSize: 100, total: 3, totalPages: 1 },
+      data: [aprilPaid],
+      meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
     })
     harness.paymentsRepository.listResidentPayments.mockResolvedValue({
       data: [],
@@ -533,26 +835,17 @@ describe("PaymentsService", () => {
       organizationId: TEST_ORGANIZATION_ID,
     })
 
-    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenCalledTimes(2)
-    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        period_month: "2026-05-01",
-        due_date: "2026-05-01",
-        total_amount: 5000,
-      })
-    )
-    expect(harness.systemPaymentsRepository.createFeeRecord).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        period_month: "2026-06-01",
-        due_date: "2026-06-01",
-        total_amount: 5000,
-      })
-    )
-    expect(ledger.primaryDueRecord?.id).toBe(mayDue.id)
+    expect(harness.systemPaymentsRepository.findFeeRecordByResidentPeriod).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.createFeeRecord).not.toHaveBeenCalled()
+    expect(harness.systemPaymentsRepository.updateFeeRecord).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.createFeeRecord).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.create).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generateMonthlyFeeInvoice).not.toHaveBeenCalled()
+    expect(harness.uploadsRepository.createDocument).not.toHaveBeenCalled()
+    expect(ledger.primaryDueRecord).toBeNull()
+    expect(ledger.billing.generatedCurrentDue).toBe(false)
     expect(ledger.billing.nextDueDate).toBe("2026-07-01")
-    expect(ledger.totals.currentDue).toBe(10000)
+    expect(ledger.totals.currentDue).toBe(0)
   })
 
   it("allows residents to submit payment proof before profile completion", async () => {

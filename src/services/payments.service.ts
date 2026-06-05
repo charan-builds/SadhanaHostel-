@@ -1,16 +1,25 @@
 import "server-only"
 
 import { anyRoleHasPermission } from "@/constants/auth"
+import { areOperationalRepairsEnabled } from "@/config/launch"
 import { badRequest, conflict, forbidden } from "@/lib/api/api-error"
 import { logError, logPaymentEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
+import {
+  assertNonProductionOperation,
+} from "@/lib/operations/production-safety"
+import {
+  buildResidentBillingContext,
+  resolveNextBillingDueDate,
+  todayDateOnly,
+} from "@/lib/finance/billing-date"
+import { createManualPaymentReceiptMarker } from "@/lib/payments/manual-receipt-marker"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
-import { RoomsRepository } from "@/repositories/rooms.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import type {
@@ -27,6 +36,7 @@ import {
   paymentSettingsQuerySchema,
   paymentSettingsSchema,
   paymentSettingsTestSchema,
+  reconcilePaymentInvoicesSchema,
   recordInPersonPaymentSchema,
   rejectPaymentSchema,
   residentPaymentLedgerSchema,
@@ -51,7 +61,6 @@ export class PaymentsService {
   private readonly paymentSettingsRepository: PaymentSettingsRepository
   private readonly paymentsRepository: PaymentsRepository
   private readonly residentsRepository: ResidentsRepository
-  private readonly roomsRepository: RoomsRepository
   private readonly uploadsRepository: UploadsRepository
   private readonly uploadsService: UploadsService
   private readonly invoicesService: InvoicesService
@@ -64,7 +73,6 @@ export class PaymentsService {
     this.paymentSettingsRepository = new PaymentSettingsRepository(db)
     this.paymentsRepository = new PaymentsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
-    this.roomsRepository = new RoomsRepository(db)
     this.uploadsRepository = new UploadsRepository(db)
     this.uploadsService = new UploadsService(db)
     this.invoicesService = new InvoicesService(db)
@@ -259,7 +267,8 @@ export class PaymentsService {
         method: values.method,
         status: "pending",
         transaction_id:
-          values.method === "bank_transfer" && values.manualReference
+          (values.method === "bank_transfer" || values.method === "upi") &&
+          values.manualReference
             ? values.manualReference
             : null,
         idempotency_key: idempotencyKey,
@@ -272,6 +281,8 @@ export class PaymentsService {
         metadata: {
           idempotency_key: idempotencyKey,
           source: "admin_in_person",
+          collection_workflow: "finance_collection_center",
+          collection_method: values.method,
           manual_entry: true,
           created_as_pending_for_atomic_verification: true,
         },
@@ -281,7 +292,7 @@ export class PaymentsService {
       })
     }
 
-    await this.ensureManualPaymentProof(payment, context.authUser.id, {
+    const manualProof = await this.ensureManualPaymentProof(payment, context.authUser.id, {
       manualReference: values.manualReference || null,
       notes: values.notes || null,
     })
@@ -293,7 +304,13 @@ export class PaymentsService {
       idempotencyKey
     )
 
-    verifiedPayment = await this.ensureVerifiedPaymentInvoice(
+    await this.markManualPaymentProofVerified(
+      manualProof.id,
+      values.organizationId,
+      context.authUser.id
+    )
+
+    verifiedPayment = await this.finalizeVerifiedPaymentInvoice(
       verifiedPayment,
       context.authUser.id,
       "payment.invoice_generation_after_manual_entry_failed"
@@ -714,6 +731,9 @@ export class PaymentsService {
 
   async testPaymentSettings(input: unknown) {
     const values = paymentSettingsTestSchema.parse(input)
+
+    assertNonProductionOperation("test_payment_generation")
+
     const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
@@ -880,15 +900,7 @@ export class PaymentsService {
       this.authService.requireHostelAccess(context, values.organizationId, resident.hostel_id)
     }
 
-    const billing = buildResidentBillingContext(resident.joined_on)
-    const generatedCurrentDue = await this.ensureCurrentAnniversaryDueRecord({
-      organizationId: values.organizationId,
-      resident,
-      periodMonth: billing.currentPeriodMonth,
-      dueDate: billing.currentDueDate,
-      actorUserId: context.authUser.id,
-    })
-
+    const billing = buildResidentBillingContext({ joinedOn: resident.joined_on })
     const feeRecords = await this.paymentsRepository.listFeeRecords({
       organizationId: values.organizationId,
       hostelId: resident.hostel_id,
@@ -914,8 +926,9 @@ export class PaymentsService {
       (total, record) => total + record.balance_amount,
       0
     )
+    const today = todayDateOnly()
     const overdue = unpaidFeeRecords
-      .filter((record) => record.status === "overdue")
+      .filter((record) => record.balance_amount > 0 && isDateBefore(record.due_date, today))
       .reduce((total, record) => total + record.balance_amount, 0)
     const pendingVerification = payments.data
       .filter((payment) => payment.status === "pending" || payment.status === "initiated")
@@ -946,158 +959,14 @@ export class PaymentsService {
         joinedOn: resident.joined_on,
         currentPeriodMonth: billing.currentPeriodMonth,
         currentDueDate: billing.currentDueDate,
-        nextDueDate: resolveNextDueDate({
-          billing,
-        }),
-        generatedCurrentDue,
+        nextDueDate: resolveNextBillingDueDate({ billing }),
+        generatedCurrentDue: false,
       },
       primaryDueRecord: unpaidFeeRecords[0] ?? null,
       feeRecords: feeRecords.data,
       payments: payments.data,
       invoices,
     }
-  }
-
-  private async ensureCurrentAnniversaryDueRecord(values: {
-    organizationId: string
-    resident: Pick<
-      Tables<"residents">,
-      | "id"
-      | "organization_id"
-      | "hostel_id"
-      | "joined_on"
-      | "monthly_fee_amount"
-      | "is_active"
-      | "checkout_on"
-    >
-    periodMonth: string
-    dueDate: string | null
-    actorUserId: string
-  }) {
-    const today = todayDateOnly()
-
-    if (values.resident.joined_on && values.resident.joined_on > today) {
-      return false
-    }
-
-    if (!values.dueDate || !isDateOnOrBefore(values.dueDate, today)) {
-      return false
-    }
-
-    if (!values.resident.is_active || values.resident.checkout_on) {
-      return false
-    }
-
-    const systemPaymentsRepository = this.getSystemPaymentsRepository()
-    const duePeriods = buildDuePeriodsThroughCurrent({
-      joinedOn: values.resident.joined_on,
-      currentPeriodMonth: values.periodMonth,
-      today,
-    })
-    let generated = false
-
-    for (const duePeriod of duePeriods) {
-      const existing = await systemPaymentsRepository.findFeeRecordByResidentPeriod(
-        values.organizationId,
-        values.resident.id,
-        duePeriod.periodMonth
-      )
-
-      if (existing) {
-        const repaired = await this.repairMisclassifiedAdmissionFeeRecord({
-          existing,
-          organizationId: values.organizationId,
-          resident: values.resident,
-          actorUserId: values.actorUserId,
-          systemPaymentsRepository,
-        })
-
-        if (!repaired) {
-          continue
-        }
-      }
-
-      const allocation = await this.roomsRepository.getActiveAllocationForResidentInHostel(
-        values.resident.id,
-        values.organizationId,
-        values.resident.hostel_id
-      )
-      const baseAmount = allocation?.monthly_fee_amount ?? values.resident.monthly_fee_amount
-
-      await systemPaymentsRepository.createFeeRecord({
-        organization_id: values.organizationId,
-        hostel_id: values.resident.hostel_id,
-        resident_id: values.resident.id,
-        room_allocation_id: allocation?.id,
-        period_month: duePeriod.periodMonth,
-        due_date: duePeriod.dueDate,
-        base_amount: baseAmount,
-        total_amount: baseAmount,
-        balance_amount: baseAmount,
-        status: baseAmount === 0 ? "paid" : "pending",
-        notes: "Monthly fee generated from resident billing anniversary.",
-        metadata: {
-          source: "resident_ledger_anniversary_due",
-          joined_on: values.resident.joined_on,
-          generated_from_ledger_open: true,
-        },
-        created_by: values.actorUserId,
-        updated_by: values.actorUserId,
-      })
-
-      generated = true
-    }
-
-    return generated
-  }
-
-  private async repairMisclassifiedAdmissionFeeRecord(values: {
-    existing: Tables<"monthly_fee_records">
-    organizationId: string
-    resident: Pick<Tables<"residents">, "id" | "joined_on">
-    actorUserId: string
-    systemPaymentsRepository: PaymentsRepository
-  }) {
-    const joinedOn = values.resident.joined_on
-    const joinedPeriodMonth = joinedOn ? periodMonthForDateOnly(joinedOn) : null
-
-    if (
-      !joinedOn ||
-      !joinedPeriodMonth ||
-      joinedPeriodMonth >= values.existing.period_month ||
-      !isQuickAdmissionFirstMonthRecord(values.existing)
-    ) {
-      return false
-    }
-
-    const joinedRecord = await values.systemPaymentsRepository.findFeeRecordByResidentPeriod(
-      values.organizationId,
-      values.resident.id,
-      joinedPeriodMonth
-    )
-
-    if (joinedRecord) {
-      return false
-    }
-
-    const metadata = jsonObject(values.existing.metadata)
-
-    await values.systemPaymentsRepository.updateFeeRecord(
-      values.existing.id,
-      values.organizationId,
-      {
-        period_month: joinedPeriodMonth,
-        due_date: joinedOn,
-        metadata: {
-          ...metadata,
-          repaired_from_period_month: values.existing.period_month,
-          repaired_reason: "quick_admission_first_month_joined_date_alignment",
-        },
-        updated_by: values.actorUserId,
-      }
-    )
-
-    return true
   }
 
   async verifyPayment(input: unknown) {
@@ -1130,7 +999,7 @@ export class PaymentsService {
     })
 
     if (existingPayment.status === "verified") {
-      const reconciledPayment = await this.ensureVerifiedPaymentInvoice(
+      const reconciledPayment = await this.finalizeVerifiedPaymentInvoice(
         existingPayment,
         context.authUser.id,
         "payment.invoice_generation_for_verified_payment_failed"
@@ -1173,7 +1042,7 @@ export class PaymentsService {
       values.idempotencyKey
     )
 
-    verifiedPayment = await this.ensureVerifiedPaymentInvoice(
+    verifiedPayment = await this.finalizeVerifiedPaymentInvoice(
       verifiedPayment,
       context.authUser.id,
       "payment.invoice_generation_after_verification_failed"
@@ -1262,6 +1131,15 @@ export class PaymentsService {
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 
+    const resident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    if (resident.hostel_id !== values.hostelId) {
+      throw conflict("Monthly due hostel does not match resident hostel.")
+    }
+
     const existing = await this.paymentsRepository.findFeeRecordByResidentPeriod(
       values.organizationId,
       values.residentId,
@@ -1272,8 +1150,9 @@ export class PaymentsService {
       return existing
     }
 
+    const baseAmount = resident.monthly_fee_amount
     const totalAmount =
-      values.baseAmount +
+      baseAmount +
       values.penaltyAmount +
       values.adjustmentAmount -
       values.discountAmount -
@@ -1287,10 +1166,10 @@ export class PaymentsService {
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       resident_id: values.residentId,
-      room_allocation_id: values.roomAllocationId,
+      room_allocation_id: null,
       period_month: values.periodMonth,
       due_date: values.dueDate,
-      base_amount: values.baseAmount,
+      base_amount: baseAmount,
       discount_amount: values.discountAmount,
       penalty_amount: values.penaltyAmount,
       adjustment_amount: values.adjustmentAmount,
@@ -1299,9 +1178,74 @@ export class PaymentsService {
       balance_amount: totalAmount,
       status: totalAmount === 0 ? "paid" : "pending",
       notes: values.notes,
+      metadata: {
+        source: "manual_monthly_fee_generation",
+        derived_from_resident_monthly_fee_amount: true,
+        resident_monthly_fee_amount: baseAmount,
+        adjustment_reason: values.adjustmentReason ?? null,
+        generated_by_user_id: context.authUser.id,
+      },
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+  }
+
+  async reconcilePaymentInvoices(input: unknown) {
+    const values = reconcilePaymentInvoicesSchema.parse(input)
+
+    if (!areOperationalRepairsEnabled()) {
+      throw forbidden(
+        "Payment invoice reconciliation is disabled by OPERATIONAL_REPAIRS_ENABLED=false."
+      )
+    }
+
+    const context = await this.authService.requirePermission("finance.manage")
+    const hostelId = values.hostelId
+      ? this.authService.resolveHostelScope(context, values.organizationId, values.hostelId)
+      : undefined
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const payments = await this.paymentsRepository.listPaymentsNeedingInvoiceFinalization(
+      values.organizationId,
+      hostelId ?? undefined
+    )
+    const results: Array<{
+      paymentId: string
+      status: "succeeded" | "failed"
+      invoiceId: string | null
+      error?: string
+    }> = []
+
+    for (const payment of payments.slice(0, values.limit)) {
+      try {
+        const finalized = await this.finalizeVerifiedPaymentInvoice(
+          payment,
+          context.authUser.id,
+          "payment.invoice_reconciliation_failed"
+        )
+
+        results.push({
+          paymentId: payment.id,
+          status: "succeeded",
+          invoiceId: finalized.invoice_id,
+        })
+      } catch (error) {
+        results.push({
+          paymentId: payment.id,
+          status: "failed",
+          invoiceId: payment.invoice_id,
+          error: error instanceof Error ? error.message : "Unknown finalization error",
+        })
+      }
+    }
+
+    return {
+      processed: results.length,
+      succeeded: results.filter((result) => result.status === "succeeded").length,
+      failed: results.filter((result) => result.status === "failed").length,
+      results,
+    }
   }
 
   private async publishPaymentVerificationEvents(
@@ -1322,7 +1266,72 @@ export class PaymentsService {
       payment.organization_id
     )
 
-    if (!resident?.email) {
+    try {
+      await this.notificationService.queue({
+        organizationId: payment.organization_id,
+        hostelId: payment.hostel_id,
+        channel: "in_app",
+        recipient: {
+          userId: actorUserId,
+        },
+        actorUserId,
+        message: {
+          title:
+            payment.method === "cash" ? "Cash collection recorded" : "Payment received",
+          body: `${resident?.full_name ?? "Resident"} paid INR ${payment.amount}.`,
+          templateKey: "payment_received",
+          payload: {
+            payment_id: payment.id,
+            resident_id: payment.resident_id,
+            amount: payment.amount,
+            method: payment.method,
+            invoice_id: payment.invoice_id,
+          },
+        },
+      })
+    } catch (error) {
+      logError(error, {
+        event: "payment.admin_notification_failed",
+        paymentId: payment.id,
+        organizationId: payment.organization_id,
+      })
+    }
+
+    if (!resident) {
+      return
+    }
+
+    try {
+      await this.notificationService.queue({
+        organizationId: payment.organization_id,
+        hostelId: payment.hostel_id,
+        channel: "in_app",
+        recipient: {
+          residentId: resident.id,
+          userId: resident.user_id,
+        },
+        actorUserId,
+        message: {
+          title: "Payment received",
+          body: `We received and verified your payment of INR ${payment.amount}.`,
+          templateKey: "payment_receipt",
+          payload: {
+            payment_id: payment.id,
+            invoice_id: payment.invoice_id,
+            amount: payment.amount,
+            transaction_id: payment.transaction_id,
+          },
+        },
+      })
+    } catch (error) {
+      logError(error, {
+        event: "payment.receipt_notification_failed",
+        paymentId: payment.id,
+        organizationId: payment.organization_id,
+      })
+    }
+
+    if (!resident.email) {
       return
     }
 
@@ -1502,42 +1511,60 @@ export class PaymentsService {
     }
   }
 
-  private async ensureVerifiedPaymentInvoice(
+  private async finalizeVerifiedPaymentInvoice(
     payment: PaymentRow,
     actorUserId: string,
     failureEvent: string
   ) {
+    await this.paymentsRepository.markInvoiceFinalizationInProgress(
+      payment.id,
+      payment.organization_id,
+      actorUserId
+    )
+
     try {
-      if (payment.monthly_fee_record_id) {
-        const invoice =
-          await this.invoicesService.generateVerifiedMonthlyFeePaymentInvoice({
-            payment,
-            actorUserId,
-          })
+      const finalized = await this.ensureVerifiedPaymentInvoice(payment, actorUserId)
 
-        if (payment.invoice_id === invoice.id) {
-          return (
-            (await this.paymentsRepository.getById(
-              payment.id,
-              payment.organization_id
-            )) ?? payment
-          )
-        }
-
-        return this.paymentsRepository.updateInvoiceLink(
-          payment.id,
-          payment.organization_id,
-          invoice.id,
-          actorUserId
-        )
+      if (!finalized.invoice_id) {
+        throw conflict("Verified payment must be linked to an invoice before finalization succeeds.")
       }
 
-      if (payment.invoice_id) {
-        await this.invoicesService.generatePaymentReceiptInvoice({
+      return this.paymentsRepository.markInvoiceFinalizationSucceeded(
+        finalized.id,
+        finalized.organization_id,
+        actorUserId
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown invoice finalization error"
+
+      await this.paymentsRepository.markInvoiceFinalizationFailed(
+        payment.id,
+        payment.organization_id,
+        message,
+        actorUserId
+      )
+      logError(error, {
+        event: failureEvent,
+        paymentId: payment.id,
+        organizationId: payment.organization_id,
+      })
+
+      throw error
+    }
+  }
+
+  private async ensureVerifiedPaymentInvoice(
+    payment: PaymentRow,
+    actorUserId: string
+  ) {
+    if (payment.monthly_fee_record_id) {
+      const invoice =
+        await this.invoicesService.generateVerifiedMonthlyFeePaymentInvoice({
           payment,
           actorUserId,
         })
 
+      if (payment.invoice_id === invoice.id) {
         return (
           (await this.paymentsRepository.getById(
             payment.id,
@@ -1546,26 +1573,39 @@ export class PaymentsService {
         )
       }
 
-      const invoice = await this.invoicesService.generatePaymentReceiptInvoice({
-        payment,
-        actorUserId,
-      })
-
       return this.paymentsRepository.updateInvoiceLink(
         payment.id,
         payment.organization_id,
         invoice.id,
         actorUserId
       )
-    } catch (error) {
-      logError(error, {
-        event: failureEvent,
-        paymentId: payment.id,
-        organizationId: payment.organization_id,
+    }
+
+    if (payment.invoice_id) {
+      await this.invoicesService.generatePaymentReceiptInvoice({
+        payment,
+        actorUserId,
       })
 
-      return payment
+      return (
+        (await this.paymentsRepository.getById(
+          payment.id,
+          payment.organization_id
+        )) ?? payment
+      )
     }
+
+    const invoice = await this.invoicesService.generatePaymentReceiptInvoice({
+      payment,
+      actorUserId,
+    })
+
+    return this.paymentsRepository.updateInvoiceLink(
+      payment.id,
+      payment.organization_id,
+      invoice.id,
+      actorUserId
+    )
   }
 
   private async ensureManualPaymentProof(
@@ -1611,14 +1651,14 @@ export class PaymentsService {
       payment_id: payment.id,
       uploaded_by_user_id: actorUserId,
       document_type: "payment_receipt",
-      status: "verified",
+      status: "pending",
       bucket_name: "payment-screenshots",
       storage_path: storagePath,
       file_name: file.name,
       mime_type: file.type,
       file_size_bytes: file.size,
-      verified_by: actorUserId,
-      verified_at: now,
+      verified_by: null,
+      verified_at: null,
       is_public: false,
       metadata: {
         source: "admin_in_person",
@@ -1630,6 +1670,19 @@ export class PaymentsService {
         generated_at: now,
       },
       created_by: actorUserId,
+      updated_by: actorUserId,
+    })
+  }
+
+  private async markManualPaymentProofVerified(
+    documentId: string,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    return this.uploadsRepository.updateDocument(documentId, organizationId, {
+      status: "verified",
+      verified_by: actorUserId,
+      verified_at: new Date().toISOString(),
       updated_by: actorUserId,
     })
   }
@@ -1825,113 +1878,10 @@ function appendQrPreviewCacheBust(
   return `${signedUrl}${signedUrl.includes("?") ? "&" : "?"}${cacheKey}`
 }
 
-function createManualPaymentReceiptMarker(paymentId: string) {
-  return new File(
-    [MANUAL_PAYMENT_RECEIPT_MARKER_PNG],
-    `manual-payment-receipt-${paymentId}.png`,
-    { type: "image/png" }
-  )
-}
-
 function createScreenshotPaymentReference(idempotencyKey: string) {
   const compactKey = idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 32)
 
   return `SCREENSHOT-${compactKey || crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
-}
-
-type BillingContext = {
-  joinedOn: string | null
-  currentPeriodMonth: string
-  currentDueDate: string | null
-  nextPeriodDueDate: string | null
-}
-
-function buildResidentBillingContext(joinedOn: string | null): BillingContext {
-  const today = new Date()
-  const currentPeriodMonth = toPeriodMonth(today)
-  const billingDay = joinedOn ? Number(joinedOn.slice(8, 10)) : 10
-  const currentDueDate = buildDueDateForMonth(
-    today.getUTCFullYear(),
-    today.getUTCMonth(),
-    billingDay
-  )
-  const nextPeriodDueDate = buildDueDateForMonth(
-    today.getUTCFullYear(),
-    today.getUTCMonth() + 1,
-    billingDay
-  )
-
-  return {
-    joinedOn,
-    currentPeriodMonth,
-    currentDueDate,
-    nextPeriodDueDate,
-  }
-}
-
-function isQuickAdmissionFirstMonthRecord(record: Tables<"monthly_fee_records">) {
-  const metadata = jsonObject(record.metadata)
-
-  return (
-    metadata.source === "resident_quick_admission" &&
-    metadata.generated_for_initial_collection === true
-  )
-}
-
-function jsonObject(value: Json): Record<string, Json> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {}
-  }
-
-  return value as Record<string, Json>
-}
-
-function resolveNextDueDate(input: {
-  billing: BillingContext
-}) {
-  const today = todayDateOnly()
-
-  if (
-    input.billing.currentDueDate &&
-    !isDateBefore(input.billing.currentDueDate, today)
-  ) {
-    return input.billing.currentDueDate
-  }
-
-  return input.billing.nextPeriodDueDate
-}
-
-function buildDuePeriodsThroughCurrent(input: {
-  joinedOn: string | null
-  currentPeriodMonth: string
-  today: string
-}) {
-  const startPeriodMonth = input.joinedOn
-    ? periodMonthForDateOnly(input.joinedOn)
-    : input.currentPeriodMonth
-  const billingDay = input.joinedOn ? Number(input.joinedOn.slice(8, 10)) : 10
-  const periods: Array<{ periodMonth: string; dueDate: string }> = []
-  let cursor = parsePeriodMonth(startPeriodMonth)
-  const endPeriod = input.currentPeriodMonth
-  let guard = 0
-
-  while (toPeriodMonth(cursor) <= endPeriod && guard < 120) {
-    const periodMonth = toPeriodMonth(cursor)
-    const dueDate = buildDueDateForMonth(
-      cursor.getUTCFullYear(),
-      cursor.getUTCMonth(),
-      billingDay
-    )
-
-    if (isDateOnOrBefore(dueDate, input.today)) {
-      periods.push({ periodMonth, dueDate })
-    }
-
-    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
-    guard += 1
-  }
-
-  return periods
 }
 
 function compareFeeRecordsByDueDate(
@@ -1945,47 +1895,6 @@ function compareFeeRecordsByDueDate(
   )
 }
 
-function toPeriodMonth(date: Date) {
-  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-01`
-}
-
-function parsePeriodMonth(periodMonth: string) {
-  return new Date(Date.UTC(Number(periodMonth.slice(0, 4)), Number(periodMonth.slice(5, 7)) - 1, 1))
-}
-
-function periodMonthForDateOnly(date: string) {
-  return `${date.slice(0, 7)}-01`
-}
-
-function todayDateOnly() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function buildDueDateForMonth(year: number, monthIndex: number, billingDay: number) {
-  const monthStart = new Date(Date.UTC(year, monthIndex, 1))
-  const lastDay = new Date(
-    Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)
-  ).getUTCDate()
-  const dueDay = Math.min(Math.max(1, billingDay), lastDay)
-
-  return `${monthStart.getUTCFullYear()}-${pad2(monthStart.getUTCMonth() + 1)}-${pad2(dueDay)}`
-}
-
-function isDateOnOrBefore(left: string, right: string) {
-  return left <= right
-}
-
 function isDateBefore(left: string, right: string) {
   return left < right
 }
-
-function pad2(value: number) {
-  return String(value).padStart(2, "0")
-}
-
-const MANUAL_PAYMENT_RECEIPT_MARKER_PNG = Uint8Array.from([
-  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
-  0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
-  120, 156, 99, 248, 15, 4, 0, 9, 251, 3, 253, 167, 246, 129, 37, 0, 0, 0, 0,
-  73, 69, 78, 68, 174, 66, 96, 130,
-])

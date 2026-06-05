@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og"
 
 import { BrandIconImage } from "@/components/seo/brand-icon-image"
+import { getPublishedBrandIconUrl } from "@/lib/public-brand-logo"
 
 export const size = {
   width: 180,
@@ -8,7 +9,10 @@ export const size = {
 }
 
 export const contentType = "image/png"
+export const revalidate = 60
 
-export default function AppleIcon() {
-  return new ImageResponse(<BrandIconImage />, size)
+export default async function AppleIcon() {
+  const logoUrl = await getPublishedBrandIconUrl()
+
+  return new ImageResponse(<BrandIconImage logoUrl={logoUrl} />, size)
 }

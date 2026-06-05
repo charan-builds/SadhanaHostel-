@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 
+import { getProductionSafetySnapshot } from "../src/config/production-safety"
 import type { Database } from "../src/types/database"
 import {
   createFeeRecords,
@@ -234,14 +235,30 @@ async function insertNotices(
 function assertStaging() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ""
   const allowProductionSeed = process.env.ALLOW_PRODUCTION_SEED === "true"
+  const safety = getProductionSafetySnapshot()
 
   if (allowProductionSeed) {
     throw new Error("Production seeding is blocked. Remove ALLOW_PRODUCTION_SEED.")
   }
 
-  if (!appUrl.includes("staging") && process.env.NODE_ENV !== "development") {
+  if (safety.production) {
     throw new Error(
-      "Refusing to seed non-staging environment. Set NEXT_PUBLIC_APP_URL to a staging URL."
+      `Production seeding is blocked. LAUNCH_MODE=${safety.launchMode ?? "unset"}, NEXT_PUBLIC_LAUNCH_MODE=${safety.publicLaunchMode ?? "unset"}.`
+    )
+  }
+
+  if (process.env.NODE_ENV === "development" && safety.effectiveMode === "local") {
+    return
+  }
+
+  if (
+    safety.effectiveMode !== "staging" ||
+    safety.launchMode === "soft_launch" ||
+    safety.publicLaunchMode === "soft_launch" ||
+    !appUrl.includes("staging")
+  ) {
+    throw new Error(
+      "Refusing to seed non-staging environment. Set LAUNCH_MODE=staging, NEXT_PUBLIC_LAUNCH_MODE=staging, and NEXT_PUBLIC_APP_URL to a staging URL."
     )
   }
 }

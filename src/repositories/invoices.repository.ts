@@ -116,6 +116,67 @@ export class InvoicesRepository {
     return data
   }
 
+  async listMissingPdfInvoices(input: {
+    organizationId: string
+    hostelId?: string | null
+    limit?: number
+  }) {
+    let query = this.db
+      .from("invoices")
+      .select("*")
+      .eq("organization_id", input.organizationId)
+      .is("pdf_document_id", null)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(input.limit ?? 100)
+
+    if (input.hostelId) {
+      query = query.eq("hostel_id", input.hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load invoices missing PDFs.")
+    }
+
+    return data ?? []
+  }
+
+  async getPaymentById(paymentId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("payments")
+      .select("*")
+      .eq("id", paymentId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load invoice payment.")
+    }
+
+    return data
+  }
+
+  async findPaymentByInvoiceId(invoiceId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("payments")
+      .select("*")
+      .eq("invoice_id", invoiceId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("verified_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load payment linked to invoice.")
+    }
+
+    return data
+  }
+
   async findReceiptByPaymentId(paymentId: string, organizationId: string) {
     const { data, error } = await this.db
       .from("invoices")

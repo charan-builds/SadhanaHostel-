@@ -59,6 +59,7 @@ export const consistencyRepairSchema = z.object({
     "release_stale_allocations",
     "resync_auth_linkage",
     "repair_analytics",
+    "repair_financial_reconciliation",
     "reconcile_dues",
     "generate_fees",
     "run_consistency_scan",
@@ -101,6 +102,27 @@ export const identityRepairSchema = z.object({
   dryRun: z.boolean().default(true),
 })
 
+export const financialReconciliationActionSchema = z.enum([
+  "repair_monthly_fee_invoices",
+  "repair_advance_payment_invoices",
+  "repair_receipt_invoice_links",
+  "repair_all",
+])
+
+export const financialReconciliationRepairSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  action: financialReconciliationActionSchema.default("repair_all"),
+  dryRun: z.boolean().default(true),
+})
+
+export const missingReceiptRegenerationSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  dryRun: z.boolean().default(true),
+  limit: z.coerce.number().int().positive().max(500).default(100),
+})
+
 export type AutomationJobName = z.infer<typeof automationJobNameSchema>
 export type AutomationDashboardQueryInput = z.infer<typeof automationDashboardQuerySchema>
 export type AutomationRunInput = z.infer<typeof automationRunSchema>
@@ -110,3 +132,9 @@ export type ConsistencyRepairInput = z.infer<typeof consistencyRepairSchema>
 export type DemoDataResetInput = z.infer<typeof demoDataResetSchema>
 export type IdentityReconciliationQueryInput = z.infer<typeof identityReconciliationQuerySchema>
 export type IdentityRepairInput = z.infer<typeof identityRepairSchema>
+export type FinancialReconciliationRepairInput = z.infer<
+  typeof financialReconciliationRepairSchema
+>
+export type MissingReceiptRegenerationInput = z.infer<
+  typeof missingReceiptRegenerationSchema
+>

@@ -33,6 +33,7 @@ describe("static migration security checks", () => {
   it("keeps critical finance and onboarding tables protected by RLS", () => {
     const manualUpi = migration("20260522001000_manual_upi_payment_operations.sql")
     const invites = migration("20260522000000_resident_invite_onboarding.sql")
+    const p1Finance = migration("20260605001000_p1_finance_hardening.sql")
 
     expect(manualUpi).toMatch(
       /alter\s+table\s+public\.payment_settings\s+enable\s+row\s+level\s+security/i
@@ -43,6 +44,39 @@ describe("static migration security checks", () => {
     expect(invites).toMatch(
       /alter\s+table\s+public\.resident_invites\s+enable\s+row\s+level\s+security/i
     )
+    expect(p1Finance).toMatch(
+      /alter\s+table\s+public\.collection_followups\s+enable\s+row\s+level\s+security/i
+    )
+    expect(p1Finance).toMatch(
+      /alter\s+table\s+public\.collection_followups\s+force\s+row\s+level\s+security/i
+    )
+    expect(p1Finance).toMatch(/public\.can_manage_finance\(organization_id,\s*hostel_id\)/i)
+  })
+
+  it("keeps finance dashboard aggregates database-owned and finance-guarded", () => {
+    const p1Finance = migration("20260605001000_p1_finance_hardening.sql")
+
+    expect(p1Finance).toMatch(/create\s+or\s+replace\s+function\s+public\.finance_dashboard_aggregates/i)
+    expect(p1Finance).toMatch(/public\.can_manage_finance\(p_organization_id,\s*p_hostel_id\)/i)
+    expect(p1Finance).toMatch(/'truncated',\s*false/i)
+    expect(p1Finance).toMatch(/'totalRowsScanned'/i)
+    expect(p1Finance).toMatch(/balance_amount\s*>\s*0/i)
+    expect(p1Finance).toMatch(/verified_at/i)
+  })
+
+  it("keeps collection follow-up ownership and priority indexed for finance workflows", () => {
+    const collectionCenter = migration(
+      "20260605002000_collection_center_followup_assignment.sql"
+    )
+
+    expect(collectionCenter).toMatch(/add\s+column\s+if\s+not\s+exists\s+priority\s+text/i)
+    expect(collectionCenter).toMatch(
+      /check\s*\(\s*priority\s+in\s+\('low',\s*'medium',\s*'high',\s*'critical'\)\s*\)/i
+    )
+    expect(collectionCenter).toMatch(/add\s+column\s+if\s+not\s+exists\s+assigned_to\s+uuid/i)
+    expect(collectionCenter).toMatch(/references\s+public\.users\(id\)\s+on\s+delete\s+set\s+null/i)
+    expect(collectionCenter).toMatch(/collection_followups_priority_idx/i)
+    expect(collectionCenter).toMatch(/collection_followups_assigned_to_idx/i)
   })
 
   it("keeps manual UPI duplicate protections at database level", () => {
@@ -350,6 +384,7 @@ describe("static migration security checks", () => {
 
   it("reports resident tenant identity anomalies without auto-assigning orphan tenants", () => {
     const normalization = migration("20260526001000_phone_identity_normalization.sql")
+    const rpcHardening = migration("20260604005000_repair_rpc_service_role_hardening.sql")
 
     expect(normalization).toMatch(/create\s+or\s+replace\s+view\s+public\.resident_tenant_identity_anomalies/i)
     expect(normalization).toMatch(
@@ -361,11 +396,88 @@ describe("static migration security checks", () => {
     expect(normalization).toMatch(/resident_auth_profile_organization_mismatch/i)
     expect(normalization).toMatch(/Do not auto-assign a tenant/i)
     expect(normalization).toMatch(/can_manage_organization\(p_organization_id,\s*p_hostel_id\)/i)
-    expect(normalization).toMatch(
-      /revoke\s+execute\s+on\s+function\s+public\.get_resident_tenant_identity_anomaly_report\(uuid,\s*uuid,\s*integer\)\s+from\s+public,\s*anon/i
+    expect(rpcHardening).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.get_resident_tenant_identity_anomaly_report\(uuid,\s*uuid,\s*integer\)\s+from\s+public,\s*anon,\s*authenticated/i
     )
-    expect(normalization).toMatch(
-      /grant\s+execute\s+on\s+function\s+public\.get_resident_tenant_identity_anomaly_report\(uuid,\s*uuid,\s*integer\)\s+to\s+authenticated,\s*service_role/i
+    expect(rpcHardening).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.get_resident_tenant_identity_anomaly_report\(uuid,\s*uuid,\s*integer\)\s+to\s+service_role/i
+    )
+  })
+
+  it("keeps repair, reconciliation, and maintenance RPCs service-role-only", () => {
+    const rpcHardening = migration("20260604005000_repair_rpc_service_role_hardening.sql")
+    const serviceOnlyFunctions = [
+      ["financial_reconciliation_counts", "uuid, uuid"],
+      ["list_verified_payments_missing_receipts", "uuid, uuid, integer"],
+      ["repair_monthly_fee_invoices_atomic", "uuid, uuid, uuid, boolean"],
+      ["repair_advance_payment_invoices_atomic", "uuid, uuid, uuid, boolean"],
+      ["repair_receipt_invoice_links_atomic", "uuid, uuid, uuid, boolean"],
+      ["repair_resident_lifecycle_atomic", "uuid, uuid, uuid, boolean"],
+      ["repair_onboarding_access_consistency_atomic", "uuid, uuid, integer, uuid"],
+      ["reconcile_invalid_dues_atomic", "uuid, uuid, integer, uuid"],
+      ["repair_analytics_consistency_atomic", "uuid, uuid, uuid"],
+      ["repair_tenant_linkage_consistency_atomic", "uuid, uuid, uuid"],
+      ["repair_occupancy_consistency_atomic", "uuid, uuid, uuid"],
+      ["cleanup_resident_onboarding_access", "uuid, uuid, integer, uuid"],
+      ["get_resident_tenant_identity_anomaly_report", "uuid, uuid, integer"],
+      ["expire_resident_invites", "uuid, uuid, integer"],
+      ["expire_reservations", "uuid, uuid, integer"],
+    ] as const
+
+    expect(rpcHardening).toMatch(/create\s+or\s+replace\s+function\s+public\.assert_service_role_rpc/i)
+    expect(rpcHardening).toMatch(/service_role_rpc_required/i)
+    expect(rpcHardening).toMatch(/SECURITY DEFINER ownership alone is not trusted/i)
+
+    for (const [functionName, signature] of serviceOnlyFunctions) {
+      expect(rpcHardening).toContain(`perform public.assert_service_role_rpc('${functionName}');`)
+      expect(rpcHardening).toContain(
+        `grant execute on function public.${functionName}(${signature}) to service_role;`
+      )
+      expect(rpcHardening).toContain(
+        `revoke execute on function public.${functionName}_core(${signature}) from public, anon, authenticated, service_role;`
+      )
+      expect(rpcHardening).toMatch(
+        new RegExp(
+          `revoke\\s+execute\\s+on\\s+function\\s+public\\.${functionName}\\(${signature.replaceAll(" ", "\\s*")}\\)\\s+from\\s+public,\\s*anon,\\s*authenticated`,
+          "i"
+        )
+      )
+    }
+  })
+
+  it("makes payment verification invoice linkage atomic at the database layer", () => {
+    const invariant = migration("20260604006000_payment_verification_invoice_invariant.sql")
+
+    expect(invariant).toMatch(/payments_verified_invoice_required_chk/i)
+    expect(invariant).toMatch(
+      /status\s+<>\s+'verified'::public\.payment_status_enum\s+or\s+invoice_id\s+is\s+not\s+null/i
+    )
+    expect(invariant).toMatch(/not\s+valid/i)
+    expect(invariant).toMatch(/create\s+or\s+replace\s+function\s+public\.verify_payment_atomic/i)
+    expect(invariant).toMatch(/for\s+update/i)
+    expect(invariant).toMatch(/auth\.role\(\)[\s\S]*auth\.uid\(\)/i)
+    expect(invariant).toMatch(/payment_verifier_actor_mismatch/i)
+    expect(invariant).toMatch(/public\.can_manage_finance\(v_payment\.organization_id,\s*v_payment\.hostel_id\)/i)
+    expect(invariant).toMatch(/payment_verification_forbidden/i)
+    expect(invariant).toMatch(/payment_proof_required/i)
+    expect(invariant).toMatch(/public\.create_monthly_fee_invoice_atomic/i)
+    expect(invariant).toMatch(/:payment-receipt:/i)
+    expect(invariant).toMatch(/:invoice:/i)
+    expect(invariant).toMatch(/metadata->>'source'\s+=\s+'payment_receipt'/i)
+    expect(invariant).toMatch(/insert\s+into\s+public\.invoices/i)
+    expect(invariant).toMatch(/verified_payment_requires_invoice/i)
+    expect(invariant).toMatch(
+      /invoice_id\s+=\s+v_payment\.invoice_id,[\s\S]*status\s+=\s+'verified'::public\.payment_status_enum/i
+    )
+    const requiredInvoiceGuard = invariant.indexOf(
+      "raise exception 'verified_payment_requires_invoice'"
+    )
+    expect(requiredInvoiceGuard).toBeGreaterThan(-1)
+    expect(
+      invariant.indexOf("status = 'verified'::public.payment_status_enum", requiredInvoiceGuard)
+    ).toBeGreaterThan(requiredInvoiceGuard)
+    expect(invariant).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.verify_payment_atomic\(uuid,\s*uuid,\s*uuid,\s*text\)\s+to\s+authenticated,\s*service_role/i
     )
   })
 
@@ -422,5 +534,33 @@ describe("static migration security checks", () => {
     expect(userGuard).toMatch(/privileged_user_hard_delete_blocked/i)
     expect(userGuard).toMatch(/old\.default_role::text\s+not\s+in\s+\('resident',\s*'parent'\)/i)
     expect(userGuard).toMatch(/ur\.role::text\s+not\s+in\s+\('resident',\s*'parent'\)/i)
+  })
+
+  it("blocks production destructive operations at the database layer", () => {
+    const guard = migration("20260604004000_production_destructive_operation_guard.sql")
+
+    expect(guard).toMatch(/create\s+table\s+if\s+not\s+exists\s+public\.operational_safety_settings/i)
+    expect(guard).toMatch(/launch_mode\s+text\s+not\s+null\s+default\s+'production'/i)
+    expect(guard).toMatch(/next_public_launch_mode\s+text\s+not\s+null\s+default\s+'production'/i)
+    expect(guard).toMatch(/destructive_operations_enabled\s+boolean\s+not\s+null\s+default\s+false/i)
+    expect(guard).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.assert_non_production_destructive_operation/i
+    )
+    expect(guard).toMatch(/production_destructive_operation_blocked/i)
+    expect(guard).toMatch(
+      /perform\s+public\.assert_non_production_destructive_operation\(\s*'reset_resident_operational_data_for_staging'/i
+    )
+
+    for (const table of [
+      "payments",
+      "invoices",
+      "monthly_fee_records",
+      "residents",
+      "documents",
+    ]) {
+      expect(guard).toMatch(
+        new RegExp(`before\\s+delete\\s+on\\s+public\\.${table}`, "i")
+      )
+    }
   })
 })

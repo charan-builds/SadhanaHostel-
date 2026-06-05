@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
+import { trackResidentRegistration } from "@/lib/analytics/google-analytics"
 import { FrontendApiError } from "@/lib/api-client"
 import {
   useCurrentResident,
@@ -119,6 +120,10 @@ export function OnboardingClient() {
         parentPhone: values.parentPhone || undefined,
         emergencyContactPhone: values.emergencyContactPhone || undefined,
         permanentAddress: values.permanentAddress || undefined,
+      })
+      trackResidentRegistration({
+        source: "auth_onboarding",
+        status: "details_saved",
       })
       toast.success("Onboarding details saved.")
     } catch (error) {

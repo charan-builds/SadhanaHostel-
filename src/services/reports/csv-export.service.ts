@@ -1,5 +1,6 @@
 import "server-only"
 
+import { escapeCsvCell } from "@/lib/csv"
 import type { ReportDefinition, ReportRow } from "./types"
 
 export class CsvExportService {
@@ -25,15 +26,9 @@ export class CsvExportService {
 }
 
 function renderCsvRow(values: ReportRow[string][]) {
-  return values.map((value) => csvEscape(value)).join(",")
+  return values.map((value) => escapeCsvCell(value)).join(",")
 }
 
 function csvEscape(value: unknown) {
-  const normalized = value === undefined || value === null ? "" : String(value)
-
-  if (!/[",\n\r]/.test(normalized)) {
-    return normalized
-  }
-
-  return `"${normalized.replace(/"/g, "\"\"")}"`
+  return escapeCsvCell(value)
 }

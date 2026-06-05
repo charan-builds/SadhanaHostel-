@@ -1,4 +1,5 @@
 import {
+  assertSameOriginMutation,
   errorResponse,
   getQueryParams,
   successResponse,
@@ -14,6 +15,8 @@ type GalleryRouteContext = {
 
 export async function DELETE(request: Request, context: GalleryRouteContext) {
   try {
+    assertSameOriginMutation(request)
+
     const { id } = await context.params
     const { organizationId } = getQueryParams(request)
     const service = await WebsiteService.create()

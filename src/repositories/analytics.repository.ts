@@ -213,7 +213,7 @@ export class AnalyticsRepository {
       .eq("organization_id", organizationId)
       .eq("status", "verified")
       .gte("verified_at", fromDate)
-      .lt("verified_at", toDate)
+      .lte("verified_at", toDate)
       .is("deleted_at", null)
 
     if (hostelId) {

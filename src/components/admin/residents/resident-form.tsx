@@ -22,12 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { hostelModules } from "@/config/hostel-modules"
 import { HOSTEL_FEES } from "@/constants/hostel"
 import { useAuth } from "@/lib/auth"
+import { trackResidentRegistration } from "@/lib/analytics/google-analytics"
 import { FrontendApiError } from "@/lib/api-client"
 import { formatCurrency } from "@/lib/format"
-import { useAdmissionsVacancy, useCreateResident, useCreateResidentInvite, useUpdateResident } from "@/hooks"
+import { useCreateResident, useCreateResidentInvite, useUpdateResident } from "@/hooks"
 import type { ResidentInviteCreated } from "@/types/invites"
 import type { Tables } from "@/types/database"
 
@@ -80,11 +80,10 @@ const residentFormSchema = z.object({
     manualReference: optionalTextSchema.pipe(z.string().max(120).optional()),
     notes: optionalTextSchema.pipe(z.string().max(1000).optional()),
   })).default([]),
-  roomId: z.string().uuid("Choose an available room.").optional().or(z.literal("")),
-  bedLabel: optionalTextSchema.pipe(z.string().max(40).optional()),
-  allocatedFrom: optionalTextSchema,
   notes: optionalTextSchema.pipe(z.string().max(1000).optional()),
-  status: z.enum(["draft", "active", "suspended", "checked_out", "archived"]).optional(),
+  status: z
+    .enum(["draft", "pending_finance", "active", "suspended", "checked_out", "archived"])
+    .optional(),
 }).superRefine((value, context) => {
   if (value.advancePaymentStatus === "paid" && value.advancePaymentAmount <= 0) {
     context.addIssue({
@@ -140,14 +139,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
   const [createdAdvancePayment, setCreatedAdvancePayment] = useState<Tables<"payments"> | null>(null)
   const [createdFirstMonthFeePayment, setCreatedFirstMonthFeePayment] = useState<Tables<"payments"> | null>(null)
   const [duplicateDetails, setDuplicateDetails] = useState<DuplicateResidentDetails | null>(null)
-  const vacancyQuery = useAdmissionsVacancy({
-    organizationId: organizationId ?? "",
-    hostelId: hostelId ?? undefined,
-  })
-  const availableRooms =
-    vacancyQuery.data?.rooms.filter(
-      (room) => room.room_status === "active" && room.available_beds > 0
-    ) ?? []
   const {
     control,
     register,
@@ -184,9 +175,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       firstMonthFeeManualReference: "",
       firstMonthFeeNotes: "",
       openingMonthlyFees: [],
-      roomId: "",
-      bedLabel: "",
-      allocatedFrom: new Date().toISOString().slice(0, 10),
       notes: resident?.notes ?? "",
       status: resident?.status ?? "draft",
     },
@@ -304,9 +292,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
             firstMonthFeeManualReference: values.firstMonthFeeManualReference || undefined,
             firstMonthFeeNotes: values.firstMonthFeeNotes || undefined,
             openingMonthlyFees: values.openingMonthlyFees,
-            roomId: values.roomId || undefined,
-            bedLabel: undefined,
-            allocatedFrom: values.allocatedFrom || undefined,
             notes: values.notes || undefined,
             inviteDeliveryChannel:
               accessMode === "temporary_password" ? "temp_password" : "whatsapp",
@@ -322,6 +307,11 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
       if (!resident) {
         setCreatedResident(savedResident)
         setCreatedInvite(generatedInvite)
+        trackResidentRegistration({
+          source: "admin_resident_form",
+          status: savedResident.status,
+          resident_type: savedResident.resident_type,
+        })
 
         toast.success(
           accessMode === "temporary_password"
@@ -504,7 +494,7 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   Mark this when the resident has already paid advance. It is saved as a
-                  verified advance payment and appears in the admin and resident ledgers.
+                  verified advance payment and appears in the Finance module.
                 </p>
               </div>
               <Field id="advancePaymentStatus" label="Advance status" error={errors.advancePaymentStatus?.message}>
@@ -751,48 +741,6 @@ export function ResidentForm({ resident, onSaved, onCancel }: ResidentFormProps)
               </div>
             ) : null}
           </div>
-        ) : null}
-        {!resident && hostelModules.roomAllocation ? (
-          <>
-            <div className="md:col-span-2">
-              <h3 className="text-sm font-semibold text-foreground">Room assignment</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Save a preferred room for the resident. It can be activated if capacity is still available.
-              </p>
-            </div>
-            <Field id="roomId" label="Preferred room" error={errors.roomId?.message}>
-              <Controller
-                control={control}
-                name="roomId"
-                render={({ field }) => (
-                  <Select
-                    value={field.value || "none"}
-                    onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
-                    disabled={vacancyQuery.isLoading}
-                  >
-                    <SelectTrigger id="roomId" className="h-9 w-full">
-                      <SelectValue
-                        placeholder={
-                          vacancyQuery.isLoading ? "Loading rooms" : "Choose preferred room"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Do not assign yet</SelectItem>
-                      {availableRooms.map((room) => (
-                        <SelectItem key={room.room_id} value={room.room_id}>
-                          {room.room_number} · {room.available_beds} student vacancies
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-            <Field id="allocatedFrom" label="Allocated from" error={errors.allocatedFrom?.message}>
-              <Input id="allocatedFrom" type="date" {...register("allocatedFrom")} />
-            </Field>
-          </>
         ) : null}
         {!isCreate ? (
           <Field id="permanentAddress" label="Permanent address" error={errors.permanentAddress?.message} className="md:col-span-2">

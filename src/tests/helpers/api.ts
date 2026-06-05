@@ -5,14 +5,20 @@ export function createJsonRequest(
   body?: Record<string, unknown>,
   init: RequestInit = {}
 ) {
-  return new Request(`http://localhost${path}`, {
-    method: init.method ?? "POST",
-    headers: {
+  const method = init.method ?? "POST"
+  const headers = withBrowserMutationHeaders(
+    {
       "content-type": "application/json",
       ...Object.fromEntries(new Headers(init.headers).entries()),
     },
-    body: body ? JSON.stringify(body) : init.body,
+    method
+  )
+
+  return new Request(`http://localhost${path}`, {
     ...init,
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : init.body,
   })
 }
 
@@ -38,6 +44,7 @@ export function createMultipartRequest(path: string, fields: Record<string, stri
 
   return new Request(`http://localhost${path}`, {
     method: "POST",
+    headers: withBrowserMutationHeaders({}, "POST"),
     body: formData,
   })
 }
@@ -50,4 +57,21 @@ export function routeContext<TParams extends Record<string, string>>(params: TPa
   return {
     params: Promise.resolve(params),
   }
+}
+
+function withBrowserMutationHeaders(headersInit: HeadersInit, method: string) {
+  const headers = new Headers(headersInit)
+  const normalizedMethod = method.toUpperCase()
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod)) {
+    if (!headers.has("origin")) {
+      headers.set("origin", "http://localhost")
+    }
+
+    if (!headers.has("sec-fetch-site")) {
+      headers.set("sec-fetch-site", "same-origin")
+    }
+  }
+
+  return headers
 }

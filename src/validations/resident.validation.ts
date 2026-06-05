@@ -61,9 +61,6 @@ const createResidentBaseSchema = z.object({
     )
     .max(12, "Record at most 12 previous monthly fees during quick admission.")
     .default([]),
-  roomId: uuidSchema.optional(),
-  bedLabel: z.string().trim().max(40).optional(),
-  allocatedFrom: dateOnlySchema.optional(),
   notes: z.string().trim().max(1000).optional(),
   inviteDeliveryChannel: z
     .enum(["copy_link", "email", "whatsapp", "sms_ready", "temp_password"])
@@ -125,9 +122,6 @@ export const updateResidentSchema = createResidentBaseSchema
     organizationId: true,
     hostelId: true,
     admissionNumber: true,
-    roomId: true,
-    bedLabel: true,
-    allocatedFrom: true,
     advancePaymentAmount: true,
     advancePaymentMethod: true,
     advanceManualReference: true,

@@ -1,4 +1,7 @@
 import { Client } from "pg"
+import { loadEnvConfig } from "@next/env"
+
+loadEnvConfig(process.cwd())
 
 type CheckResult = {
   name: string

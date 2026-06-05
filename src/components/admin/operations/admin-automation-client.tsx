@@ -739,7 +739,7 @@ function RecommendedAutomationPanel({
     <section className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Recommended automation for critical issues</h2>
+        <h2 className="text-sm font-semibold">Recommended automation for urgent issues</h2>
         <Badge variant="destructive">
           {consistencyFindings.length + identityFindings.length} urgent finding(s)
         </Badge>
@@ -1050,6 +1050,8 @@ function automationInstruction(action: ConsistencyRepairAction) {
     reconcile_dues: "Run Dues Reconciliation to cancel invalid unpaid dues and linked invoices.",
     release_stale_allocations: "Run Repair Occupancy to close stale allocations and refresh vacancy.",
     repair_analytics: "Run Analytics Repair to refresh hostel capacity snapshots.",
+    repair_financial_reconciliation:
+      "Run Financial Reconciliation to repair invoice and receipt links.",
     repair_tenant_linkage: "Run Tenant Linkage Repair to rescope records to the correct organization or hostel.",
     resync_auth_linkage: "Run Auth Linkage Repair to synchronize resident login and access state.",
     run_consistency_scan: "Run Consistency Scan to refresh the report before applying repairs.",

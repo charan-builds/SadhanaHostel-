@@ -9,6 +9,15 @@ const localSiteUrl = "http://localhost:3002"
 export const localSeoKeywords = [
   "Sadhana Boys Hostel",
   "Sadhana Hostel",
+  "boys hostel in Tirupati",
+  "Tirupati boys hostel",
+  "best boys hostel in Tirupati",
+  "student hostel in Tirupati",
+  "student accommodation Tirupati",
+  "hostel near colleges in Tirupati",
+  "hostel near degree college Tirupati",
+  "hostel near engineering college Tirupati",
+  "affordable hostel Tirupati",
   "boys hostel in Pulivendula",
   "Pulivendula boys hostel",
   "best boys hostel in Pulivendula",
@@ -137,7 +146,13 @@ function normalizeSiteUrlCandidate(value?: string | null) {
   const withProtocol = /^https?:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`
 
   try {
-    return new URL(withProtocol).origin
+    const url = new URL(withProtocol)
+
+    if (url.protocol === "http:" && !isLocalHostname(url.hostname)) {
+      url.protocol = "https:"
+    }
+
+    return url.origin
   } catch {
     return null
   }
@@ -147,12 +162,17 @@ function isLocalOrPlaceholderSiteUrl(value: string) {
   const hostname = new URL(value).hostname.toLowerCase()
 
   return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
+    isLocalHostname(hostname) ||
     hostname.endsWith(".local") ||
     hostname.includes("example.com") ||
     hostname.includes("placeholder")
   )
+}
+
+function isLocalHostname(hostname: string) {
+  const normalizedHostname = hostname.toLowerCase()
+
+  return normalizedHostname === "localhost" || normalizedHostname === "127.0.0.1"
 }
 
 function isProductionLikeEnvironment() {
@@ -287,7 +307,7 @@ export function createPublicSiteJsonLd() {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": ["LodgingBusiness", "Hostel"],
+        "@type": ["LocalBusiness", "LodgingBusiness", "Hostel"],
         "@id": businessId,
         name: hostelConfig.name,
         alternateName: hostelConfig.shortName,
@@ -318,6 +338,9 @@ export function createPublicSiteJsonLd() {
           "Palem Street",
           "Royals Road",
           "Pulivendula Andhra Pradesh",
+          "Tirupati",
+          "Tirupati Andhra Pradesh",
+          "Tirupati student accommodation",
         ],
         hasMap: hostelConfig.links.mapSearchHref,
         sameAs: [hostelConfig.links.mapSearchHref],
