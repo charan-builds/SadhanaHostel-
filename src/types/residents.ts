@@ -1,6 +1,13 @@
 import type { Tables } from "./database"
 import type { ResidentInviteCreated } from "./invites"
 
+export type CurrentResidentProfile = Tables<"residents"> & {
+  current_room_allocation_id?: string | null
+  current_room_number?: string | null
+  current_room_name?: string | null
+  current_bed_label?: string | null
+}
+
 export type ResidentCreateResult = {
   resident: Tables<"residents">
   invite: ResidentInviteCreated | null

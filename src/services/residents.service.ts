@@ -23,7 +23,11 @@ import { UploadsRepository } from "@/repositories/uploads.repository"
 import type { Json } from "@/types/database"
 import { UsersRepository } from "@/repositories/users.repository"
 import type { ResidentInviteCreated } from "@/types/invites"
-import type { ResidentCreateResult, ResidentPasswordResetResult } from "@/types/residents"
+import type {
+  CurrentResidentProfile,
+  ResidentCreateResult,
+  ResidentPasswordResetResult,
+} from "@/types/residents"
 import { RealtimeEventPublisher } from "@/services/realtime/event-publisher"
 import type { RealtimeEventType } from "@/services/realtime/event-types"
 import { RealtimeService } from "@/services/realtime/realtime.service"
@@ -233,7 +237,7 @@ export class ResidentsService {
     return assertFound(resident, "Resident not found.")
   }
 
-  async getCurrentResident(organizationId?: string) {
+  async getCurrentResident(organizationId?: string): Promise<CurrentResidentProfile> {
     const context = await this.authService.getCurrentContext()
     const targetOrganizationId = organizationId ?? context.organizationId
 
@@ -247,8 +251,22 @@ export class ResidentsService {
       context.authUser.id,
       targetOrganizationId
     )
+    const currentResident = assertFound(
+      resident,
+      "Resident profile is not linked to this account yet."
+    )
+    const roomAssignment = await this.residentsRepository.getCurrentRoomAssignment(
+      currentResident.id,
+      targetOrganizationId
+    )
 
-    return assertFound(resident, "Resident profile is not linked to this account yet.")
+    return {
+      ...currentResident,
+      current_room_allocation_id: roomAssignment?.id ?? null,
+      current_room_number: roomAssignment?.roomNumber ?? null,
+      current_room_name: roomAssignment?.roomName ?? null,
+      current_bed_label: roomAssignment?.bedLabel ?? null,
+    }
   }
 
   async createResident(input: unknown): Promise<ResidentCreateResult> {

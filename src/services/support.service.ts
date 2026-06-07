@@ -9,7 +9,6 @@ import { logError } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
-import { AdmissionsService } from "@/services/admissions.service"
 import { NotificationService } from "@/services/notifications"
 import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import { OperationsRepository } from "@/repositories/operations.repository"
@@ -51,20 +50,27 @@ import { scanConsistency } from "./operations/consistency.service"
 export class SupportService {
   private readonly authService: AuthService
   private readonly supportRepository: SupportRepository
+  private readonly adminSupportRepository: SupportRepository
   private readonly residentsRepository: ResidentsRepository
-  private readonly paymentsRepository: PaymentsRepository
-  private readonly paymentSettingsRepository: PaymentSettingsRepository
-  private readonly operationsRepository: OperationsRepository
+  private readonly adminResidentsRepository: ResidentsRepository
+  private readonly adminPaymentsRepository: PaymentsRepository
+  private readonly adminPaymentSettingsRepository: PaymentSettingsRepository
+  private readonly adminOperationsRepository: OperationsRepository
   private readonly noticesRepository: NoticesRepository
   private readonly notificationService: NotificationService
 
-  constructor(private readonly db: AppSupabaseClient) {
+  constructor(
+    private readonly db: AppSupabaseClient,
+    private readonly adminDb: AppSupabaseClient = db
+  ) {
     this.authService = new AuthService(db)
     this.supportRepository = new SupportRepository(db)
+    this.adminSupportRepository = new SupportRepository(adminDb)
     this.residentsRepository = new ResidentsRepository(db)
-    this.paymentsRepository = new PaymentsRepository(db)
-    this.paymentSettingsRepository = new PaymentSettingsRepository(db)
-    this.operationsRepository = new OperationsRepository(db)
+    this.adminResidentsRepository = new ResidentsRepository(adminDb)
+    this.adminPaymentsRepository = new PaymentsRepository(adminDb)
+    this.adminPaymentSettingsRepository = new PaymentSettingsRepository(adminDb)
+    this.adminOperationsRepository = new OperationsRepository(adminDb)
     this.noticesRepository = new NoticesRepository(db)
     this.notificationService = new NotificationService(db)
   }
@@ -72,11 +78,13 @@ export class SupportService {
   static async create() {
     const db = await createSupabaseServerClient()
 
-    return new SupportService(db)
+    return new SupportService(db, createSupabaseAdminClient())
   }
 
   static createPublic() {
-    return new SupportService(createSupabaseAdminClient())
+    const adminDb = createSupabaseAdminClient()
+
+    return new SupportService(adminDb, adminDb)
   }
 
   async listRequests(input: unknown) {
@@ -436,24 +444,24 @@ export class SupportService {
       consistency,
       failedJobCount,
     ] = await Promise.all([
-      this.supportRepository.countPasswordResetRequests({
+      this.adminSupportRepository.countPasswordResetRequests({
         organizationId,
         hostelId,
         status: ["open", "in_progress"],
       }),
-      this.supportRepository.count({
+      this.adminSupportRepository.count({
         organizationId,
         hostelId,
         status: ["open", "in_progress"],
         workflow: "resident_report",
       }),
-      this.supportRepository.count({
+      this.adminSupportRepository.count({
         organizationId,
         hostelId,
         status: ["open", "in_progress", "waiting_on_resident"],
         priority: ["high", "urgent"],
       }),
-      this.supportRepository.count({
+      this.adminSupportRepository.count({
         organizationId,
         hostelId,
         status: ["open", "in_progress", "waiting_on_resident"],
@@ -476,12 +484,12 @@ export class SupportService {
       financeAlertsEnabled
         ? this.hasActivePaymentSettings(organizationId, hostelId ?? undefined)
         : Promise.resolve(true),
-      scanConsistency(this.operationsRepository, {
+      scanConsistency(this.adminOperationsRepository, {
         organizationId,
         hostelId,
         actorUserId: context.authUser.id,
       }),
-      this.operationsRepository.count("audit_logs", {
+      this.adminOperationsRepository.count("audit_logs", {
         organizationId,
         equals: { action: "job.failed" },
         gte: {
@@ -771,7 +779,7 @@ export class SupportService {
     hostelId: string | undefined,
     statuses: Array<"profile_incomplete" | "documents_pending" | "verification_pending" | "rejected">
   ) {
-    const result = await this.residentsRepository.listOnboardingQueue({
+    const result = await this.adminResidentsRepository.listOnboardingQueue({
       organizationId,
       hostelId,
       onboardingStatuses: statuses,
@@ -787,7 +795,7 @@ export class SupportService {
     hostelId: string | undefined,
     status: "pending" | "failed"
   ) {
-    const result = await this.paymentsRepository.list({
+    const result = await this.adminPaymentsRepository.list({
       organizationId,
       hostelId,
       status,
@@ -800,10 +808,17 @@ export class SupportService {
 
   private async loadVacancy(organizationId: string, hostelId?: string) {
     try {
-      const admissionsService = new AdmissionsService(this.db)
-      const payload = await admissionsService.getVacancy({ organizationId, hostelId })
+      const [vacancy] = await new AdmissionsRepository(this.adminDb).getVacancy(
+        organizationId,
+        hostelId
+      )
 
-      return payload.summary
+      return vacancy
+        ? {
+            ...vacancy,
+            available_beds: Math.max(vacancy.total_beds - vacancy.occupied_beds, 0),
+          }
+        : null
     } catch (error) {
       logError(error, {
         event: "support.alerts.vacancy_failed",
@@ -820,7 +835,7 @@ export class SupportService {
       return false
     }
 
-    const setting = await this.paymentSettingsRepository.getActive(organizationId, hostelId)
+    const setting = await this.adminPaymentSettingsRepository.getActive(organizationId, hostelId)
 
     return Boolean(setting)
   }

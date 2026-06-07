@@ -1024,9 +1024,11 @@ export type Database = {
           id: string
           is_active: boolean
           is_pinned: boolean
+          notice_type: string
           organization_id: string
           published_at: string | null
           published_by: string | null
+          requires_acknowledgement: boolean
           status: Database["public"]["Enums"]["cms_status_enum"]
           title: string
           updated_at: string
@@ -1045,9 +1047,11 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_pinned?: boolean
+          notice_type?: string
           organization_id: string
           published_at?: string | null
           published_by?: string | null
+          requires_acknowledgement?: boolean
           status?: Database["public"]["Enums"]["cms_status_enum"]
           title: string
           updated_at?: string
@@ -1066,9 +1070,11 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_pinned?: boolean
+          notice_type?: string
           organization_id?: string
           published_at?: string | null
           published_by?: string | null
+          requires_acknowledgement?: boolean
           status?: Database["public"]["Enums"]["cms_status_enum"]
           title?: string
           updated_at?: string
@@ -1113,6 +1119,190 @@ export type Database = {
           {
             foreignKeyName: "notices_updated_by_fkey"
             columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notice_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          created_at: string
+          created_by: string | null
+          hostel_id: string | null
+          id: string
+          notice_id: string
+          organization_id: string
+          resident_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          acknowledged_at?: string
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          notice_id: string
+          organization_id: string
+          resident_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          acknowledged_at?: string
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          notice_id?: string
+          organization_id?: string
+          resident_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_acknowledgements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_notice_id_fkey"
+            columns: ["notice_id"]
+            isOneToOne: false
+            referencedRelation: "notices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_acknowledgements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notice_reads: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          hostel_id: string | null
+          id: string
+          notice_id: string
+          organization_id: string
+          read_at: string
+          resident_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          notice_id: string
+          organization_id: string
+          read_at?: string
+          resident_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          notice_id?: string
+          organization_id?: string
+          read_at?: string
+          resident_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_reads_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_notice_id_fkey"
+            columns: ["notice_id"]
+            isOneToOne: false
+            referencedRelation: "notices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_reads_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1220,7 +1410,10 @@ export type Database = {
       }
       notifications: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           body: string
+          category: string
           channel: Database["public"]["Enums"]["notification_channel_enum"]
           created_at: string
           created_by: string | null
@@ -1234,6 +1427,7 @@ export type Database = {
           notice_id: string | null
           organization_id: string
           payload: Json
+          priority: string
           read_at: string | null
           recipient_user_id: string | null
           resident_id: string | null
@@ -1246,7 +1440,10 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           body: string
+          category?: string
           channel?: Database["public"]["Enums"]["notification_channel_enum"]
           created_at?: string
           created_by?: string | null
@@ -1260,6 +1457,7 @@ export type Database = {
           notice_id?: string | null
           organization_id: string
           payload?: Json
+          priority?: string
           read_at?: string | null
           recipient_user_id?: string | null
           resident_id?: string | null
@@ -1272,7 +1470,10 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           body?: string
+          category?: string
           channel?: Database["public"]["Enums"]["notification_channel_enum"]
           created_at?: string
           created_by?: string | null
@@ -1286,6 +1487,7 @@ export type Database = {
           notice_id?: string | null
           organization_id?: string
           payload?: Json
+          priority?: string
           read_at?: string | null
           recipient_user_id?: string | null
           resident_id?: string | null
@@ -1298,6 +1500,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_created_by_fkey"
             columns: ["created_by"]
@@ -1740,6 +1949,125 @@ export type Database = {
           {
             foreignKeyName: "payments_verified_by_fkey"
             columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth_key: string
+          created_at: string
+          created_by: string | null
+          device_label: string | null
+          endpoint: string
+          failure_count: number
+          hostel_id: string | null
+          id: string
+          last_seen_at: string
+          last_sent_at: string | null
+          organization_id: string
+          p256dh_key: string
+          platform: string | null
+          resident_id: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          updated_at: string
+          updated_by: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          created_by?: string | null
+          device_label?: string | null
+          endpoint: string
+          failure_count?: number
+          hostel_id?: string | null
+          id?: string
+          last_seen_at?: string
+          last_sent_at?: string | null
+          organization_id: string
+          p256dh_key: string
+          platform?: string | null
+          resident_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          created_by?: string | null
+          device_label?: string | null
+          endpoint?: string
+          failure_count?: number
+          hostel_id?: string | null
+          id?: string
+          last_seen_at?: string
+          last_sent_at?: string | null
+          organization_id?: string
+          p256dh_key?: string
+          platform?: string | null
+          resident_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]

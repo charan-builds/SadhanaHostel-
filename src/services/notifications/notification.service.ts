@@ -3,7 +3,13 @@ import "server-only"
 import { logError, logger } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { measureAsync } from "@/lib/performance"
+import {
+  resolveNotificationCatalog,
+  type NotificationCategory,
+  type NotificationPriority,
+} from "@/lib/notifications/catalog"
 import { sanitizeNotificationText } from "@/lib/security"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import {
   NotificationsRepository,
@@ -12,6 +18,7 @@ import {
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
 import {
+  archiveNotificationSchema,
   markAllNotificationsReadSchema,
   markNotificationReadSchema,
   notificationListSchema,
@@ -28,6 +35,7 @@ import type {
 } from "./types"
 import { WhatsappProvider } from "./whatsapp.provider"
 import { AuthService } from "../auth.service"
+import { WebPushService } from "../pwa/web-push.service"
 import { RealtimeService } from "../realtime"
 
 export type QueueNotificationInput = {
@@ -39,18 +47,27 @@ export type QueueNotificationInput = {
   message: NotificationMessage
   scheduledFor?: string | null
   actorUserId?: string | null
+  category?: NotificationCategory
+  priority?: NotificationPriority
 }
 
 export class NotificationService {
   private readonly authService: AuthService
   private readonly notificationsRepository: NotificationsRepository
+  private readonly adminNotificationsRepository: NotificationsRepository
   private readonly providers: Record<NotificationChannel, NotificationProvider>
   private readonly realtimeService: RealtimeService
+  private readonly webPushService: WebPushService
 
-  constructor(private readonly db: AppSupabaseClient) {
+  constructor(
+    private readonly db: AppSupabaseClient,
+    adminDb: AppSupabaseClient = db
+  ) {
     this.authService = new AuthService(db)
     this.notificationsRepository = new NotificationsRepository(db)
+    this.adminNotificationsRepository = new NotificationsRepository(adminDb)
     this.realtimeService = new RealtimeService(db)
+    this.webPushService = new WebPushService(adminDb)
     this.providers = {
       email: new EmailProvider(),
       sms: new SmsProvider(),
@@ -62,11 +79,17 @@ export class NotificationService {
   static async create() {
     const db = await createSupabaseServerClient()
 
-    return new NotificationService(db)
+    return new NotificationService(db, createSupabaseAdminClient())
   }
 
   async queue(input: QueueNotificationInput) {
     const channel = input.channel ?? "in_app"
+    const catalog = resolveNotificationCatalog({
+      templateKey: input.message.templateKey,
+      noticeId: input.noticeId,
+      category: input.category ?? input.message.category,
+      priority: input.priority ?? input.message.priority,
+    })
     const notification = await this.notificationsRepository.create({
       organization_id: input.organizationId,
       hostel_id: input.hostelId,
@@ -78,6 +101,8 @@ export class NotificationService {
       body: sanitizeNotificationText(input.message.body),
       template_key: input.message.templateKey,
       payload: input.message.payload ?? {},
+      category: catalog.category,
+      priority: catalog.priority,
       scheduled_for: input.scheduledFor,
       status: input.scheduledFor ? "queued" : "queued",
       created_by: input.actorUserId,
@@ -96,6 +121,10 @@ export class NotificationService {
       recipientUserId: notification.recipient_user_id,
       residentId: notification.resident_id,
     })
+
+    if (channel === "in_app" && shouldSendPushNow(input.scheduledFor)) {
+      await this.webPushService.sendForNotification(notification)
+    }
 
     return notification
   }
@@ -125,7 +154,7 @@ export class NotificationService {
 
     this.authService.requireOrganizationAccess(context, values.organizationId)
 
-    return this.notificationsRepository.markRead({
+    return this.adminNotificationsRepository.markRead({
       notificationId,
       organizationId: values.organizationId,
       recipientUserId: context.authUser.id,
@@ -144,13 +173,27 @@ export class NotificationService {
       : undefined
 
     return {
-      updated: await this.notificationsRepository.markAllRead({
+      updated: await this.adminNotificationsRepository.markAllRead({
         organizationId: values.organizationId,
         hostelId: hostelId ?? undefined,
         recipientUserId: context.authUser.id,
         actorUserId: context.authUser.id,
       }),
     }
+  }
+
+  async archive(notificationId: string, input: unknown) {
+    const values = archiveNotificationSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    return this.adminNotificationsRepository.archive({
+      notificationId,
+      organizationId: values.organizationId,
+      recipientUserId: context.authUser.id,
+      actorUserId: context.authUser.id,
+    })
   }
 
   async send(input: NotificationSendInput) {
@@ -265,4 +308,12 @@ export class NotificationService {
       has_phone: Boolean(input.recipient.phone),
     }
   }
+}
+
+function shouldSendPushNow(scheduledFor?: string | null) {
+  if (!scheduledFor) {
+    return true
+  }
+
+  return new Date(scheduledFor).getTime() <= Date.now()
 }

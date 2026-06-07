@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
+  CurrentResidentProfile,
   ResidentCreateResult,
   ResidentLifecycleRepairResult,
   ResidentPasswordResetResult,
@@ -32,7 +33,7 @@ export const residentsSdk = {
   },
 
   me(organizationId: string) {
-    return apiClient.get<Tables<"residents">>("/api/residents/me", {
+    return apiClient.get<CurrentResidentProfile>("/api/residents/me", {
       organizationId,
     })
   },
