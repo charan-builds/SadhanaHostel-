@@ -1,11 +1,14 @@
 import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
+  BrandingUploadInput,
   BootstrapAdminTenantInput,
   HostelCreateInput,
   HostelUpdateInput,
   UpdateOrganizationInput,
 } from "@/validations/platform.validation"
+
+import { uploadFile, type UploadOptions } from "./uploads.sdk"
 
 export type SetupStatus = {
   setupRequired: boolean
@@ -18,6 +21,13 @@ export type SetupStatus = {
 export type BootstrapTenantResult = {
   organization: Tables<"organizations">
   hostel: Tables<"hostels">
+}
+
+export type BrandingUploadResult = {
+  imageKind: BrandingUploadInput["imageKind"]
+  document: Tables<"documents">
+  storagePath: string
+  publicUrl: string
 }
 
 export const platformSdk = {
@@ -41,6 +51,19 @@ export const platformSdk = {
     return apiClient.patch<Tables<"organizations">, UpdateOrganizationInput>(
       "/api/platform/organization",
       input
+    )
+  },
+
+  uploadBrandingImage(
+    input: BrandingUploadInput,
+    file: File,
+    options?: UploadOptions
+  ) {
+    return uploadFile<BrandingUploadResult>(
+      "/api/platform/branding/upload",
+      input,
+      file,
+      options
     )
   },
 

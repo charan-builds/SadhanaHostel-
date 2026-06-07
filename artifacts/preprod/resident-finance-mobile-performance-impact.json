@@ -1,0 +1,111 @@
+{
+  "route": "/resident/payments",
+  "totalEntryJsBytes": 1115265,
+  "routeEntryChunks": [
+    {
+      "chunk": "static/chunks/0g8odlr1fnhhq.js",
+      "bytes": 35072
+    },
+    {
+      "chunk": "static/chunks/0y~lc13s-3o5u.js",
+      "bytes": 22932
+    },
+    {
+      "chunk": "static/chunks/0appppv0acqjl.js",
+      "bytes": 27405
+    },
+    {
+      "chunk": "static/chunks/119c42p~4qejt.js",
+      "bytes": 29964
+    },
+    {
+      "chunk": "static/chunks/0an872dgk~fji.js",
+      "bytes": 73709
+    },
+    {
+      "chunk": "static/chunks/0ro.5x95mdd5h.js",
+      "bytes": 31564
+    },
+    {
+      "chunk": "static/chunks/07kfzabz_vgz..js",
+      "bytes": 594779
+    },
+    {
+      "chunk": "static/chunks/0qlh2bpzx8qv~.js",
+      "bytes": 64525
+    },
+    {
+      "chunk": "static/chunks/094fh3my3su19.js",
+      "bytes": 27447
+    },
+    {
+      "chunk": "static/chunks/0_rnmwly2u.zr.js",
+      "bytes": 146167
+    },
+    {
+      "chunk": "static/chunks/0lgavo4nf3qnz.js",
+      "bytes": 29107
+    },
+    {
+      "chunk": "static/chunks/02x27-t5fat3i.js",
+      "bytes": 32594
+    }
+  ],
+  "residentLayoutChunks": [
+    {
+      "chunk": "static/chunks/0g8odlr1fnhhq.js",
+      "bytes": 35072
+    },
+    {
+      "chunk": "static/chunks/0y~lc13s-3o5u.js",
+      "bytes": 22932
+    },
+    {
+      "chunk": "static/chunks/0appppv0acqjl.js",
+      "bytes": 27405
+    },
+    {
+      "chunk": "static/chunks/119c42p~4qejt.js",
+      "bytes": 29964
+    },
+    {
+      "chunk": "static/chunks/0an872dgk~fji.js",
+      "bytes": 73709
+    },
+    {
+      "chunk": "static/chunks/0ro.5x95mdd5h.js",
+      "bytes": 31564
+    },
+    {
+      "chunk": "static/chunks/07kfzabz_vgz..js",
+      "bytes": 594779
+    },
+    {
+      "chunk": "static/chunks/0qlh2bpzx8qv~.js",
+      "bytes": 64525
+    },
+    {
+      "chunk": "static/chunks/094fh3my3su19.js",
+      "bytes": 27447
+    },
+    {
+      "chunk": "static/chunks/0_rnmwly2u.zr.js",
+      "bytes": 146167
+    }
+  ],
+  "pageOnlyChunks": [
+    {
+      "chunk": "static/chunks/0lgavo4nf3qnz.js",
+      "bytes": 29107
+    },
+    {
+      "chunk": "static/chunks/02x27-t5fat3i.js",
+      "bytes": 32594
+    }
+  ],
+  "notes": [
+    "Payment history uses ledger.data.payments instead of usePayments list API.",
+    "Notifications query is enabled only when activeTab === \"reminders\".",
+    "qrcode is loaded with dynamic import inside QrPaymentSection."
+  ]
+}

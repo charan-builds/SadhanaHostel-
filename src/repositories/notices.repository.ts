@@ -139,4 +139,34 @@ export class NoticesRepository {
 
     return data ?? []
   }
+
+  async listAcknowledgementRequired(input: {
+    organizationId: string
+    hostelId?: string | null
+  }) {
+    let query = this.db
+      .from("notices")
+      .select("*")
+      .eq("organization_id", input.organizationId)
+      .eq("requires_acknowledgement", true)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+
+    if (input.hostelId) {
+      query = query.or(`hostel_id.is.null,hostel_id.eq.${input.hostelId}`)
+    }
+
+    const { data, error } = await query
+      .order("published_at", { ascending: false })
+      .range(0, 5_000)
+
+    if (error) {
+      throwRepositoryError(
+        error,
+        "Unable to load acknowledgement-required notices."
+      )
+    }
+
+    return data ?? []
+  }
 }

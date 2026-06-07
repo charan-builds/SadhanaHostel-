@@ -38,6 +38,13 @@ export type ResidentWithOnboarding = ResidentRow & {
   onboarding_metadata?: Record<string, unknown>
 }
 
+export type CurrentRoomAssignment = {
+  id: string
+  roomNumber: string | null
+  roomName: string | null
+  bedLabel: string | null
+}
+
 export type ListResidentsFilters = PaginationParams & {
   organizationId: string
   hostelId?: string
@@ -128,6 +135,49 @@ export class ResidentsRepository {
     }
 
     return data
+  }
+
+  async getCurrentRoomAssignment(
+    residentId: string,
+    organizationId: string
+  ): Promise<CurrentRoomAssignment | null> {
+    const { data: allocation, error: allocationError } = await this.db
+      .from("room_allocations")
+      .select("id, room_id, bed_label")
+      .eq("organization_id", organizationId)
+      .eq("resident_id", residentId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .order("allocated_from", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (allocationError) {
+      throwRepositoryError(allocationError, "Unable to load resident room assignment.")
+    }
+
+    if (!allocation) {
+      return null
+    }
+
+    const { data: room, error: roomError } = await this.db
+      .from("rooms")
+      .select("room_number, room_name")
+      .eq("organization_id", organizationId)
+      .eq("id", allocation.room_id)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (roomError) {
+      throwRepositoryError(roomError, "Unable to load resident room.")
+    }
+
+    return {
+      id: allocation.id,
+      roomNumber: room?.room_number ?? null,
+      roomName: room?.room_name ?? null,
+      bedLabel: allocation.bed_label ?? null,
+    }
   }
 
   async findPasswordResetCandidate(input: {

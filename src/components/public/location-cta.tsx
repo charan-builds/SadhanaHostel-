@@ -1,10 +1,5 @@
-import Link from "next/link"
-import type { Route } from "next"
-import { MapPin, Navigation, Phone } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref } from "@/constants/hostel"
-import { buildMapEmbedUrl, buildMapNavigationUrl } from "@/lib/public-gallery"
+import { buildMapNavigationUrl } from "@/lib/public-gallery"
 
 export function LocationCta({ mapLink }: { mapLink?: string | null }) {
   const locationHref = buildMapNavigationUrl(mapLink) || mapSearchHref
@@ -18,40 +13,52 @@ export function LocationCta({ mapLink }: { mapLink?: string | null }) {
             Boys hostel location in {hostelConfig.location.city}.
           </h2>
           <div className="mt-5 flex gap-3 text-slate-700">
-            <MapPin className="mt-1 size-5 shrink-0 text-blue-700" aria-hidden="true" />
+            <span className="mt-3 size-2 shrink-0 rounded-full bg-blue-700" aria-hidden="true" />
             <div>
               <p className="leading-7">{hostelConfig.location.address}</p>
               <p className="mt-2 font-medium text-slate-950">{hostelConfig.location.note}</p>
             </div>
           </div>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <Button asChild>
-              <a href={locationHref} target="_blank" rel="noreferrer">
-                <Navigation className="size-4" aria-hidden="true" />
-                Navigate
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href={callHref}>
-                <Phone className="size-4" aria-hidden="true" />
-                Call
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href={"/pulivendula-boys-hostel" as Route}>Hostel details</Link>
-            </Button>
+            <a
+              href={locationHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Navigate
+            </a>
+            <a
+              href={callHref}
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Call
+            </a>
+            <a
+              href="/pulivendula-boys-hostel"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Hostel details
+            </a>
           </div>
         </div>
 
-        <div className="min-h-72 overflow-hidden rounded-2xl border bg-white p-3 shadow-sm">
-          <iframe
-            title={`${hostelConfig.name} location map`}
-            src={buildMapEmbedUrl(mapLink)}
-            className="h-full min-h-72 w-full rounded-xl border-0"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            allowFullScreen
-          />
+        <div className="grid min-h-72 place-items-center rounded-2xl border bg-white p-6 text-center shadow-sm">
+          <div>
+            <span className="mx-auto block size-10 rounded-full bg-blue-700/10" aria-hidden="true" />
+            <h3 className="mt-4 text-xl font-semibold text-slate-950">Open the hostel map</h3>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600">
+              View directions and nearby roads in Google Maps when you are ready to visit.
+            </p>
+            <a
+              href={locationHref}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Open Map
+            </a>
+          </div>
         </div>
       </div>
     </section>

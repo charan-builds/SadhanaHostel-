@@ -1,6 +1,3 @@
-import { MessageCircle, Phone } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 
 export function FinalCta() {
@@ -17,28 +14,22 @@ export function FinalCta() {
           </p>
         </div>
         <div className="mt-7 flex flex-col gap-3 sm:flex-row lg:mt-0">
-          <Button asChild size="lg" className="h-11 bg-white px-4 text-slate-950 hover:bg-blue-50">
-            <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
-              <Phone className="size-4" aria-hidden="true" />
-              Call Now
-            </a>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="h-11 border-white/20 bg-white/10 px-4 text-white hover:bg-white/15"
+          <a
+            href={callHref}
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-white px-4 text-sm font-medium text-slate-950 shadow-sm transition-colors hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-white/40"
+            aria-label={`Call ${hostelConfig.name}`}
           >
-            <a
-              href={whatsappHref}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Message ${hostelConfig.name} on WhatsApp`}
-            >
-              <MessageCircle className="size-4" aria-hidden="true" />
-              WhatsApp
-            </a>
-          </Button>
+            Call Now
+          </a>
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-white/40"
+            aria-label={`Message ${hostelConfig.name} on WhatsApp`}
+          >
+            WhatsApp
+          </a>
         </div>
       </div>
     </section>

@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/react-query"
 import { noticesSdk } from "@/sdk"
 import type {
+  AcknowledgeNoticeInput,
   CreateNoticeInput,
+  MarkNoticeReadInput,
   NoticeListInput,
   UpdateNoticeInput,
 } from "@/validations/notice.validation"
@@ -42,6 +44,62 @@ export function useUpdateNotice() {
     onSuccess: (notice) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.notices.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useMarkNoticeRead() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      input,
+    }: {
+      noticeId: string
+      input: MarkNoticeReadInput
+    }) => noticesSdk.markRead(noticeId, input),
+    onSuccess: (notice) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notices.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useAcknowledgeNotice() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      noticeId,
+      input,
+    }: {
+      noticeId: string
+      input: AcknowledgeNoticeInput
+    }) => noticesSdk.acknowledge(noticeId, input),
+    onSuccess: (notice) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notices.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all({
           organizationId: notice.organization_id,
           hostelId: notice.hostel_id,
         }),

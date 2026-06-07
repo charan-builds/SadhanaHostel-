@@ -1,0 +1,18 @@
+{
+  "categories": {
+    "performance": 48,
+    "accessibility": 100,
+    "best-practices": 93,
+    "seo": 61
+  },
+  "audits": {
+    "first-contentful-paint": "1.0 s",
+    "largest-contentful-paint": "4.9 s",
+    "interactive": "5.9 s",
+    "total-blocking-time": "940 ms",
+    "cumulative-layout-shift": "0.249",
+    "speed-index": "3.2 s"
+  },
+  "lcp": "4,850 ms",
+  "runtimeError": null
+}

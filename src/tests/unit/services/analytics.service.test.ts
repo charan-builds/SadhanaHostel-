@@ -33,6 +33,20 @@ describe("AnalyticsService", () => {
           },
         ]),
       },
+      notificationsRepository: {
+        getCommunicationAnalytics: vi.fn().mockResolvedValue({
+          unreadNotifications: 0,
+          unreadNotices: 0,
+          unreadResidents: 0,
+          totalNoticeRecipients: 0,
+          readNoticeRecipients: 0,
+          unreadNoticeRecipients: 0,
+          noticeReadPercentage: 0,
+          feeReminderSent: 0,
+          feeReminderRead: 0,
+          feeReminderEngagement: 0,
+        }),
+      },
     })
 
     const result = await (
@@ -111,6 +125,48 @@ describe("AnalyticsService", () => {
           },
         ]),
       },
+      noticesRepository: {
+        listAcknowledgementRequired: vi.fn().mockResolvedValue([
+          {
+            id: "00000000-0000-4000-8000-000000000231",
+            requires_acknowledgement: true,
+          },
+        ]),
+      },
+      notificationsRepository: {
+        getCommunicationAnalytics: vi.fn().mockResolvedValue({
+          unreadNotifications: 0,
+          unreadNotices: 0,
+          unreadResidents: 0,
+          totalNoticeRecipients: 0,
+          readNoticeRecipients: 0,
+          unreadNoticeRecipients: 0,
+          noticeReadPercentage: 0,
+          feeReminderSent: 0,
+          feeReminderRead: 0,
+          feeReminderEngagement: 0,
+        }),
+        listNoticeRecipientStats: vi.fn().mockResolvedValue(
+          new Map([
+            [
+              "00000000-0000-4000-8000-000000000231",
+              {
+                totalRecipients: 2,
+                readCount: 1,
+                unreadCount: 1,
+                readPercentage: 50,
+              },
+            ],
+          ])
+        ),
+      },
+      noticeAcknowledgementsRepository: {
+        listAcknowledgementCountsByNotice: vi
+          .fn()
+          .mockResolvedValue(
+            new Map([["00000000-0000-4000-8000-000000000231", 1]])
+          ),
+      },
     })
 
     const result = await (
@@ -129,6 +185,14 @@ describe("AnalyticsService", () => {
             month: string
             revenue: number
           }>
+          communications: {
+            noticeAcknowledgementRates: {
+              totalRecipients: number
+              acknowledged: number
+              pending: number
+              percentage: number
+            }
+          }
         }>
       }
     ).loadOwnerDashboard(
@@ -142,5 +206,11 @@ describe("AnalyticsService", () => {
     expect(result.summary.revenue).toBe(3500)
     expect(trendRevenue).toBe(result.summary.revenue)
     expect(result.summary.activeResidents).toBe(1)
+    expect(result.communications.noticeAcknowledgementRates).toEqual({
+      totalRecipients: 2,
+      acknowledged: 1,
+      pending: 1,
+      percentage: 50,
+    })
   })
 })

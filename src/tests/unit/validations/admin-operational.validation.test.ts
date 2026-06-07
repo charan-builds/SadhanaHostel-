@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { TEST_HOSTEL_ID, TEST_ORGANIZATION_ID } from "@/tests/fixtures"
 import {
+  brandingUploadSchema,
   bootstrapAdminTenantSchema,
   hostelUpdateSchema,
   updateOrganizationSchema,
@@ -37,6 +38,15 @@ describe("admin operational validation", () => {
     })
 
     expect(result.success).toBe(true)
+  })
+
+  it("validates cropped branding uploads from organization settings", () => {
+    const result = brandingUploadSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      imageKind: "favicon",
+    })
+
+    expect(result.imageKind).toBe("favicon")
   })
 
   it("requires at least one real hostel update field", () => {

@@ -1,3 +1,5 @@
+import Image from "next/image"
+
 import { hostelConfig } from "@/constants/hostel"
 import { cn } from "@/lib/utils"
 
@@ -18,11 +20,12 @@ export function BrandMark({
       )}
     >
       {logoUrl ? (
-        // CMS/storage logo URLs can be remote signed/public URLs.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={logoUrl}
           alt={`${hostelConfig.name} logo`}
+          width={40}
+          height={40}
+          sizes="40px"
           className={cn("size-full object-cover", imageClassName)}
         />
       ) : (

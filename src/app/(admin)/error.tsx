@@ -1,6 +1,5 @@
 "use client"
 
-import * as Sentry from "@sentry/nextjs"
 import { useEffect } from "react"
 
 import { APIErrorState } from "@/components/system"
@@ -15,7 +14,9 @@ export default function AdminError({
   reset?: () => void
 }) {
   useEffect(() => {
-    Sentry.captureException(error, { tags: { route_area: "admin" } })
+    void import("@sentry/nextjs").then((Sentry) => {
+      Sentry.captureException(error, { tags: { route_area: "admin" } })
+    })
   }, [error])
 
   const retry = unstable_retry ?? reset

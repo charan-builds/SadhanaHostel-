@@ -54,7 +54,8 @@ export const cronRegistry = {
     maxDurationSeconds: 60,
     buildPayload: ({ organization, now }: CronBuildInput) => ({
       organizationId: organization.id,
-      dueBeforeDate: toDateOnly(now),
+      dueBeforeDate: toDateOnly(addDays(now, 7)),
+      runDate: toDateOnly(now),
       limit: 200,
     }),
   },
@@ -193,4 +194,12 @@ function toFirstDayOfMonth(date: Date) {
 
 function toDateOnly(date: Date) {
   return date.toISOString().slice(0, 10)
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+
+  next.setUTCDate(next.getUTCDate() + days)
+
+  return next
 }

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/react-query"
 import { notificationsSdk } from "@/sdk"
 import type {
+  ArchiveNotificationInput,
   MarkAllNotificationsReadInput,
   MarkNotificationReadInput,
   NotificationListInput,
@@ -59,6 +60,28 @@ export function useMarkAllNotificationsRead() {
         queryKey: queryKeys.notifications.all({
           organizationId: input.organizationId,
           hostelId: input.hostelId,
+        }),
+      })
+    },
+  })
+}
+
+export function useArchiveNotification() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      notificationId,
+      input,
+    }: {
+      notificationId: string
+      input: ArchiveNotificationInput
+    }) => notificationsSdk.archive(notificationId, input),
+    onSuccess: (notification) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all({
+          organizationId: notification.organization_id,
+          hostelId: notification.hostel_id,
         }),
       })
     },

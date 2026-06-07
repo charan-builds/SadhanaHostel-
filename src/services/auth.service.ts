@@ -37,6 +37,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
+import { PushSubscriptionsRepository } from "@/repositories/push-subscriptions.repository"
 import {
   ResidentsRepository,
   type ResidentWithOnboarding,
@@ -617,6 +618,8 @@ export class AuthService {
   }
 
   async logout() {
+    await this.revokeCurrentUserPushSubscriptions()
+
     const { error } = await this.db.auth.signOut()
 
     if (error) {
@@ -624,6 +627,26 @@ export class AuthService {
     }
 
     return { authenticated: false }
+  }
+
+  private async revokeCurrentUserPushSubscriptions() {
+    try {
+      const authUser = await this.getCurrentAuthUser()
+      const repository = new PushSubscriptionsRepository(createSupabaseAdminClient())
+
+      await repository.revokeForUser({
+        userId: authUser.id,
+        actorUserId: authUser.id,
+      })
+    } catch (error) {
+      logger.warn({
+        event: "auth.logout_push_revoke_failed",
+        message: "Logout continued after push subscription revoke failed.",
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      })
+    }
   }
 
   async resetPassword(input: unknown) {

@@ -1,6 +1,5 @@
 "use client"
 
-import * as Sentry from "@sentry/nextjs"
 import { Component, type ErrorInfo, type ReactNode } from "react"
 
 import { APIErrorState } from "./api-error-state"
@@ -22,10 +21,12 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    Sentry.captureException(error, {
-      extra: {
-        componentStack: info.componentStack,
-      },
+    void import("@sentry/nextjs").then((Sentry) => {
+      Sentry.captureException(error, {
+        extra: {
+          componentStack: info.componentStack,
+        },
+      })
     })
 
     if (process.env.NODE_ENV !== "production") {

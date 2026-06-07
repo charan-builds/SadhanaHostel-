@@ -1,0 +1,411 @@
+{
+  "generatedAt": "2026-06-06T16:16:33.862Z",
+  "rootMainFiles": [
+    {
+      "file": "static/chunks/0z7v6zi8yh70~.js",
+      "bytes": 233833
+    },
+    {
+      "file": "static/chunks/07-62kw.81-d5.js",
+      "bytes": 123988
+    },
+    {
+      "file": "static/chunks/0zjs5hlwbvch9.js",
+      "bytes": 44919
+    },
+    {
+      "file": "static/chunks/0oryz08czt21c.js",
+      "bytes": 37903
+    },
+    {
+      "file": "static/chunks/turbopack-0ttqjith6cvyj.js",
+      "bytes": 10614
+    },
+    {
+      "file": "static/chunks/0jlq3x0t6vldn.js",
+      "bytes": 9340
+    }
+  ],
+  "topChunks": [
+    {
+      "file": ".next/static/chunks/07kfzabz_vgz..js",
+      "bytes": 594779
+    },
+    {
+      "file": ".next/static/chunks/0l3zf_eddl0.j.js",
+      "bytes": 594779
+    },
+    {
+      "file": ".next/static/chunks/0p7wppezznx1e.js",
+      "bytes": 594779
+    },
+    {
+      "file": ".next/static/chunks/0lp4p8ec6bix5.js",
+      "bytes": 552692
+    },
+    {
+      "file": ".next/static/chunks/0z7v6zi8yh70~.js",
+      "bytes": 233833
+    },
+    {
+      "file": ".next/static/chunks/0_rnmwly2u.zr.js",
+      "bytes": 146167
+    },
+    {
+      "file": ".next/static/chunks/0jwchonudrj04.js",
+      "bytes": 146167
+    },
+    {
+      "file": ".next/static/chunks/07-62kw.81-d5.js",
+      "bytes": 123988
+    },
+    {
+      "file": ".next/static/chunks/0l9o4f7yok4hi.js",
+      "bytes": 122103
+    },
+    {
+      "file": ".next/static/chunks/03~yq9q893hmn.js",
+      "bytes": 112594
+    },
+    {
+      "file": ".next/static/chunks/184l7bx3v8vsj.js",
+      "bytes": 73709
+    },
+    {
+      "file": ".next/static/chunks/0b-tvqokyz8f3.js",
+      "bytes": 64525
+    },
+    {
+      "file": ".next/static/chunks/0qlh2bpzx8qv~.js",
+      "bytes": 64525
+    },
+    {
+      "file": ".next/static/chunks/180.vxm_fyyvr.js",
+      "bytes": 56119
+    },
+    {
+      "file": ".next/static/chunks/0.om4iw1bthpt.js",
+      "bytes": 52260
+    },
+    {
+      "file": ".next/static/chunks/0jtj3qztgk._w.js",
+      "bytes": 48477
+    },
+    {
+      "file": ".next/static/chunks/0gl~djcscr1it.js",
+      "bytes": 45453
+    },
+    {
+      "file": ".next/static/chunks/0zjs5hlwbvch9.js",
+      "bytes": 44919
+    },
+    {
+      "file": ".next/static/chunks/0j0jjt4wv12sx.js",
+      "bytes": 44271
+    },
+    {
+      "file": ".next/static/chunks/17a0l.chc249x.js",
+      "bytes": 42807
+    },
+    {
+      "file": ".next/static/chunks/0guvjx_myp0ne.js",
+      "bytes": 39466
+    },
+    {
+      "file": ".next/static/chunks/0oryz08czt21c.js",
+      "bytes": 37903
+    },
+    {
+      "file": ".next/static/chunks/0kmcl-h0vnikg.js",
+      "bytes": 37199
+    },
+    {
+      "file": ".next/static/chunks/0u3xerwegm1px.js",
+      "bytes": 36790
+    },
+    {
+      "file": ".next/static/chunks/0-cdlqb~23r1n.js",
+      "bytes": 35891
+    },
+    {
+      "file": ".next/static/chunks/0fx67mwkb3tu7.js",
+      "bytes": 35548
+    },
+    {
+      "file": ".next/static/chunks/0g8odlr1fnhhq.js",
+      "bytes": 35072
+    },
+    {
+      "file": ".next/static/chunks/0gh_0290vvtpq.js",
+      "bytes": 34414
+    },
+    {
+      "file": ".next/static/chunks/0eigwmnjbc6u7.js",
+      "bytes": 33884
+    },
+    {
+      "file": ".next/static/chunks/0vt3isnu35fdq.js",
+      "bytes": 32044
+    }
+  ],
+  "routes": [
+    {
+      "label": "/",
+      "path": ".next/server/app/(public)/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 7675,
+      "chunkCount": 5,
+      "rawClientReferenceChunkBytes": 76348,
+      "topChunks": [
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/02pc7q1dp4ugg.js",
+          "bytes": 15452
+        },
+        {
+          "file": "static/chunks/0xp~wg5m99o8h.js",
+          "bytes": 5883
+        },
+        {
+          "file": "static/chunks/0chxjs7sl._4g.js",
+          "bytes": 1384
+        },
+        {
+          "file": "static/chunks/0s77kz9amh0vv.js",
+          "bytes": 1369
+        }
+      ]
+    },
+    {
+      "label": "/about",
+      "path": ".next/server/app/(public)/about/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 8428,
+      "chunkCount": 6,
+      "rawClientReferenceChunkBytes": 77672,
+      "topChunks": [
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/02pc7q1dp4ugg.js",
+          "bytes": 15452
+        },
+        {
+          "file": "static/chunks/0xp~wg5m99o8h.js",
+          "bytes": 5883
+        },
+        {
+          "file": "static/chunks/0chxjs7sl._4g.js",
+          "bytes": 1384
+        },
+        {
+          "file": "static/chunks/0s77kz9amh0vv.js",
+          "bytes": 1369
+        },
+        {
+          "file": "static/chunks/0c_v1-l3b~-oa.js",
+          "bytes": 1324
+        }
+      ]
+    },
+    {
+      "label": "/contact",
+      "path": ".next/server/app/(public)/contact/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 9807,
+      "chunkCount": 14,
+      "rawClientReferenceChunkBytes": 930585,
+      "topChunks": [
+        {
+          "file": "static/chunks/0l3zf_eddl0.j.js",
+          "bytes": 594779
+        },
+        {
+          "file": "static/chunks/0qlh2bpzx8qv~.js",
+          "bytes": 64525
+        },
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/17a0l.chc249x.js",
+          "bytes": 42807
+        },
+        {
+          "file": "static/chunks/0~-fzx74ewe_k.js",
+          "bytes": 31148
+        },
+        {
+          "file": "static/chunks/119c42p~4qejt.js",
+          "bytes": 29964
+        },
+        {
+          "file": "static/chunks/0appppv0acqjl.js",
+          "bytes": 27405
+        },
+        {
+          "file": "static/chunks/17q2csdwfty6c.js",
+          "bytes": 27307
+        },
+        {
+          "file": "static/chunks/0bbh--82f1-7q.js",
+          "bytes": 22932
+        },
+        {
+          "file": "static/chunks/02pc7q1dp4ugg.js",
+          "bytes": 15452
+        }
+      ]
+    },
+    {
+      "label": "/resident/login",
+      "path": ".next/server/app/(auth)/resident/login/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 20415,
+      "chunkCount": 12,
+      "rawClientReferenceChunkBytes": 1021521,
+      "topChunks": [
+        {
+          "file": "static/chunks/0p7wppezznx1e.js",
+          "bytes": 594779
+        },
+        {
+          "file": "static/chunks/0jwchonudrj04.js",
+          "bytes": 146167
+        },
+        {
+          "file": "static/chunks/0qlh2bpzx8qv~.js",
+          "bytes": 64525
+        },
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/0g8odlr1fnhhq.js",
+          "bytes": 35072
+        },
+        {
+          "file": "static/chunks/0ro.5x95mdd5h.js",
+          "bytes": 31564
+        },
+        {
+          "file": "static/chunks/094fh3my3su19.js",
+          "bytes": 27447
+        },
+        {
+          "file": "static/chunks/0appppv0acqjl.js",
+          "bytes": 27405
+        },
+        {
+          "file": "static/chunks/0uy-6z2v9bm~e.js",
+          "bytes": 22754
+        },
+        {
+          "file": "static/chunks/0f8zmhmv_~w~w.js",
+          "bytes": 12281
+        }
+      ]
+    },
+    {
+      "label": "/admin/login",
+      "path": ".next/server/app/(auth)/admin/login/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 20406,
+      "chunkCount": 12,
+      "rawClientReferenceChunkBytes": 1021521,
+      "topChunks": [
+        {
+          "file": "static/chunks/0p7wppezznx1e.js",
+          "bytes": 594779
+        },
+        {
+          "file": "static/chunks/0jwchonudrj04.js",
+          "bytes": 146167
+        },
+        {
+          "file": "static/chunks/0qlh2bpzx8qv~.js",
+          "bytes": 64525
+        },
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/0g8odlr1fnhhq.js",
+          "bytes": 35072
+        },
+        {
+          "file": "static/chunks/0ro.5x95mdd5h.js",
+          "bytes": 31564
+        },
+        {
+          "file": "static/chunks/094fh3my3su19.js",
+          "bytes": 27447
+        },
+        {
+          "file": "static/chunks/0appppv0acqjl.js",
+          "bytes": 27405
+        },
+        {
+          "file": "static/chunks/0uy-6z2v9bm~e.js",
+          "bytes": 22754
+        },
+        {
+          "file": "static/chunks/0f8zmhmv_~w~w.js",
+          "bytes": 12281
+        }
+      ]
+    },
+    {
+      "label": "/admin/finance",
+      "path": ".next/server/app/(admin)/admin/finance/page_client-reference-manifest.js",
+      "clientReferenceManifestBytes": 42288,
+      "chunkCount": 18,
+      "rawClientReferenceChunkBytes": 1285739,
+      "topChunks": [
+        {
+          "file": "static/chunks/0l3zf_eddl0.j.js",
+          "bytes": 594779
+        },
+        {
+          "file": "static/chunks/0_rnmwly2u.zr.js",
+          "bytes": 146167
+        },
+        {
+          "file": "static/chunks/0l9o4f7yok4hi.js",
+          "bytes": 122103
+        },
+        {
+          "file": "static/chunks/0qlh2bpzx8qv~.js",
+          "bytes": 64525
+        },
+        {
+          "file": "static/chunks/0.om4iw1bthpt.js",
+          "bytes": 52260
+        },
+        {
+          "file": "static/chunks/0jtj3qztgk._w.js",
+          "bytes": 48477
+        },
+        {
+          "file": "static/chunks/0g8odlr1fnhhq.js",
+          "bytes": 35072
+        },
+        {
+          "file": "static/chunks/0ro.5x95mdd5h.js",
+          "bytes": 31564
+        },
+        {
+          "file": "static/chunks/0~-fzx74ewe_k.js",
+          "bytes": 31148
+        },
+        {
+          "file": "static/chunks/119c42p~4qejt.js",
+          "bytes": 29964
+        }
+      ]
+    }
+  ]
+}

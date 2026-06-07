@@ -53,6 +53,84 @@ describe("static migration security checks", () => {
     expect(p1Finance).toMatch(/public\.can_manage_finance\(organization_id,\s*hostel_id\)/i)
   })
 
+  it("keeps resident notice reads tenant-scoped and RLS protected", () => {
+    const noticeReads = migration("20260606001000_resident_notice_reads.sql")
+
+    expect(noticeReads).toMatch(/create\s+table\s+if\s+not\s+exists\s+public\.notice_reads/i)
+    expect(noticeReads).toMatch(/unique\s*\(\s*notice_id,\s*resident_id\s*\)/i)
+    expect(noticeReads).toMatch(
+      /alter\s+table\s+public\.notice_reads\s+enable\s+row\s+level\s+security/i
+    )
+    expect(noticeReads).toMatch(
+      /alter\s+table\s+public\.notice_reads\s+force\s+row\s+level\s+security/i
+    )
+    expect(noticeReads).toMatch(/public\.can_manage_organization\(organization_id,\s*hostel_id\)/i)
+    expect(noticeReads).toMatch(/public\.owns_resident\(resident_id\)/i)
+  })
+
+  it("keeps resident notice acknowledgements tenant-scoped and RLS protected", () => {
+    const acknowledgements = migration("20260606003000_notice_acknowledgements.sql")
+
+    expect(acknowledgements).toMatch(
+      /add\s+column\s+if\s+not\s+exists\s+notice_type\s+text/i
+    )
+    expect(acknowledgements).toMatch(
+      /notice_type\s+in\s+\('general',\s*'fee_updates',\s*'hostel_rules',\s*'maintenance',\s*'emergency'\)/i
+    )
+    expect(acknowledgements).toMatch(
+      /add\s+column\s+if\s+not\s+exists\s+requires_acknowledgement\s+boolean/i
+    )
+    expect(acknowledgements).toMatch(
+      /create\s+table\s+if\s+not\s+exists\s+public\.notice_acknowledgements/i
+    )
+    expect(acknowledgements).toMatch(/unique\s*\(\s*notice_id,\s*resident_id\s*\)/i)
+    expect(acknowledgements).toMatch(
+      /alter\s+table\s+public\.notice_acknowledgements\s+enable\s+row\s+level\s+security/i
+    )
+    expect(acknowledgements).toMatch(
+      /alter\s+table\s+public\.notice_acknowledgements\s+force\s+row\s+level\s+security/i
+    )
+    expect(acknowledgements).toMatch(
+      /public\.can_manage_organization\(organization_id,\s*hostel_id\)/i
+    )
+    expect(acknowledgements).toMatch(/public\.owns_resident\(resident_id\)/i)
+  })
+
+  it("keeps PWA push subscriptions tenant-scoped and RLS protected", () => {
+    const pushSubscriptions = migration("20260606004000_pwa_push_subscriptions.sql")
+
+    expect(pushSubscriptions).toMatch(
+      /create\s+table\s+if\s+not\s+exists\s+public\.push_subscriptions/i
+    )
+    expect(pushSubscriptions).toMatch(/organization_id\s+uuid\s+not\s+null/i)
+    expect(pushSubscriptions).toMatch(/user_id\s+uuid\s+not\s+null/i)
+    expect(pushSubscriptions).toMatch(/unique\s*\(\s*endpoint\s*\)/i)
+    expect(pushSubscriptions).toMatch(
+      /alter\s+table\s+public\.push_subscriptions\s+enable\s+row\s+level\s+security/i
+    )
+    expect(pushSubscriptions).toMatch(
+      /alter\s+table\s+public\.push_subscriptions\s+force\s+row\s+level\s+security/i
+    )
+    expect(pushSubscriptions).toMatch(
+      /public\.can_manage_organization\(organization_id,\s*hostel_id\)/i
+    )
+    expect(pushSubscriptions).toMatch(/auth\.uid\(\)\s*=\s*user_id/i)
+    expect(pushSubscriptions).toMatch(/public\.belongs_to_organization\(organization_id\)/i)
+  })
+
+  it("keeps notification center category, priority, and archive fields indexed", () => {
+    const smartNotifications = migration("20260606002000_smart_notification_center.sql")
+
+    expect(smartNotifications).toMatch(/add\s+column\s+if\s+not\s+exists\s+category\s+text/i)
+    expect(smartNotifications).toMatch(/category\s+in\s+\('finance',\s*'hostel',\s*'personal'\)/i)
+    expect(smartNotifications).toMatch(/add\s+column\s+if\s+not\s+exists\s+priority\s+text/i)
+    expect(smartNotifications).toMatch(/priority\s+in\s+\('info',\s*'warning',\s*'urgent',\s*'critical'\)/i)
+    expect(smartNotifications).toMatch(/add\s+column\s+if\s+not\s+exists\s+archived_at/i)
+    expect(smartNotifications).toMatch(/notifications_recipient_center_idx/i)
+    expect(smartNotifications).toMatch(/notifications_unread_center_idx/i)
+    expect(smartNotifications).toMatch(/notifications_archived_idx/i)
+  })
+
   it("keeps finance dashboard aggregates database-owned and finance-guarded", () => {
     const p1Finance = migration("20260605001000_p1_finance_hardening.sql")
 

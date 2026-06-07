@@ -1,0 +1,47 @@
+{
+  "url": "http://localhost:3023/",
+  "fetchedAt": "2026-06-06T16:08:39.268Z",
+  "categories": {
+    "performance": 91,
+    "accessibility": 96,
+    "best-practices": 96,
+    "seo": 61
+  },
+  "metrics": {
+    "firstContentfulPaintMs": 1059,
+    "largestContentfulPaintMs": 3177,
+    "totalBlockingTimeMs": 163,
+    "cumulativeLayoutShift": 0,
+    "speedIndexMs": 2088,
+    "timeToInteractiveMs": 3180
+  },
+  "lcpElement": "<p class=\"mt-5 max-w-2xl text-lg leading-8 text-white/82 sm:text-xl\">",
+  "lcpPhases": [
+    {
+      "phase": "TTFB",
+      "timing": 529.6320000000001,
+      "percent": "17%"
+    },
+    {
+      "phase": "Load Delay",
+      "timing": 0,
+      "percent": "0%"
+    },
+    {
+      "phase": "Load Time",
+      "timing": 0,
+      "percent": "0%"
+    },
+    {
+      "phase": "Render Delay",
+      "timing": 2647.264,
+      "percent": "83%"
+    }
+  ],
+  "diagnostics": {
+    "totalByteWeightBytes": 257279,
+    "bootupTimeMs": 419,
+    "mainThreadWorkMs": 1087,
+    "unusedJavascriptSavingsBytes": 27927
+  }
+}

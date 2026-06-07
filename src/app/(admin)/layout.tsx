@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 
 import { AdminLayoutShell } from "@/components/admin/layout/admin-layout-shell"
 import { PasswordResetGate } from "@/components/auth/password-reset-gate"
-import { SessionProviders } from "@/components/providers/app-providers"
+import { SessionProviders } from "@/components/providers/session-providers"
 import { requireProtectedRoute } from "@/lib/auth/server-route-guard"
 import { getPublicCmsContent } from "@/lib/cms/public-cms"
 import { getPublishedBrandLogoUrl } from "@/lib/public-brand-logo"

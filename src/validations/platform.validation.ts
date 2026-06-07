@@ -53,6 +53,11 @@ export const updateOrganizationSchema = z.object({
   settings: jsonObjectSchema.optional(),
 })
 
+export const brandingUploadSchema = z.object({
+  organizationId: uuidSchema,
+  imageKind: z.enum(["logo", "favicon"]).default("favicon"),
+})
+
 export const hostelCreateSchema = z.object({
   organizationId: uuidSchema,
   name: z.string().trim().min(2).max(160),
@@ -103,6 +108,7 @@ export const platformScopedSchema = z.object({
 
 export type BootstrapAdminTenantInput = z.infer<typeof bootstrapAdminTenantSchema>
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>
+export type BrandingUploadInput = z.infer<typeof brandingUploadSchema>
 export type HostelCreateInput = z.infer<typeof hostelCreateSchema>
 export type HostelUpdateInput = z.infer<typeof hostelUpdateSchema>
 export type PlatformScopedInput = z.infer<typeof platformScopedSchema>

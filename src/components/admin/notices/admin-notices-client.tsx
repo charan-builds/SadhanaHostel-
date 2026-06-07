@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ClipboardList, Edit, Loader2, Plus } from "lucide-react"
-import { Controller, useForm } from "react-hook-form"
+import { Archive, ClipboardList, Edit, Loader2, Plus, Users } from "lucide-react"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -38,23 +38,34 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
-import { useCreateNotice, useNotices, useUpdateNotice } from "@/hooks"
+import { useCreateNotice, useNotices, useResidents, useUpdateNotice } from "@/hooks"
 import type { Tables } from "@/types/database"
 
 const PAGE_SIZE = 10
 const cmsStatuses = ["draft", "published", "archived"] as const
 const audienceTypes = ["all", "hostel", "room", "residents", "roles"] as const
+const noticeTypes = [
+  "general",
+  "fee_updates",
+  "hostel_rules",
+  "maintenance",
+  "emergency",
+] as const
 
 const noticeFormSchema = z.object({
   title: z.string().trim().min(2).max(160),
   body: z.string().trim().min(5).max(5000),
   status: z.enum(cmsStatuses),
+  noticeType: z.enum(noticeTypes),
+  requiresAcknowledgement: z.boolean(),
   audienceType: z.enum(audienceTypes),
+  selectedResidentIds: z.array(z.string().uuid()).default([]),
   isPinned: z.boolean(),
   expiresAt: z.string().optional(),
 })
 
-type NoticeFormValues = z.infer<typeof noticeFormSchema>
+type NoticeFormInput = z.input<typeof noticeFormSchema>
+type NoticeFormValues = z.output<typeof noticeFormSchema>
 
 export function AdminNoticesClient() {
   const { organizationId, session } = useAuth()
@@ -71,8 +82,29 @@ export function AdminNoticesClient() {
     pageSize: PAGE_SIZE,
     status: status === "all" ? undefined : status,
   })
+  const updateNotice = useUpdateNotice()
   const notices = noticesQuery.data?.data ?? []
   const meta = noticesQuery.data?.meta
+  const unreadCount = notices.reduce((total, notice) => total + notice.unread_count, 0)
+  const recipientCount = notices.reduce((total, notice) => total + notice.total_recipients, 0)
+  const readCount = notices.reduce((total, notice) => total + notice.read_count, 0)
+  const acknowledgementRecipientCount = notices.reduce(
+    (total, notice) =>
+      total + (notice.requires_acknowledgement ? notice.total_recipients : 0),
+    0
+  )
+  const acknowledgementCount = notices.reduce(
+    (total, notice) => total + notice.acknowledgement_count,
+    0
+  )
+  const readRate =
+    recipientCount === 0 ? 0 : Number(((readCount / recipientCount) * 100).toFixed(1))
+  const acknowledgementRate =
+    acknowledgementRecipientCount === 0
+      ? 0
+      : Number(
+          ((acknowledgementCount / acknowledgementRecipientCount) * 100).toFixed(1)
+        )
 
   if (!organizationId) {
     return (
@@ -85,16 +117,15 @@ export function AdminNoticesClient() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-5">
         <NoticeMetric label="Notices on page" value={notices.length} />
         <NoticeMetric
           label="Published"
           value={notices.filter((notice) => notice.status === "published").length}
         />
-        <NoticeMetric
-          label="Pinned"
-          value={notices.filter((notice) => notice.is_pinned).length}
-        />
+        <NoticeMetric label="Unread recipients" value={unreadCount} />
+        <NoticeMetric label="Read rate" value={`${readRate}%`} />
+        <NoticeMetric label="Ack rate" value={`${acknowledgementRate}%`} />
       </div>
 
       <Card>
@@ -166,6 +197,18 @@ export function AdminNoticesClient() {
                         <span className="text-xs text-muted-foreground">
                           {humanizeEnum(notice.audience_type)}
                         </span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                          {humanizeEnum(notice.notice_type)}
+                        </span>
+                        {notice.requires_acknowledgement ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                            Acknowledgement required
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">
+                            Informational
+                          </span>
+                        )}
                       </div>
                       <h2 className="mt-3 font-semibold">{notice.title}</h2>
                       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -176,19 +219,55 @@ export function AdminNoticesClient() {
                           ? `Published ${formatDateTime(notice.published_at)}`
                           : "Not published"}
                       </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>{notice.total_recipients} recipients</span>
+                        <span>{notice.read_count} read</span>
+                        <span>{notice.unread_count} unread</span>
+                        <span>{notice.read_percentage}% read</span>
+                        {notice.requires_acknowledgement ? (
+                          <>
+                            <span>{notice.acknowledgement_count} acknowledged</span>
+                            <span>{notice.pending_count} pending</span>
+                            <span>{notice.acknowledgement_percentage}% acknowledged</span>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => {
-                        setEditingNotice(notice)
-                        setIsDialogOpen(true)
-                      }}
-                    >
-                      <Edit className="size-4" aria-hidden="true" />
-                      Edit
-                    </Button>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          setEditingNotice(notice)
+                          setIsDialogOpen(true)
+                        }}
+                      >
+                        <Edit className="size-4" aria-hidden="true" />
+                        Edit
+                      </Button>
+                      {notice.status !== "archived" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          disabled={updateNotice.isPending}
+                          onClick={() => {
+                            void updateNotice
+                              .mutateAsync({
+                                noticeId: notice.id,
+                                organizationId,
+                                status: "archived",
+                                isActive: false,
+                              })
+                              .then(() => toast.success("Notice archived."))
+                          }}
+                        >
+                          <Archive className="size-4" aria-hidden="true" />
+                          Archive
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               ))}
@@ -245,7 +324,14 @@ function NoticeEditorDialog({
 }) {
   const createNotice = useCreateNotice()
   const updateNotice = useUpdateNotice()
-  const form = useForm<NoticeFormValues>({
+  const residents = useResidents({
+    organizationId,
+    hostelId,
+    status: "active",
+    page: 1,
+    pageSize: 50,
+  })
+  const form = useForm<NoticeFormInput, unknown, NoticeFormValues>({
     resolver: zodResolver(noticeFormSchema),
     defaultValues: getNoticeDefaults(notice),
   })
@@ -255,6 +341,11 @@ function NoticeEditorDialog({
   }, [form, notice])
 
   async function onSubmit(values: NoticeFormValues) {
+    const audienceFilter =
+      values.audienceType === "residents"
+        ? { resident_ids: values.selectedResidentIds }
+        : {}
+
     if (notice) {
       await updateNotice.mutateAsync({
         noticeId: notice.id,
@@ -263,8 +354,10 @@ function NoticeEditorDialog({
         title: values.title,
         body: values.body,
         status: values.status,
+        noticeType: values.noticeType,
+        requiresAcknowledgement: values.requiresAcknowledgement,
         audienceType: values.audienceType,
-        audienceFilter: {},
+        audienceFilter,
         isPinned: values.isPinned,
         isActive: true,
         expiresAt: values.expiresAt || undefined,
@@ -277,8 +370,10 @@ function NoticeEditorDialog({
         title: values.title,
         body: values.body,
         status: values.status,
+        noticeType: values.noticeType,
+        requiresAcknowledgement: values.requiresAcknowledgement,
         audienceType: values.audienceType,
-        audienceFilter: {},
+        audienceFilter,
         isPinned: values.isPinned,
         expiresAt: values.expiresAt || undefined,
       })
@@ -289,6 +384,10 @@ function NoticeEditorDialog({
   }
 
   const isPending = createNotice.isPending || updateNotice.isPending
+  const audienceType = useWatch({ control: form.control, name: "audienceType" })
+  const selectedResidentIds =
+    useWatch({ control: form.control, name: "selectedResidentIds" }) ?? []
+  const residentRows = residents.data?.data ?? []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -342,6 +441,27 @@ function NoticeEditorDialog({
                 />
               </div>
               <div className="grid gap-2">
+                <Label>Notice type</Label>
+                <Controller
+                  control={form.control}
+                  name="noticeType"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {noticeTypes.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {humanizeEnum(item)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="grid gap-2">
                 <Label>Audience</Label>
                 <Controller
                   control={form.control}
@@ -357,6 +477,31 @@ function NoticeEditorDialog({
                             {humanizeEnum(item)}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Mode</Label>
+                <Controller
+                  control={form.control}
+                  name="requiresAcknowledgement"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? "acknowledgement" : "informational"}
+                      onValueChange={(value) =>
+                        field.onChange(value === "acknowledgement")
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="informational">Informational</SelectItem>
+                        <SelectItem value="acknowledgement">
+                          Acknowledgement Required
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -388,6 +533,61 @@ function NoticeEditorDialog({
                 />
               </div>
             </div>
+            {audienceType === "residents" ? (
+              <div className="grid gap-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label>Selected residents</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {selectedResidentIds.length} selected
+                    </p>
+                  </div>
+                  <Users className="size-4 text-muted-foreground" aria-hidden="true" />
+                </div>
+                <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
+                  {residents.isLoading ? (
+                    <div className="h-20 rounded-lg bg-muted/50" />
+                  ) : residentRows.length === 0 ? (
+                    <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                      No active residents found.
+                    </p>
+                  ) : (
+                    residentRows.map((resident) => {
+                      const checked = selectedResidentIds.includes(resident.id)
+
+                      return (
+                        <label
+                          key={resident.id}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1 size-4"
+                            checked={checked}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...selectedResidentIds, resident.id]
+                                : selectedResidentIds.filter((id) => id !== resident.id)
+
+                              form.setValue("selectedResidentIds", next, {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              })
+                            }}
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-medium">{resident.full_name}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {resident.admission_number}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -413,10 +613,27 @@ function getNoticeDefaults(notice: Tables<"notices"> | null): NoticeFormValues {
     title: notice?.title ?? "",
     body: notice?.body ?? "",
     status: notice?.status ?? "draft",
+    noticeType: (notice?.notice_type as NoticeFormValues["noticeType"]) ?? "general",
+    requiresAcknowledgement: notice?.requires_acknowledgement ?? false,
     audienceType: (notice?.audience_type as NoticeFormValues["audienceType"]) ?? "all",
+    selectedResidentIds: getSelectedResidentIds(notice),
     isPinned: notice?.is_pinned ?? false,
     expiresAt: notice?.expires_at ? notice.expires_at.slice(0, 16) : "",
   }
+}
+
+function getSelectedResidentIds(notice: Tables<"notices"> | null) {
+  const filter = notice?.audience_filter
+
+  if (!filter || typeof filter !== "object" || Array.isArray(filter)) {
+    return []
+  }
+
+  const residentIds = filter.resident_ids
+
+  return Array.isArray(residentIds)
+    ? residentIds.filter((value): value is string => typeof value === "string")
+    : []
 }
 
 function NoticeMetric({ label, value }: { label: string; value: string | number }) {

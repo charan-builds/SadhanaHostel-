@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 
 import { PasswordResetGate } from "@/components/auth/password-reset-gate"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
-import { SessionProviders } from "@/components/providers/app-providers"
+import { SessionProviders } from "@/components/providers/session-providers"
 import { residentNavigation } from "@/constants/navigation"
 import { requireProtectedRoute } from "@/lib/auth/server-route-guard"
 import { getPublicCmsContent } from "@/lib/cms/public-cms"

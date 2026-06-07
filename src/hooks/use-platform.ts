@@ -5,11 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/react-query"
 import { platformSdk } from "@/sdk"
 import type {
+  BrandingUploadInput,
   BootstrapAdminTenantInput,
   HostelCreateInput,
   HostelUpdateInput,
   UpdateOrganizationInput,
 } from "@/validations/platform.validation"
+import type { UploadOptions } from "@/sdk/uploads.sdk"
 
 export function useSetupStatus() {
   return useQuery({
@@ -55,6 +57,20 @@ export function useUpdateOrganizationSettings() {
         queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus }),
       ])
     },
+  })
+}
+
+export function useUploadBrandingImage() {
+  return useMutation({
+    mutationFn: ({
+      input,
+      file,
+      options,
+    }: {
+      input: BrandingUploadInput
+      file: File
+      options?: UploadOptions
+    }) => platformSdk.uploadBrandingImage(input, file, options),
   })
 }
 

@@ -2,6 +2,8 @@ import { NoticesRepository } from "@/repositories/notices.repository"
 import { NotificationsRepository } from "@/repositories/notifications.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import { NotificationService } from "@/services/notifications"
+import { noticeTargetsResident } from "@/lib/notices/audience"
+import { noticeNotificationClassification } from "@/lib/notices/notification-classification"
 
 import type { JobDefinition, OrganizationJobPayload } from "./types"
 
@@ -40,7 +42,7 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
 
     for (const notice of notices) {
       for (const resident of residents) {
-        if (notice.hostel_id && resident.hostel_id !== notice.hostel_id) {
+        if (!noticeTargetsResident(notice, resident)) {
           skipped += 1
           continue
         }
@@ -57,6 +59,7 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
           continue
         }
 
+        const classification = noticeNotificationClassification(notice)
         await notificationService.queue({
           organizationId: payload.organizationId,
           hostelId: resident.hostel_id,
@@ -71,11 +74,15 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
           message: {
             title: notice.title,
             body: notice.body,
-            templateKey: "notice_published",
+            templateKey: classification.templateKey,
             payload: {
               notice_id: notice.id,
+              notice_type: notice.notice_type,
               audience_type: notice.audience_type,
+              requires_acknowledgement: notice.requires_acknowledgement,
             },
+            category: classification.category,
+            priority: classification.priority,
           },
         })
 
@@ -94,11 +101,15 @@ export const scheduledNoticesJob: JobDefinition<ScheduledNoticesPayload> = {
             message: {
               title: notice.title,
               body: notice.body,
-              templateKey: "notice_published",
+              templateKey: classification.templateKey,
               payload: {
                 notice_id: notice.id,
+                notice_type: notice.notice_type,
                 audience_type: notice.audience_type,
+                requires_acknowledgement: notice.requires_acknowledgement,
               },
+              category: classification.category,
+              priority: classification.priority,
             },
           })
         }

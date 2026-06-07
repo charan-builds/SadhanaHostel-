@@ -1,44 +1,6 @@
-"use client"
-
-import { motion } from "framer-motion"
-import type { LucideIcon } from "lucide-react"
-import {
-  Bath,
-  Camera,
-  Cctv,
-  Droplets,
-  MapPin,
-  ParkingCircle,
-  ShieldCheck,
-  Sparkles,
-  Utensils,
-  Wifi,
-} from "lucide-react"
-
 import { hostelConfig } from "@/constants/hostel"
 import { fallbackFacilities } from "@/constants/public-content"
 import type { FacilityItem } from "@/types/frontend"
-
-const iconMap: Record<string, LucideIcon> = {
-  bath: Bath,
-  Bath,
-  camera: Camera,
-  Cctv,
-  cctv: Cctv,
-  droplets: Droplets,
-  Droplets,
-  "map-pin": MapPin,
-  MapPin,
-  "parking-circle": ParkingCircle,
-  ParkingCircle,
-  "shield-check": ShieldCheck,
-  sparkles: Sparkles,
-  Sparkles,
-  utensils: Utensils,
-  Utensils,
-  wifi: Wifi,
-  Wifi,
-}
 
 function facilityByTitle(facilities: FacilityItem[], title: string) {
   return facilities.find((facility) => facility.title === title)
@@ -84,34 +46,18 @@ export function HomeHighlights({
           </p>
         </div>
 
-        <motion.div
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, margin: "-80px" }}
-          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
-          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {highlightItems.map((item) => {
-            const Icon = iconMap[item.icon] ?? Sparkles
-
-            return (
-              <motion.article
-                key={item.title}
-                variants={{
-                  hidden: { opacity: 0, y: 18, filter: "blur(8px)" },
-                  show: { opacity: 1, y: 0, filter: "blur(0px)" },
-                }}
-                className="rounded-xl border bg-card/90 p-5 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted"
-              >
-                <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="size-5" aria-hidden="true" />
-                </span>
-                <h3 className="mt-4 text-base font-semibold text-foreground">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
-              </motion.article>
-            )
-          })}
-        </motion.div>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {highlightItems.map((item) => (
+            <article
+              key={item.title}
+              className="rounded-xl border bg-card/90 p-5 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted"
+            >
+              <span className="block size-10 rounded-lg bg-primary/10" aria-hidden="true" />
+              <h3 className="mt-4 text-base font-semibold text-foreground">{item.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   )

@@ -48,18 +48,21 @@ export function LanguageSwitcher({ className, compact = false }: LanguageSwitche
   const [language, setLanguage] = useState<LanguageValue>(() => readCurrentLanguage())
 
   useEffect(() => {
-    loadGoogleTranslate()
-  }, [])
+    if (language === TELUGU_LANGUAGE) {
+      loadGoogleTranslate()
+    }
+  }, [language])
 
   function handleLanguageChange(nextLanguage: LanguageValue) {
     setLanguage(nextLanguage)
 
     if (nextLanguage === TELUGU_LANGUAGE) {
       setTranslationCookie(`/${ENGLISH_LANGUAGE}/${TELUGU_LANGUAGE}`, COOKIE_MAX_AGE_SECONDS)
-
-      if (!applyGoogleTranslateLanguage(TELUGU_LANGUAGE)) {
-        window.location.reload()
-      }
+      loadGoogleTranslate(() => {
+        if (!applyGoogleTranslateLanguage(TELUGU_LANGUAGE)) {
+          window.location.reload()
+        }
+      })
 
       return
     }
@@ -120,15 +123,19 @@ export function LanguageSwitcher({ className, compact = false }: LanguageSwitche
   )
 }
 
-function loadGoogleTranslate() {
+function loadGoogleTranslate(onReady?: () => void) {
   if (typeof window === "undefined") {
     return
   }
 
-  window.googleTranslateElementInit = initializeGoogleTranslate
+  window.googleTranslateElementInit = () => {
+    initializeGoogleTranslate()
+    onReady?.()
+  }
 
   if (window.google?.translate?.TranslateElement) {
     initializeGoogleTranslate()
+    onReady?.()
     return
   }
 

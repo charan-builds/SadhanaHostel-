@@ -1,26 +1,13 @@
-"use client"
-
 import Image from "next/image"
-import { motion } from "framer-motion"
-import { MapPin, MessageCircle, Phone, type LucideIcon } from "lucide-react"
 
-import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { hostelImages } from "@/constants/hostel-images"
-import {
-  trackContactAction,
-  trackWhatsAppClick,
-} from "@/lib/analytics/google-analytics"
 
 export function InquirySection() {
   return (
     <section className="bg-background py-14 sm:py-20" id="inquiry">
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
-        <motion.div
-          initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
-          whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        <div
           className="overflow-hidden rounded-2xl border bg-sidebar text-sidebar-foreground shadow-lifted"
         >
           <div className="relative aspect-[4/3]">
@@ -41,32 +28,60 @@ export function InquirySection() {
             </div>
           </div>
           <div className="grid gap-3 p-5 sm:grid-cols-3">
-            <ContactPill icon={Phone} label="Call" value={hostelConfig.contact.phone} href={callHref} />
-            <ContactPill icon={MessageCircle} label="WhatsApp" value="Message" href={whatsappHref} />
-            <ContactPill icon={MapPin} label="Location" value={hostelConfig.location.city} href={hostelConfig.links.mapSearchHref} />
+            <ContactPill label="Call" value={hostelConfig.contact.phone} href={callHref} />
+            <ContactPill label="WhatsApp" value="Message" href={whatsappHref} />
+            <ContactPill label="Location" value={hostelConfig.location.city} href={hostelConfig.links.mapSearchHref} />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
-          whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.55, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <ContactInquiryForm />
-        </motion.div>
+        <div>
+          <div className="rounded-2xl border bg-card/95 p-6 shadow-lifted">
+            <p className="text-sm font-medium text-primary">Quick inquiry</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+              Share your joining details with the hostel office.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The full inquiry form is available on the contact page. You can also call or WhatsApp
+              directly for faster room availability questions.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <a
+                href="/contact"
+                className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+              >
+                Open inquiry form
+              </a>
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+              >
+                WhatsApp
+              </a>
+            </div>
+            <div className="mt-6 grid gap-3 rounded-xl border bg-muted/35 p-4 text-sm text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">Phone:</span>{" "}
+                {hostelConfig.contact.phone}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Location:</span>{" "}
+                {hostelConfig.location.note}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   )
 }
 
 function ContactPill({
-  icon: Icon,
   label,
   value,
   href,
 }: {
-  icon: LucideIcon
   label: string
   value: string
   href: string
@@ -77,17 +92,8 @@ function ContactPill({
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noreferrer" : undefined}
       className="rounded-xl border border-white/10 bg-white/[0.08] p-3 transition-colors hover:bg-white/[0.12]"
-      onClick={() => {
-        const method = label === "WhatsApp" ? "whatsapp" : label === "Call" ? "phone" : "map"
-
-        trackContactAction(method, "home_inquiry_section")
-
-        if (method === "whatsapp") {
-          trackWhatsAppClick("home_inquiry_section")
-        }
-      }}
     >
-      <Icon className="size-4 text-cyan-200" aria-hidden="true" />
+      <span className="block size-2 rounded-full bg-cyan-200" aria-hidden="true" />
       <p className="mt-3 text-xs text-sidebar-foreground/55">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold">{value}</p>
     </a>

@@ -1,17 +1,27 @@
 "use client"
 
-import { sendGAEvent } from "@next/third-parties/google"
-
 import { analyticsConfig } from "@/config/analytics"
 
 type AnalyticsParams = Record<string, string | number | boolean | null | undefined>
+
+type GtagCommand = "config" | "event" | "js" | "set"
+
+declare global {
+  interface Window {
+    gtag?: (
+      command: GtagCommand,
+      eventNameOrId: string | Date,
+      params?: AnalyticsParams
+    ) => void
+  }
+}
 
 function trackEvent(eventName: string, params: AnalyticsParams = {}) {
   if (!analyticsConfig.isGoogleAnalyticsEnabled) {
     return
   }
 
-  sendGAEvent("event", eventName, {
+  window.gtag?.("event", eventName, {
     transport_type: "beacon",
     ...params,
   })

@@ -1,0 +1,34 @@
+{
+  "public": {
+    "categories": {
+      "performance": 40,
+      "accessibility": 100,
+      "best-practices": 96,
+      "seo": 61
+    },
+    "audits": {
+      "first-contentful-paint": "1.0 s",
+      "largest-contentful-paint": "9.9 s",
+      "interactive": "15.1 s",
+      "total-blocking-time": "650 ms",
+      "cumulative-layout-shift": "0.248",
+      "speed-index": "6.7 s"
+    }
+  },
+  "resident": {
+    "categories": {
+      "performance": 79,
+      "accessibility": 100,
+      "best-practices": 96,
+      "seo": 69
+    },
+    "audits": {
+      "first-contentful-paint": "1.0 s",
+      "largest-contentful-paint": "1.9 s",
+      "interactive": "6.0 s",
+      "total-blocking-time": "840 ms",
+      "cumulative-layout-shift": "0.034",
+      "speed-index": "2.5 s"
+    }
+  }
+}

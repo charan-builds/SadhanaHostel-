@@ -25,6 +25,10 @@ export function useRealtimeNotifications(options?: { enabled?: boolean; resident
         organizationId,
         hostelId: defaultHostelId,
       }),
+      queryKeys.notifications.all({
+        organizationId,
+        hostelId: defaultHostelId,
+      }),
     ])
   }, [defaultHostelId, organizationId, queryClient])
 

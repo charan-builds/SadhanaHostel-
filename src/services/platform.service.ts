@@ -9,8 +9,10 @@ import {
   type OrganizationRow,
 } from "@/repositories/organizations.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
+import { UploadsRepository } from "@/repositories/uploads.repository"
 import type { Json } from "@/types/database"
 import {
+  brandingUploadSchema,
   bootstrapAdminTenantSchema,
   hostelCreateSchema,
   hostelUpdateSchema,
@@ -18,6 +20,10 @@ import {
 } from "@/validations/platform.validation"
 
 import { assertFound, AuthService } from "./auth.service"
+
+const BRANDING_BUCKET = "gallery-images"
+const MAX_BRANDING_IMAGE_BYTES = 2 * 1024 * 1024
+const BRANDING_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
 export type SetupStatus = {
   setupRequired: boolean
@@ -30,10 +36,12 @@ export type SetupStatus = {
 export class PlatformService {
   private readonly authService: AuthService
   private readonly organizationsRepository: OrganizationsRepository
+  private readonly uploadsRepository: UploadsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.organizationsRepository = new OrganizationsRepository(db)
+    this.uploadsRepository = new UploadsRepository(db)
   }
 
   static async create() {
@@ -153,6 +161,82 @@ export class PlatformService {
     return organization
   }
 
+  async uploadBrandingImage(input: unknown, file: File) {
+    const values = brandingUploadSchema.parse(input)
+    const context = await this.authService.requirePermission("settings.manage")
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+    this.validateBrandingFile(file)
+
+    const storagePath = this.buildBrandingStoragePath(
+      values.organizationId,
+      values.imageKind,
+      file.name
+    )
+
+    await this.uploadsRepository.uploadObject(BRANDING_BUCKET, storagePath, file, {
+      cacheControl: "31536000",
+      upsert: false,
+    })
+
+    try {
+      const checksum = await this.calculateChecksum(file)
+      const document = await this.uploadsRepository.createDocument({
+        organization_id: values.organizationId,
+        hostel_id: null,
+        uploaded_by_user_id: context.authUser.id,
+        document_type: "gallery_image",
+        bucket_name: BRANDING_BUCKET,
+        storage_path: storagePath,
+        file_name: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size,
+        checksum,
+        is_public: true,
+        status: "verified",
+        verified_at: new Date().toISOString(),
+        verified_by: context.authUser.id,
+        metadata: {
+          source: "admin_branding_crop",
+          imageKind: values.imageKind,
+        },
+        created_by: context.authUser.id,
+        updated_by: context.authUser.id,
+      })
+      const publicUrl = versionedPublicUrl(
+        this.uploadsRepository.getPublicUrl(BRANDING_BUCKET, storagePath),
+        document.updated_at ?? document.created_at
+      )
+
+      await this.audit({
+        action: "platform.branding_image.uploaded",
+        organizationId: values.organizationId,
+        hostelId: null,
+        tableName: "documents",
+        recordId: document.id,
+        actorUserId: context.authUser.id,
+        oldValues: null,
+        newValues: {
+          documentId: document.id,
+          imageKind: values.imageKind,
+          bucketName: BRANDING_BUCKET,
+          storagePath,
+          publicUrl,
+        },
+      })
+
+      return {
+        imageKind: values.imageKind,
+        document,
+        storagePath,
+        publicUrl,
+      }
+    } catch (error) {
+      await this.uploadsRepository.removeObject(BRANDING_BUCKET, storagePath)
+      throw error
+    }
+  }
+
   async listHostels() {
     const context = await this.authService.requirePermission("settings.manage")
 
@@ -269,6 +353,52 @@ export class PlatformService {
     return hostel
   }
 
+  private validateBrandingFile(file: File) {
+    if (!file || file.size === 0) {
+      throw badRequest("A non-empty branding image is required.")
+    }
+
+    if (file.size > MAX_BRANDING_IMAGE_BYTES) {
+      throw badRequest("Branding image is larger than the allowed upload size.")
+    }
+
+    if (!BRANDING_IMAGE_MIME_TYPES.has(file.type)) {
+      throw badRequest("Branding image must be a JPG, PNG, or WebP file.")
+    }
+  }
+
+  private buildBrandingStoragePath(
+    organizationId: string,
+    imageKind: "logo" | "favicon",
+    fileName: string
+  ) {
+    return [
+      organizationId,
+      "global",
+      "branding",
+      imageKind,
+      `${crypto.randomUUID()}-${this.safeFileName(fileName)}`,
+    ].join("/")
+  }
+
+  private safeFileName(fileName: string) {
+    const safeFileName = fileName
+      .toLowerCase()
+      .replace(/[^a-z0-9.]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+
+    return safeFileName || "brand-image.png"
+  }
+
+  private async calculateChecksum(file: File) {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
+
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+  }
+
   private async audit(input: {
     action: string
     organizationId: string
@@ -305,4 +435,14 @@ function jsonObjectOrEmpty(value: Json): Record<string, unknown> {
   }
 
   return value
+}
+
+function versionedPublicUrl(url: string, version: string | null | undefined) {
+  if (!version) {
+    return url
+  }
+
+  const separator = url.includes("?") ? "&" : "?"
+
+  return `${url}${separator}v=${encodeURIComponent(version)}`
 }

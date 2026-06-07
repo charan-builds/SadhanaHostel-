@@ -16,6 +16,7 @@ function createServiceHarness() {
   const authService = {
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
     requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
+    getCurrentContext: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
     requireHostelAccess: vi.fn(),
     resolveHostelScope: vi.fn((_context, _organizationId, hostelId) => hostelId ?? null),
@@ -23,6 +24,8 @@ function createServiceHarness() {
   const residentsRepository = {
     create: vi.fn(),
     getById: vi.fn(),
+    getByUserId: vi.fn(),
+    getCurrentRoomAssignment: vi.fn().mockResolvedValue(null),
     findAdmissionDuplicate: vi.fn().mockResolvedValue(null),
     deactivate: vi.fn(),
     checkout: vi.fn(),
@@ -167,6 +170,39 @@ function monthlyFeeRecordFixture(overrides: Record<string, unknown> = {}) {
 describe("ResidentsService", () => {
   afterEach(() => {
     vi.unstubAllEnvs()
+  })
+
+  it("enriches the current resident profile with active room assignment", async () => {
+    const harness = createServiceHarness()
+    const resident = residentFixture({ user_id: "test-user-id" })
+
+    harness.authService.getCurrentContext.mockResolvedValue(adminAuthContext())
+    harness.residentsRepository.getByUserId.mockResolvedValue(resident)
+    harness.residentsRepository.getCurrentRoomAssignment.mockResolvedValue({
+      id: "allocation-1",
+      roomNumber: "204",
+      roomName: "East Wing",
+      bedLabel: "B",
+    })
+
+    await expect(
+      harness.service.getCurrentResident(TEST_ORGANIZATION_ID)
+    ).resolves.toMatchObject({
+      id: resident.id,
+      current_room_allocation_id: "allocation-1",
+      current_room_number: "204",
+      current_room_name: "East Wing",
+      current_bed_label: "B",
+    })
+
+    expect(harness.authService.requireOrganizationAccess).toHaveBeenCalledWith(
+      expect.anything(),
+      TEST_ORGANIZATION_ID
+    )
+    expect(harness.residentsRepository.getCurrentRoomAssignment).toHaveBeenCalledWith(
+      resident.id,
+      TEST_ORGANIZATION_ID
+    )
   })
 
   it("creates a quick draft resident without storing room assignment metadata", async () => {

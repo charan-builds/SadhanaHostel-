@@ -1,0 +1,172 @@
+{
+  "createdAt": "2026-06-06T11:56:19.360Z",
+  "topChunks": [
+    {
+      "bytes": 569886,
+      "file": ".next/static/chunks/16_030h3ac3n5.js"
+    },
+    {
+      "bytes": 332321,
+      "file": ".next/static/chunks/0xo_.p11qtlrx.js"
+    },
+    {
+      "bytes": 233738,
+      "file": ".next/static/chunks/0xf_wo4nfq2i4.js"
+    },
+    {
+      "bytes": 228831,
+      "file": ".next/static/chunks/01an450jyg38~.js"
+    },
+    {
+      "bytes": 146167,
+      "file": ".next/static/chunks/0jwchonudrj04.js"
+    },
+    {
+      "bytes": 123988,
+      "file": ".next/static/chunks/07-62kw.81-d5.js"
+    },
+    {
+      "bytes": 112594,
+      "file": ".next/static/chunks/03~yq9q893hmn.js"
+    },
+    {
+      "bytes": 111992,
+      "file": ".next/static/chunks/17oz.092s6~_j.js"
+    },
+    {
+      "bytes": 61850,
+      "file": ".next/static/chunks/12odmhsenzu8e.js"
+    },
+    {
+      "bytes": 61833,
+      "file": ".next/static/chunks/124_plg3-1111.js"
+    },
+    {
+      "bytes": 56119,
+      "file": ".next/static/chunks/180.vxm_fyyvr.js"
+    },
+    {
+      "bytes": 52260,
+      "file": ".next/static/chunks/0.om4iw1bthpt.js"
+    },
+    {
+      "bytes": 51550,
+      "file": ".next/static/chunks/0uzww_xk25xor.js"
+    },
+    {
+      "bytes": 48477,
+      "file": ".next/static/chunks/0jtj3qztgk._w.js"
+    },
+    {
+      "bytes": 46226,
+      "file": ".next/static/chunks/0_bvbt3ygztps.js"
+    },
+    {
+      "bytes": 44022,
+      "file": ".next/static/chunks/04.i-__.as.dk.js"
+    },
+    {
+      "bytes": 39304,
+      "file": ".next/static/chunks/0oas1a2x336rb.js"
+    },
+    {
+      "bytes": 37461,
+      "file": ".next/static/chunks/0xgn0_g67u.jx.js"
+    },
+    {
+      "bytes": 36819,
+      "file": ".next/static/chunks/00utjlprh6tqa.js"
+    },
+    {
+      "bytes": 36365,
+      "file": ".next/static/chunks/0j1m_s5mtzeu3.js"
+    }
+  ],
+  "finance": [
+    {
+      "page": "page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    },
+    {
+      "page": "collections/page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    },
+    {
+      "page": "followups/page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    },
+    {
+      "page": "receipts/page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    },
+    {
+      "page": "reconciliation/page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    },
+    {
+      "page": "payment-security/page",
+      "rootMainFiles": [
+        "static/chunks/0drsa3a296nlu.js",
+        "static/chunks/12odmhsenzu8e.js",
+        "static/chunks/0pf5w941cz50~.js",
+        "static/chunks/07-62kw.81-d5.js",
+        "static/chunks/0xf_wo4nfq2i4.js",
+        "static/chunks/0xo_.p11qtlrx.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/turbopack-0w4ws2-vka88h.js"
+      ],
+      "rootMainBytes": 866724
+    }
+  ],
+  "financeBoundaryFiles": []
+}

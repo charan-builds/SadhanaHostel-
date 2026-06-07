@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import type { Route } from "next"
+import { usePathname } from "next/navigation"
 import { Menu, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { BrandMark } from "@/components/shared/brand-mark"
@@ -18,19 +19,19 @@ import {
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
-import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 type PublicMobileMenuProps = {
-  currentPathname: string
   logoUrl?: string | null
+  defaultOpen?: boolean
 }
 
 function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function PublicMobileMenu({ currentPathname, logoUrl }: PublicMobileMenuProps) {
-  const [open, setOpen] = useState(false)
+export function PublicMobileMenu({ logoUrl, defaultOpen = false }: PublicMobileMenuProps) {
+  const [open, setOpen] = useState(defaultOpen)
+  const currentPathname = usePathname()
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -86,7 +87,18 @@ export function PublicMobileMenu({ currentPathname, logoUrl }: PublicMobileMenuP
           </div>
 
           <div className="grid gap-2">
-            <PublicAuthActions mode="mobile" onNavigate={() => setOpen(false)} />
+            <div className="grid grid-cols-2 gap-2">
+              <Button asChild className="justify-start">
+                <Link href="/resident/login" onClick={() => setOpen(false)}>
+                  Resident
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="justify-start">
+                <Link href="/admin/login" onClick={() => setOpen(false)}>
+                  Admin
+                </Link>
+              </Button>
+            </div>
             <Button asChild className="justify-start">
               <a href={callHref} onClick={() => setOpen(false)}>
                 <Phone className="size-4" aria-hidden="true" />

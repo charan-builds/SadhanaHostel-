@@ -115,6 +115,31 @@ export type OwnerAnalytics = {
       riskAdjustedPendingDues: number
     }
   }
+  communications: {
+    unreadNotifications: number
+    unreadNotices: number
+    unreadResidents: number
+    overdueResidents: number
+    noticeReadRate: number
+    noticeReadRates: {
+      totalRecipients: number
+      read: number
+      unread: number
+      percentage: number
+    }
+    noticeAcknowledgementRate: number
+    noticeAcknowledgementRates: {
+      totalRecipients: number
+      acknowledged: number
+      pending: number
+      percentage: number
+    }
+    feeReminderEngagement: {
+      sent: number
+      read: number
+      percentage: number
+    }
+  }
   insights: Array<{
     severity: "critical" | "warning" | "info" | "success"
     title: string

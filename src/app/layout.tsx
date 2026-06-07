@@ -1,7 +1,5 @@
-import type { Metadata } from "next";
-import { GoogleAnalytics } from "@next/third-parties/google";
-import { AppProviders } from "@/components/providers/app-providers";
-import { analyticsConfig } from "@/config/analytics";
+import type { Metadata, Viewport } from "next";
+import { GoogleAnalyticsSlot } from "@/components/analytics/google-analytics-slot";
 import { absoluteUrl, getSiteUrl, localSeoKeywords } from "@/lib/seo";
 import "./globals.css";
 
@@ -30,6 +28,10 @@ export const metadata: Metadata = {
       }
     : {}),
   other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "default",
+    "apple-mobile-web-app-title": "Sadhana Hostel",
     "geo.region": "IN-AP",
     "geo.placename": "Pulivendula",
     "business:contact_data:locality": "Pulivendula",
@@ -69,6 +71,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0068b7",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -76,12 +85,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en-IN" className="h-full antialiased">
-      <body className="min-h-full">
-        <AppProviders>{children}</AppProviders>
-      </body>
-      {analyticsConfig.isGoogleAnalyticsEnabled ? (
-        <GoogleAnalytics gaId={analyticsConfig.gaMeasurementId} />
-      ) : null}
+      <body className="min-h-full">{children}</body>
+      <GoogleAnalyticsSlot />
     </html>
   );
 }

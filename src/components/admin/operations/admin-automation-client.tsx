@@ -947,7 +947,16 @@ function defaultPayload(name: string) {
   }
 
   if (name === "payment_reminder") {
-    return { dueBeforeDate: new Date().toISOString().slice(0, 10), limit: 100 }
+    const now = new Date()
+    const dueBeforeDate = new Date(now)
+
+    dueBeforeDate.setUTCDate(dueBeforeDate.getUTCDate() + 7)
+
+    return {
+      dueBeforeDate: dueBeforeDate.toISOString().slice(0, 10),
+      runDate: now.toISOString().slice(0, 10),
+      limit: 100,
+    }
   }
 
   if (name === "invoice_cleanup") {

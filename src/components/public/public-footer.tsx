@@ -1,17 +1,6 @@
-"use client"
-
-import Link from "next/link"
-import type { Route } from "next"
-import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
-
 import { BrandMark } from "@/components/shared/brand-mark"
-import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { localSeoLandingLinks, publicNavItems } from "@/constants/public-content"
-import {
-  trackContactAction,
-  trackWhatsAppClick,
-} from "@/lib/analytics/google-analytics"
 
 const quickLinks = publicNavItems.filter((item) =>
   ["/", "/about", "/rooms", "/facilities", "/gallery"].includes(item.href),
@@ -32,14 +21,15 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
     <footer className="border-t bg-muted/25">
       <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.25fr_0.75fr_0.75fr] lg:py-14">
         <div className="max-w-xl">
-          <Link
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a
             href="/"
             className="inline-flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             aria-label={`${hostelConfig.name} home`}
           >
             <BrandMark logoUrl={logoUrl} />
             <span className="font-semibold text-foreground">{hostelConfig.name}</span>
-          </Link>
+          </a>
 
           <p className="mt-4 max-w-lg text-sm leading-6 text-muted-foreground">
             A practical and well-managed hostel stay for students and employees in{" "}
@@ -48,7 +38,7 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
 
           <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
             <div className="flex gap-3">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+              <span className="mt-2 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
               <div>
                 <p>{hostelConfig.location.address}</p>
                 <p className="mt-1 font-medium text-foreground">{hostelConfig.location.note}</p>
@@ -57,9 +47,7 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
             <a
               href={callHref}
               className="flex w-fit items-center gap-3 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              onClick={() => trackContactAction("phone", "public_footer")}
             >
-              <Phone className="size-4 text-primary" aria-hidden="true" />
               <span>{hostelConfig.contact.phone}</span>
             </a>
             <a
@@ -67,48 +55,34 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
               target="_blank"
               rel="noreferrer"
               className="flex w-fit items-center gap-3 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              onClick={() => {
-                trackContactAction("whatsapp", "public_footer")
-                trackWhatsAppClick("public_footer")
-              }}
             >
-              <MessageCircle className="size-4 text-primary" aria-hidden="true" />
               <span>{hostelConfig.contact.whatsapp}</span>
             </a>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2">
-            <Button asChild>
-              <a href={callHref} onClick={() => trackContactAction("phone", "public_footer_cta")}>
-                <Phone className="size-4" aria-hidden="true" />
-                Call
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a
-                href={whatsappHref}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => {
-                  trackContactAction("whatsapp", "public_footer_cta")
-                  trackWhatsAppClick("public_footer_cta")
-                }}
-              >
-                <MessageCircle className="size-4" aria-hidden="true" />
-                WhatsApp
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a
-                href={mapSearchHref}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => trackContactAction("map", "public_footer_cta")}
-              >
-                <Navigation className="size-4" aria-hidden="true" />
-                Navigate
-              </a>
-            </Button>
+            <a
+              href={callHref}
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Call
+            </a>
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              WhatsApp
+            </a>
+            <a
+              href={mapSearchHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              Navigate
+            </a>
           </div>
         </div>
 
@@ -117,12 +91,12 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
           <ul className="mt-4 grid gap-2">
             {quickLinks.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href as Route}
+                <a
+                  href={item.href}
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {item.title}
-                </Link>
+                </a>
               </li>
             ))}
           </ul>
@@ -133,22 +107,22 @@ export function PublicFooter({ logoUrl }: { logoUrl?: string | null }) {
           <ul className="mt-4 grid gap-2">
             {importantLinks.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href as Route}
+                <a
+                  href={item.href}
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {item.title}
-                </Link>
+                </a>
               </li>
             ))}
             {localSeoLandingLinks.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href as Route}
+                <a
+                  href={item.href}
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {item.title}
-                </Link>
+                </a>
               </li>
             ))}
           </ul>

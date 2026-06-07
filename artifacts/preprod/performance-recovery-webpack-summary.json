@@ -1,0 +1,47 @@
+{
+  "url": "http://localhost:3023/",
+  "fetchedAt": "2026-06-06T15:31:53.113Z",
+  "categories": {
+    "performance": 49,
+    "accessibility": 100,
+    "best-practices": 93,
+    "seo": 61
+  },
+  "metrics": {
+    "firstContentfulPaintMs": 970,
+    "largestContentfulPaintMs": 6530,
+    "totalBlockingTimeMs": 1813,
+    "cumulativeLayoutShift": 0.0012,
+    "speedIndexMs": 2850,
+    "timeToInteractiveMs": 7264
+  },
+  "diagnostics": {
+    "totalByteWeightBytes": 742068,
+    "bootupTimeMs": 2489,
+    "mainThreadWorkMs": 4119,
+    "unusedJavascriptSavingsBytes": 238772
+  },
+  "lcpElement": "<img alt=\"Sadhana Boys Hostel building\" decoding=\"async\" data-nimg=\"fill\" class=\"object-cover\" style=\"position: absolute; height: 100%; width: 100%; inset: 0px;\" sizes=\"100vw\" srcset=\"/_next/image?url=%2Fimages%2Fhostel-exterior-wide.webp&amp;w=640&amp;q=75 640w, /_…\" src=\"http://localhost:3023/_next/image?url=%2Fimages%2Fhostel-exterior-wide.web…\">",
+  "lcpPhases": [
+    {
+      "phase": "TTFB",
+      "timing": 484.7573,
+      "percent": "7%"
+    },
+    {
+      "phase": "Load Delay",
+      "timing": 2109.975153845995,
+      "percent": "32%"
+    },
+    {
+      "phase": "Load Time",
+      "timing": 921.7201643660646,
+      "percent": "14%"
+    },
+    {
+      "phase": "Render Delay",
+      "timing": 3013.440631787941,
+      "percent": "46%"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import {
   Bell,
   Bot,
   CreditCard,
+  Crop,
   Edit3,
   Globe,
   KeyRound,
@@ -15,10 +16,11 @@ import {
   Power,
   Save,
   ShieldCheck,
+  Upload,
   Users,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, type FieldValues, type Path, type UseFormReturn } from "react-hook-form"
 import { toast } from "sonner"
@@ -44,8 +46,13 @@ import {
   useOrganizationSettings,
   useUpdateHostel,
   useUpdateOrganizationSettings,
+  useUploadBrandingImage,
 } from "@/hooks"
 import type { Tables } from "@/types/database"
+
+const BRAND_CROP_SIZE = 512
+const BRAND_CROP_FILE_NAME = "sadhana-brand-logo.png"
+type BrandingCropTarget = "favicon" | "logo" | "both"
 
 const organizationFormSchema = z.object({
   name: z.string().trim().min(2).max(160),
@@ -458,6 +465,7 @@ export function AdminSettingsClient() {
                 previewClassName="size-10 rounded-md"
                 imageClassName="object-contain"
               />
+              <BrandLogoCropper form={organizationForm} organizationId={organizationId} />
               <Field form={organizationForm} name="primaryColor" label="Brand color" />
               <div className="md:col-span-2">
                 <Button disabled={updateOrganization.isPending} className="gap-2">
@@ -937,6 +945,245 @@ function BrandImageField<
   )
 }
 
+function BrandLogoCropper({
+  form,
+  organizationId,
+}: {
+  form: UseFormReturn<OrganizationFormValues>
+  organizationId: string
+}) {
+  const uploadBrandingImage = useUploadBrandingImage()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const imageRef = useRef<HTMLImageElement | null>(null)
+  const [sourceUrl, setSourceUrl] = useState("")
+  const [sourceName, setSourceName] = useState("")
+  const [target, setTarget] = useState<BrandingCropTarget>("favicon")
+  const [zoom, setZoom] = useState(1)
+  const [offsetX, setOffsetX] = useState(0)
+  const [offsetY, setOffsetY] = useState(0)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const faviconUrl = form.watch("faviconUrl")
+  const logoUrl = form.watch("logoUrl")
+  const currentPreviewUrl =
+    typeof faviconUrl === "string" && faviconUrl.trim()
+      ? faviconUrl.trim()
+      : typeof logoUrl === "string"
+        ? logoUrl.trim()
+        : ""
+
+  useEffect(() => {
+    if (!sourceUrl) {
+      imageRef.current = null
+      return
+    }
+
+    const image = new window.Image()
+    image.onload = () => {
+      imageRef.current = image
+      drawBrandCrop(canvasRef.current, image, 1, 0, 0)
+    }
+    image.src = sourceUrl
+
+    return () => {
+      image.onload = null
+    }
+  }, [sourceUrl])
+
+  useEffect(() => {
+    drawBrandCrop(canvasRef.current, imageRef.current, zoom, offsetX, offsetY)
+  }, [offsetX, offsetY, zoom])
+
+  useEffect(() => {
+    return () => {
+      if (sourceUrl) {
+        URL.revokeObjectURL(sourceUrl)
+      }
+    }
+  }, [sourceUrl])
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Choose a JPG, PNG, or WebP logo.")
+      event.target.value = ""
+      return
+    }
+
+    if (sourceUrl) {
+      URL.revokeObjectURL(sourceUrl)
+    }
+
+    setSourceName(file.name)
+    setSourceUrl(URL.createObjectURL(file))
+    setZoom(1)
+    setOffsetX(0)
+    setOffsetY(0)
+  }
+
+  async function applyCrop() {
+    const canvas = canvasRef.current
+
+    if (!canvas || !imageRef.current) {
+      toast.error("Choose a logo image first.")
+      return
+    }
+
+    const blob = await canvasToBlob(canvas)
+    const file = new File([blob], BRAND_CROP_FILE_NAME, { type: "image/png" })
+    setUploadProgress(0)
+
+    try {
+      const result = await uploadBrandingImage.mutateAsync({
+        input: {
+          organizationId,
+          imageKind: target === "logo" ? "logo" : "favicon",
+        },
+        file,
+        options: {
+          onProgress: (progress) => setUploadProgress(progress.percent),
+        },
+      })
+
+      if (target === "favicon" || target === "both") {
+        form.setValue("faviconUrl", result.publicUrl, {
+          shouldDirty: true,
+          shouldValidate: true,
+        })
+      }
+
+      if (target === "logo" || target === "both") {
+        form.setValue("logoUrl", result.publicUrl, {
+          shouldDirty: true,
+          shouldValidate: true,
+        })
+      }
+
+      toast.success("Cropped logo uploaded. Save organization to publish it.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Cropped logo could not be uploaded.")
+    } finally {
+      setUploadProgress(null)
+    }
+  }
+
+  return (
+    <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:col-span-2">
+      <div className="flex items-center gap-2">
+        <Crop className="size-4 text-primary" aria-hidden="true" />
+        <h2 className="text-sm font-semibold">Cropped Logo</h2>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+        <div className="grid gap-3">
+          <div className="flex size-36 items-center justify-center overflow-hidden rounded-full border bg-background">
+            {sourceUrl ? (
+              <canvas ref={canvasRef} width={BRAND_CROP_SIZE} height={BRAND_CROP_SIZE} className="size-full" />
+            ) : currentPreviewUrl ? (
+              // Remote admin-provided branding URLs are previewed directly in this client form.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={currentPreviewUrl} alt="" className="size-full object-contain" />
+            ) : (
+              <span className="text-sm font-semibold text-muted-foreground">SB</span>
+            )}
+          </div>
+          <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} />
+          {sourceName ? (
+            <p className="truncate text-xs text-muted-foreground">{sourceName}</p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="branding-crop-target">Save cropped image as</Label>
+            <select
+              id="branding-crop-target"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              value={target}
+              onChange={(event) => setTarget(event.target.value as BrandingCropTarget)}
+            >
+              <option value="favicon">Browser/search icon</option>
+              <option value="logo">Brand logo</option>
+              <option value="both">Both</option>
+            </select>
+          </div>
+
+          <CropRange id="branding-crop-zoom" label="Zoom" min={1} max={3} step={0.05} value={zoom} onChange={setZoom} />
+          <CropRange id="branding-crop-x" label="Horizontal" min={-100} max={100} step={1} value={offsetX} onChange={setOffsetX} />
+          <CropRange id="branding-crop-y" label="Vertical" min={-100} max={100} step={1} value={offsetY} onChange={setOffsetY} />
+
+          <div>
+            <Button
+              type="button"
+              className="gap-2"
+              disabled={!sourceUrl || uploadBrandingImage.isPending}
+              onClick={() => void applyCrop()}
+            >
+              {uploadBrandingImage.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {uploadBrandingImage.isPending && uploadProgress !== null
+                ? `${uploadProgress}%`
+                : "Upload cropped logo"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CropRange({
+  id,
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor={id}>{label}</Label>
+        <Input
+          type="number"
+          className="h-8 w-20"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(event) => onChange(clampNumber(Number(event.target.value), min, max))}
+        />
+      </div>
+      <input
+        id={id}
+        type="range"
+        className="w-full accent-primary"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </div>
+  )
+}
+
 function TextAreaField<
   TFieldValues extends FieldValues,
   TTransformedValues extends FieldValues | undefined = undefined,
@@ -1019,4 +1266,69 @@ function CheckboxField<
       </span>
     </label>
   )
+}
+
+function drawBrandCrop(
+  canvas: HTMLCanvasElement | null,
+  image: HTMLImageElement | null,
+  zoom: number,
+  offsetX: number,
+  offsetY: number
+) {
+  if (!canvas || !image) {
+    return
+  }
+
+  const context = canvas.getContext("2d")
+
+  if (!context) {
+    return
+  }
+
+  canvas.width = BRAND_CROP_SIZE
+  canvas.height = BRAND_CROP_SIZE
+  context.clearRect(0, 0, BRAND_CROP_SIZE, BRAND_CROP_SIZE)
+
+  const baseScale = Math.max(
+    BRAND_CROP_SIZE / image.naturalWidth,
+    BRAND_CROP_SIZE / image.naturalHeight
+  )
+  const scale = baseScale * zoom
+  const drawWidth = image.naturalWidth * scale
+  const drawHeight = image.naturalHeight * scale
+  const maxOffsetX = Math.max(0, (drawWidth - BRAND_CROP_SIZE) / 2)
+  const maxOffsetY = Math.max(0, (drawHeight - BRAND_CROP_SIZE) / 2)
+  const drawX =
+    (BRAND_CROP_SIZE - drawWidth) / 2 + (clampNumber(offsetX, -100, 100) / 100) * maxOffsetX
+  const drawY =
+    (BRAND_CROP_SIZE - drawHeight) / 2 + (clampNumber(offsetY, -100, 100) / 100) * maxOffsetY
+
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = "high"
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+}
+
+async function canvasToBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob)
+          return
+        }
+
+        reject(new Error("Logo crop could not be created."))
+      },
+      "image/png",
+      0.95
+    )
+  })
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min
+  }
+
+  return Math.min(Math.max(value, min), max)
 }

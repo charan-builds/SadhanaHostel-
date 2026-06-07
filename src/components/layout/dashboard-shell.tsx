@@ -6,6 +6,7 @@ import { BrandMark } from "@/components/shared/brand-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DashboardUserActions } from "@/components/layout/dashboard-user-actions"
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav"
 import { Separator } from "@/components/ui/separator"
 import { RouteTransition } from "@/components/shared/route-transition"
 import {
@@ -76,7 +77,7 @@ export function DashboardShell({
           </nav>
 
           <div className="mt-auto">
-            <DashboardUserActions />
+            <DashboardUserActions area={area} />
           </div>
         </div>
       </aside>
@@ -90,75 +91,52 @@ export function DashboardShell({
             </Link>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{areaLabel}</Badge>
-              <DashboardUserActions />
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label="Open navigation">
-                    <Menu className="size-4" aria-hidden="true" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left">
-                  <SheetHeader>
-                    <SheetTitle>{areaLabel} Navigation</SheetTitle>
-                  </SheetHeader>
-                  <nav className="grid gap-1 px-4" aria-label={`${areaLabel} navigation`}>
-                    {navigation.map((item) => {
-                      const Icon = item.icon
+              <DashboardUserActions area={area} />
+              {area === "admin" ? (
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Open navigation">
+                      <Menu className="size-4" aria-hidden="true" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left">
+                    <SheetHeader>
+                      <SheetTitle>{areaLabel} Navigation</SheetTitle>
+                    </SheetHeader>
+                    <nav className="grid gap-1 px-4" aria-label={`${areaLabel} navigation`}>
+                      {navigation.map((item) => {
+                        const Icon = item.icon
 
-                      return (
-                        <SheetClose key={item.href} asChild>
-                          <Button
-                            asChild
-                            variant="ghost"
-                            className="h-11 justify-start gap-2"
-                          >
-                            <Link href={item.href}>
-                              {Icon ? (
-                                <Icon className="size-4" aria-hidden="true" />
-                              ) : null}
-                              {item.title}
-                            </Link>
-                          </Button>
-                        </SheetClose>
-                      )
-                    })}
-                  </nav>
-                </SheetContent>
-              </Sheet>
+                        return (
+                          <SheetClose key={item.href} asChild>
+                            <Button
+                              asChild
+                              variant="ghost"
+                              className="h-11 justify-start gap-2"
+                            >
+                              <Link href={item.href}>
+                                {Icon ? (
+                                  <Icon className="size-4" aria-hidden="true" />
+                                ) : null}
+                                {item.title}
+                              </Link>
+                            </Button>
+                          </SheetClose>
+                        )
+                      })}
+                    </nav>
+                  </SheetContent>
+                </Sheet>
+              ) : null}
             </div>
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 pb-24 sm:px-6 lg:py-8 lg:pb-8">
+        <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:py-8 lg:pb-8">
           <RouteTransition className="grid gap-6">{children}</RouteTransition>
         </main>
 
-        {area === "resident" ? (
-          <nav
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-white/70 bg-white/86 px-2 py-2 shadow-lg backdrop-blur-2xl lg:hidden"
-            aria-label="Resident quick navigation"
-          >
-            <div className="mx-auto flex max-w-md gap-1 overflow-x-auto">
-              {navigation.map((item) => {
-                const Icon = item.icon
-
-                return (
-                  <Button
-                    key={item.href}
-                    asChild
-                    variant="ghost"
-                    className="h-14 min-w-16 flex-col gap-1 px-1 text-[11px]"
-                  >
-                    <Link href={item.href}>
-                      {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
-                      <span className="max-w-full truncate">{item.title}</span>
-                    </Link>
-                  </Button>
-                )
-              })}
-            </div>
-          </nav>
-        ) : null}
+        {area === "resident" ? <MobileBottomNav navigation={navigation} /> : null}
       </div>
     </div>
   )

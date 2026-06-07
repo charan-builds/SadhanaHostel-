@@ -1,0 +1,165 @@
+{
+  "createdAt": "2026-06-06T11:22:09.808Z",
+  "topChunks": [
+    {
+      "bytes": 594779,
+      "file": ".next/static/chunks/0p7wppezznx1e.js"
+    },
+    {
+      "bytes": 551880,
+      "file": ".next/static/chunks/15fcnoox~74vy.js"
+    },
+    {
+      "bytes": 146167,
+      "file": ".next/static/chunks/0zwgca-c-gwy5.js"
+    },
+    {
+      "bytes": 140808,
+      "file": ".next/static/chunks/0m.~8aoylvgzl.js"
+    },
+    {
+      "bytes": 112594,
+      "file": ".next/static/chunks/03~yq9q893hmn.js"
+    },
+    {
+      "bytes": 112434,
+      "file": ".next/static/chunks/0sllvff6wd97p.js"
+    },
+    {
+      "bytes": 62275,
+      "file": ".next/static/chunks/0.jfq7xime3bh.js"
+    },
+    {
+      "bytes": 57094,
+      "file": ".next/static/chunks/0e7to1m3z8q5e.js"
+    },
+    {
+      "bytes": 56119,
+      "file": ".next/static/chunks/180.vxm_fyyvr.js"
+    },
+    {
+      "bytes": 52260,
+      "file": ".next/static/chunks/0.om4iw1bthpt.js"
+    },
+    {
+      "bytes": 51550,
+      "file": ".next/static/chunks/0uzww_xk25xor.js"
+    },
+    {
+      "bytes": 48477,
+      "file": ".next/static/chunks/0jtj3qztgk._w.js"
+    },
+    {
+      "bytes": 46226,
+      "file": ".next/static/chunks/0_bvbt3ygztps.js"
+    },
+    {
+      "bytes": 44022,
+      "file": ".next/static/chunks/04.i-__.as.dk.js"
+    },
+    {
+      "bytes": 39746,
+      "file": ".next/static/chunks/15u9ssfsrk5~_.js"
+    },
+    {
+      "bytes": 37461,
+      "file": ".next/static/chunks/0xgn0_g67u.jx.js"
+    },
+    {
+      "bytes": 36365,
+      "file": ".next/static/chunks/0j1m_s5mtzeu3.js"
+    },
+    {
+      "bytes": 35961,
+      "file": ".next/static/chunks/0kj7rci6zqhvb.js"
+    },
+    {
+      "bytes": 35618,
+      "file": ".next/static/chunks/0i-irm65l2d.4.js"
+    },
+    {
+      "bytes": 34964,
+      "file": ".next/static/chunks/03f7yrzwzqp0~.js"
+    }
+  ],
+  "finance": [
+    {
+      "page": "page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    },
+    {
+      "page": "collections/page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    },
+    {
+      "page": "followups/page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    },
+    {
+      "page": "receipts/page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    },
+    {
+      "page": "reconciliation/page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    },
+    {
+      "page": "payment-security/page",
+      "rootMainFiles": [
+        "static/chunks/035mp0-775hl2.js",
+        "static/chunks/04.i-__.as.dk.js",
+        "static/chunks/0ewu5coaodtn8.js",
+        "static/chunks/15fcnoox~74vy.js",
+        "static/chunks/0e7to1m3z8q5e.js",
+        "static/chunks/0m.~8aoylvgzl.js",
+        "static/chunks/turbopack-12at9js.2jlxy.js"
+      ],
+      "rootMainBytes": 847756
+    }
+  ]
+}

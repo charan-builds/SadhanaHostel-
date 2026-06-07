@@ -4,6 +4,10 @@ import type {
   NotificationStatus,
 } from "@/repositories/notifications.repository"
 import type { Json } from "@/types/database"
+import type {
+  NotificationCategory,
+  NotificationPriority,
+} from "@/lib/notifications/catalog"
 
 export type NotificationRecipient = {
   userId?: string | null
@@ -17,6 +21,8 @@ export type NotificationMessage = {
   body: string
   templateKey?: string | null
   payload?: Json
+  category?: NotificationCategory
+  priority?: NotificationPriority
 }
 
 export type NotificationSendInput = {

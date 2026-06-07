@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import {
   AlertTriangle,
   BarChart3,
+  Bell,
   Download,
   IndianRupee,
   Loader2,
@@ -268,6 +269,55 @@ export function OwnerDashboardClient() {
         />
       </section>
 
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          title="Unread Notifications"
+          value={data.communications.unreadNotifications}
+          description={`${data.communications.unreadNotices} unread notice notifications`}
+          icon={Bell}
+          tone={data.communications.unreadNotifications > 0 ? "warning" : "success"}
+        />
+        <StatCard
+          title="Unread Residents"
+          value={data.communications.unreadResidents}
+          description="Residents with unread notification items"
+          icon={Users}
+          tone={data.communications.unreadResidents > 0 ? "warning" : "success"}
+        />
+        <StatCard
+          title="Overdue Residents"
+          value={data.communications.overdueResidents}
+          description="Residents with overdue fee balance"
+          icon={AlertTriangle}
+          tone={data.communications.overdueResidents > 0 ? "warning" : "success"}
+        />
+        <StatCard
+          title="Notice Read Rate"
+          value={`${data.communications.noticeReadRates.percentage}%`}
+          description={`${data.communications.noticeReadRates.read}/${data.communications.noticeReadRates.totalRecipients} recipients read`}
+          icon={TrendingUp}
+          tone={data.communications.noticeReadRates.percentage >= 75 ? "success" : "warning"}
+        />
+        <StatCard
+          title="Acknowledgement Rate"
+          value={`${data.communications.noticeAcknowledgementRates.percentage}%`}
+          description={`${data.communications.noticeAcknowledgementRates.acknowledged}/${data.communications.noticeAcknowledgementRates.totalRecipients} acknowledged`}
+          icon={TrendingUp}
+          tone={
+            data.communications.noticeAcknowledgementRates.percentage >= 75
+              ? "success"
+              : "warning"
+          }
+        />
+        <StatCard
+          title="Reminder Engagement"
+          value={`${data.communications.feeReminderEngagement.percentage}%`}
+          description={`${data.communications.feeReminderEngagement.read}/${data.communications.feeReminderEngagement.sent} reminders read`}
+          icon={IndianRupee}
+          tone={data.communications.feeReminderEngagement.percentage >= 60 ? "success" : "warning"}
+        />
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <Card>
           <CardHeader>
@@ -281,9 +331,24 @@ export function OwnerDashboardClient() {
               detail={formatCurrency(finance?.dueWindows.today ?? 0)}
             />
             <OwnerMiniMetric
-              label="Upcoming Dues"
-              value={formatCurrency(finance?.owner.upcomingDues.next7Days ?? 0)}
-              detail="Next 7 days"
+              label="Due This Week"
+              value={finance?.dueWindows.weekCount ?? 0}
+              detail={formatCurrency(finance?.dueWindows.week ?? 0)}
+            />
+            <OwnerMiniMetric
+              label="Notice Engagement"
+              value={`${data.communications.noticeReadRates.percentage}%`}
+              detail={`${data.communications.noticeReadRates.read}/${data.communications.noticeReadRates.totalRecipients} read`}
+            />
+            <OwnerMiniMetric
+              label="Notification Engagement"
+              value={`${data.communications.feeReminderEngagement.percentage}%`}
+              detail={`${data.communications.feeReminderEngagement.read}/${data.communications.feeReminderEngagement.sent} reminders`}
+            />
+            <OwnerMiniMetric
+              label="Collection Conversion"
+              value={`${data.summary.paymentConversion}%`}
+              detail="Submitted to verified"
             />
             <OwnerMiniMetric
               label="Cash Today"

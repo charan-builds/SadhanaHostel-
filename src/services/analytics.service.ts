@@ -12,6 +12,9 @@ import { normalizeDateBoundary } from "@/lib/date-range"
 import { measureAsync } from "@/lib/performance"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { AnalyticsRepository } from "@/repositories/analytics.repository"
+import { NoticeAcknowledgementsRepository } from "@/repositories/notice-acknowledgements.repository"
+import { NoticesRepository } from "@/repositories/notices.repository"
+import { NotificationsRepository } from "@/repositories/notifications.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import {
   advancedAnalyticsSchema,
@@ -33,10 +36,16 @@ const OWNER_ANALYTICS_CACHE_TTL_MS = 60_000
 export class AnalyticsService {
   private readonly authService: AuthService
   private readonly analyticsRepository: AnalyticsRepository
+  private readonly noticeAcknowledgementsRepository: NoticeAcknowledgementsRepository
+  private readonly noticesRepository: NoticesRepository
+  private readonly notificationsRepository: NotificationsRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.analyticsRepository = new AnalyticsRepository(db)
+    this.noticeAcknowledgementsRepository = new NoticeAcknowledgementsRepository(db)
+    this.noticesRepository = new NoticesRepository(db)
+    this.notificationsRepository = new NotificationsRepository(db)
   }
 
   static async create() {
@@ -397,11 +406,31 @@ export class AnalyticsService {
       reservations,
       payments,
       feeRecords,
+      communicationAnalytics,
     ] = await Promise.all([
       this.analyticsRepository.listOwnerResidents(organizationId, hostelId),
       this.analyticsRepository.listOwnerReservations(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listPaymentsInRange(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listOwnerFeeRecords(organizationId, fromDate, toDate, hostelId),
+      this.notificationsRepository.getCommunicationAnalytics({ organizationId, hostelId }),
+    ])
+    const acknowledgementNotices =
+      await this.noticesRepository.listAcknowledgementRequired({
+        organizationId,
+        hostelId,
+      })
+    const acknowledgementNoticeIds = acknowledgementNotices.map((notice) => notice.id)
+    const [acknowledgementCounts, acknowledgementRecipientStats] = await Promise.all([
+      this.noticeAcknowledgementsRepository.listAcknowledgementCountsByNotice({
+        organizationId,
+        hostelId,
+        noticeIds: acknowledgementNoticeIds,
+      }),
+      this.notificationsRepository.listNoticeRecipientStats({
+        organizationId,
+        hostelId,
+        noticeIds: acknowledgementNoticeIds,
+      }),
     ])
 
     const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
@@ -432,6 +461,7 @@ export class AnalyticsService {
     const overdueRecords = pendingFeeRecords.filter(
       (record) => record.due_date < now.toISOString().slice(0, 10)
     )
+    const overdueResidentIds = new Set(overdueRecords.map((record) => record.resident_id))
     const completedOnboarding = operationalResidents.length
     const checkedOutInRange = residents.filter((resident) =>
       isDateInRange(resident.checkout_on, fromDate, toDate)
@@ -484,6 +514,29 @@ export class AnalyticsService {
       onboardingIncomplete: Math.max(0, residents.length - completedOnboarding),
       paymentConversion,
     })
+    const acknowledgementRecipients = sum(
+      acknowledgementNoticeIds.map(
+        (noticeId) => acknowledgementRecipientStats.get(noticeId)?.totalRecipients ?? 0
+      )
+    )
+    const acknowledgedRecipients = sum(
+      acknowledgementNoticeIds.map((noticeId) =>
+        Math.min(
+          acknowledgementCounts.get(noticeId) ?? 0,
+          acknowledgementRecipientStats.get(noticeId)?.totalRecipients ?? 0
+        )
+      )
+    )
+    const pendingAcknowledgements = Math.max(
+      acknowledgementRecipients - acknowledgedRecipients,
+      0
+    )
+    const acknowledgementPercentage =
+      acknowledgementRecipients === 0
+        ? 0
+        : Number(
+            ((acknowledgedRecipients / acknowledgementRecipients) * 100).toFixed(2)
+          )
 
     return {
       range: { fromDate, toDate },
@@ -512,6 +565,31 @@ export class AnalyticsService {
       trends: financeMonthly,
       forecasts: {
         revenue: revenueForecast,
+      },
+      communications: {
+        unreadNotifications: communicationAnalytics.unreadNotifications,
+        unreadNotices: communicationAnalytics.unreadNotices,
+        unreadResidents: communicationAnalytics.unreadResidents,
+        overdueResidents: hostelModules.startupFinanceZero ? 0 : overdueResidentIds.size,
+        noticeReadRate: communicationAnalytics.noticeReadPercentage,
+        noticeReadRates: {
+          totalRecipients: communicationAnalytics.totalNoticeRecipients,
+          read: communicationAnalytics.readNoticeRecipients,
+          unread: communicationAnalytics.unreadNoticeRecipients,
+          percentage: communicationAnalytics.noticeReadPercentage,
+        },
+        noticeAcknowledgementRate: acknowledgementPercentage,
+        noticeAcknowledgementRates: {
+          totalRecipients: acknowledgementRecipients,
+          acknowledged: acknowledgedRecipients,
+          pending: pendingAcknowledgements,
+          percentage: acknowledgementPercentage,
+        },
+        feeReminderEngagement: {
+          sent: communicationAnalytics.feeReminderSent,
+          read: communicationAnalytics.feeReminderRead,
+          percentage: communicationAnalytics.feeReminderEngagement,
+        },
       },
       insights,
       generatedAt: new Date().toISOString(),
