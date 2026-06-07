@@ -26,13 +26,15 @@ export const noticeTypes = [
   "emergency",
 ] as const
 
+const noticeAudienceRoleSchema = z.enum(Constants.public.Enums.user_role_enum)
+
 export const noticeAudienceFilterSchema = z
   .object({
     resident_ids: z.array(uuidSchema).max(500).optional(),
     residentIds: z.array(uuidSchema).max(500).optional(),
     room_ids: z.array(uuidSchema).max(500).optional(),
     roomIds: z.array(uuidSchema).max(500).optional(),
-    roles: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    roles: z.array(noticeAudienceRoleSchema).max(20).optional(),
   })
   .catchall(z.unknown())
   .transform((value) => {
@@ -45,9 +47,11 @@ export const noticeAudienceFilterSchema = z
       ...(value.room_ids ?? []),
       ...(value.roomIds ?? []),
     ])
+    const roles = uniqueStrings(value.roles ?? [])
 
     delete normalized.residentIds
     delete normalized.roomIds
+    delete normalized.roles
 
     if (residentIds.length > 0) {
       normalized.resident_ids = residentIds
@@ -55,6 +59,10 @@ export const noticeAudienceFilterSchema = z
 
     if (roomIds.length > 0) {
       normalized.room_ids = roomIds
+    }
+
+    if (roles.length > 0) {
+      normalized.roles = roles
     }
 
     return normalized

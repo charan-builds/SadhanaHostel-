@@ -13,6 +13,7 @@ export type RunJobOptions = {
   runId?: string
   requestedBy?: string | null
   organizationId?: string | null
+  retryDelayMs?: number
 }
 
 export async function runJob<TPayload>(
@@ -22,11 +23,14 @@ export async function runJob<TPayload>(
 ): Promise<JobResult> {
   const db = options.db ?? createSupabaseAdminClient()
   const idempotencyKey = job.buildIdempotencyKey(payload)
+  const runId = options.runId ?? crypto.randomUUID()
+  const maxAttempts = Math.max(1, job.maxAttempts)
+  const retryDelayMs = Math.max(0, options.retryDelayMs ?? 250)
   let lastResult: JobResult | null = null
 
-  for (let attemptNumber = 1; attemptNumber <= job.maxAttempts; attemptNumber += 1) {
+  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber += 1) {
     const context: JobContext = {
-      runId: options.runId ?? crypto.randomUUID(),
+      runId,
       db,
       requestedBy: options.requestedBy ?? null,
       organizationId: options.organizationId ?? null,
@@ -39,6 +43,10 @@ export async function runJob<TPayload>(
 
     if (lastResult.status !== "failed") {
       return lastResult
+    }
+
+    if (attemptNumber < maxAttempts) {
+      await sleep(retryDelayMs * attemptNumber)
     }
   }
 
@@ -93,7 +101,7 @@ async function executeJobAttempt<TPayload>(
       status: result.status,
     })
 
-    await jobsRepository.recordJobEvent({
+    await recordJobEventSafely(jobsRepository, {
       organization_id: context.organizationId,
       actor_user_id: context.requestedBy,
       table_name: "background_jobs",
@@ -136,16 +144,57 @@ async function executeJobAttempt<TPayload>(
       queueName: job.queueName,
     })
 
-    return {
+    const failedResult = {
       status: "failed",
       processed: 0,
       skipped: 0,
       failed: 1,
       message: error instanceof Error ? error.message : "Background job failed.",
-    }
+    } satisfies JobResult
+
+    await recordJobEventSafely(jobsRepository, {
+      organization_id: context.organizationId,
+      actor_user_id: context.requestedBy,
+      table_name: "background_jobs",
+      action: "job.failed",
+      record_id: null,
+      request_id: context.runId,
+      metadata: {
+        job_name: job.name,
+        queue_name: job.queueName,
+        idempotency_key: context.idempotencyKey,
+        attempt_number: context.attemptNumber,
+        result: toJson(failedResult),
+      } satisfies Json,
+    })
+
+    return failedResult
+  }
+}
+
+async function recordJobEventSafely(
+  jobsRepository: JobsRepository,
+  values: Parameters<JobsRepository["recordJobEvent"]>[0]
+) {
+  try {
+    await jobsRepository.recordJobEvent(values)
+  } catch (error) {
+    logError(error, {
+      event: "job.audit_event_failed",
+      jobAction: values.action,
+      requestId: values.request_id,
+    })
   }
 }
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json
+}
+
+function sleep(ms: number) {
+  if (ms <= 0) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

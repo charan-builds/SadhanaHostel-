@@ -16,7 +16,7 @@ import {
 import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { NoticeRow } from "@/repositories/notices.repository"
 import type { PaginatedResult } from "@/repositories/types"
-import { updateNoticeSchema } from "@/validations/notice.validation"
+import { createNoticeSchema, updateNoticeSchema } from "@/validations/notice.validation"
 
 const notice = noticeFixture()
 
@@ -128,6 +128,31 @@ describe("NoticesService resident communications", () => {
     expect(result.isPinned).toBeUndefined()
   })
 
+  it("accepts only known app roles in notice audience filters", () => {
+    const result = createNoticeSchema.parse({
+      organizationId: TEST_ORGANIZATION_ID,
+      title: "Resident notice",
+      body: "Residents only.",
+      audienceType: "roles",
+      audienceFilter: {
+        roles: ["resident", "resident"],
+      },
+    })
+
+    expect(result.audienceFilter).toEqual({ roles: ["resident"] })
+    expect(() =>
+      createNoticeSchema.parse({
+        organizationId: TEST_ORGANIZATION_ID,
+        title: "Invalid role notice",
+        body: "Invalid role.",
+        audienceType: "roles",
+        audienceFilter: {
+          roles: ["not-a-role"],
+        },
+      })
+    ).toThrow()
+  })
+
   it("allows owners to read notices with recipient engagement", async () => {
     const { service, authService } = createListHarness("owner")
 
@@ -212,6 +237,7 @@ describe("NoticesService resident communications", () => {
     })
     const residentsRepository = {
       listActiveForBilling: vi.fn().mockResolvedValue([selectedResident, otherResident]),
+      listActiveRoomIdsByResidentIds: vi.fn(),
     }
     const notificationsRepository = {
       findByNoticeRecipient: vi.fn().mockResolvedValue(null),
@@ -250,6 +276,111 @@ describe("NoticesService resident communications", () => {
         recipient: expect.objectContaining({ residentId: OTHER_RESIDENT_ID }),
       })
     )
+  })
+
+  it("fans room notices out only to residents with active allocations in selected rooms", async () => {
+    const service = new NoticesService({} as never, {} as never)
+    const selectedRoomId = "00000000-0000-4000-8000-000000000501"
+    const otherRoomId = "00000000-0000-4000-8000-000000000502"
+    const selectedResident = residentFixture({
+      id: RESIDENT_ID,
+      user_id: RESIDENT_USER_ID,
+    })
+    const otherResident = residentFixture({
+      id: OTHER_RESIDENT_ID,
+      user_id: OTHER_RESIDENT_USER_ID,
+      admission_number: "SBH-T-002",
+      full_name: "Other Resident",
+    })
+    const residentsRepository = {
+      listActiveForBilling: vi.fn().mockResolvedValue([selectedResident, otherResident]),
+      listActiveRoomIdsByResidentIds: vi.fn().mockResolvedValue(
+        new Map([
+          [RESIDENT_ID, selectedRoomId],
+          [OTHER_RESIDENT_ID, otherRoomId],
+        ])
+      ),
+    }
+    const notificationsRepository = {
+      findByNoticeRecipient: vi.fn().mockResolvedValue(null),
+    }
+    const notificationService = {
+      queue: vi.fn().mockResolvedValue({ id: "notification-id" }),
+    }
+
+    Object.assign(service as object, {
+      residentsRepository,
+      notificationsRepository,
+      notificationService,
+    })
+
+    await (
+      service as unknown as {
+        fanoutNoticeToResidents(notice: NoticeRow, actorUserId: string): Promise<void>
+      }
+    ).fanoutNoticeToResidents(
+      noticeFixture({
+        audience_type: "room",
+        audience_filter: { room_ids: [selectedRoomId] },
+      }),
+      ADMIN_USER_ID
+    )
+
+    expect(residentsRepository.listActiveRoomIdsByResidentIds).toHaveBeenCalledWith(
+      TEST_ORGANIZATION_ID,
+      [RESIDENT_ID, OTHER_RESIDENT_ID]
+    )
+    expect(notificationService.queue).toHaveBeenCalledTimes(2)
+    expect(notificationService.queue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "in_app",
+        recipient: expect.objectContaining({ residentId: RESIDENT_ID }),
+      })
+    )
+    expect(notificationService.queue).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipient: expect.objectContaining({ residentId: OTHER_RESIDENT_ID }),
+      })
+    )
+  })
+
+  it("fans resident role notices out to resident recipients", async () => {
+    const service = new NoticesService({} as never, {} as never)
+    const resident = residentFixture({
+      id: RESIDENT_ID,
+      user_id: RESIDENT_USER_ID,
+    })
+    const residentsRepository = {
+      listActiveForBilling: vi.fn().mockResolvedValue([resident]),
+      listActiveRoomIdsByResidentIds: vi.fn(),
+    }
+    const notificationsRepository = {
+      findByNoticeRecipient: vi.fn().mockResolvedValue(null),
+    }
+    const notificationService = {
+      queue: vi.fn().mockResolvedValue({ id: "notification-id" }),
+    }
+
+    Object.assign(service as object, {
+      residentsRepository,
+      notificationsRepository,
+      notificationService,
+    })
+
+    await (
+      service as unknown as {
+        fanoutNoticeToResidents(notice: NoticeRow, actorUserId: string): Promise<void>
+      }
+    ).fanoutNoticeToResidents(
+      noticeFixture({
+        audience_type: "roles",
+        audience_filter: { roles: ["resident"] },
+      }),
+      ADMIN_USER_ID
+    )
+
+    expect(notificationService.queue).toHaveBeenCalledTimes(2)
+    expect(residentsRepository.listActiveRoomIdsByResidentIds).not.toHaveBeenCalled()
   })
 
   it("updates a notice title without sending omitted notice fields", async () => {
@@ -318,6 +449,7 @@ describe("NoticesService resident communications", () => {
     }
     const residentsRepository = {
       getByUserId: vi.fn().mockResolvedValue(resident),
+      getCurrentRoomAssignment: vi.fn(),
     }
     const noticesRepository = {
       getById: vi.fn().mockResolvedValue(notice),
@@ -399,6 +531,108 @@ describe("NoticesService resident communications", () => {
     expect(adminNoticeReadsRepository.upsertRead).not.toHaveBeenCalled()
   })
 
+  it("allows notice mark-read for residents assigned to selected rooms", async () => {
+    const service = new NoticesService({} as never, {} as never)
+    const context = residentAuthContext()
+    const roomId = "00000000-0000-4000-8000-000000000501"
+    const resident = residentFixture({ id: RESIDENT_ID, user_id: context.authUser.id })
+    const roomNotice = noticeFixture({
+      audience_type: "room",
+      audience_filter: { room_ids: [roomId] },
+    })
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(context),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn().mockResolvedValue(resident),
+      getCurrentRoomAssignment: vi.fn().mockResolvedValue({
+        id: "allocation-id",
+        roomId,
+        roomNumber: "204",
+        roomName: "East Wing",
+        bedLabel: "B",
+      }),
+    }
+    const noticesRepository = {
+      getById: vi.fn().mockResolvedValue(roomNotice),
+    }
+    const adminNotificationsRepository = {
+      markNoticeRead: vi.fn().mockResolvedValue([]),
+    }
+    const adminNoticeReadsRepository = {
+      upsertRead: vi.fn().mockResolvedValue({ id: "notice-read-id" }),
+    }
+
+    Object.assign(service as object, {
+      authService,
+      residentsRepository,
+      noticesRepository,
+      adminNotificationsRepository,
+      adminNoticeReadsRepository,
+    })
+
+    await expect(
+      service.markNoticeRead(roomNotice.id, { organizationId: TEST_ORGANIZATION_ID })
+    ).resolves.toEqual(expect.objectContaining({ id: roomNotice.id, is_read: true }))
+
+    expect(residentsRepository.getCurrentRoomAssignment).toHaveBeenCalledWith(
+      RESIDENT_ID,
+      TEST_ORGANIZATION_ID
+    )
+    expect(adminNoticeReadsRepository.upsertRead).toHaveBeenCalled()
+  })
+
+  it("denies notice mark-read for residents outside selected rooms", async () => {
+    const service = new NoticesService({} as never, {} as never)
+    const context = residentAuthContext()
+    const selectedRoomId = "00000000-0000-4000-8000-000000000501"
+    const residentRoomId = "00000000-0000-4000-8000-000000000502"
+    const resident = residentFixture({ id: RESIDENT_ID, user_id: context.authUser.id })
+    const roomNotice = noticeFixture({
+      audience_type: "room",
+      audience_filter: { room_ids: [selectedRoomId] },
+    })
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(context),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn().mockResolvedValue(resident),
+      getCurrentRoomAssignment: vi.fn().mockResolvedValue({
+        id: "allocation-id",
+        roomId: residentRoomId,
+        roomNumber: "205",
+        roomName: "East Wing",
+        bedLabel: "C",
+      }),
+    }
+    const noticesRepository = {
+      getById: vi.fn().mockResolvedValue(roomNotice),
+    }
+    const adminNotificationsRepository = {
+      markNoticeRead: vi.fn(),
+    }
+    const adminNoticeReadsRepository = {
+      upsertRead: vi.fn(),
+    }
+
+    Object.assign(service as object, {
+      authService,
+      residentsRepository,
+      noticesRepository,
+      adminNotificationsRepository,
+      adminNoticeReadsRepository,
+    })
+
+    await expect(
+      service.markNoticeRead(roomNotice.id, { organizationId: TEST_ORGANIZATION_ID })
+    ).rejects.toThrow("Notice is not available for this resident.")
+
+    expect(adminNotificationsRepository.markNoticeRead).not.toHaveBeenCalled()
+    expect(adminNoticeReadsRepository.upsertRead).not.toHaveBeenCalled()
+  })
+
   it("acknowledges required resident notices through authorized admin-scoped writes", async () => {
     const service = new NoticesService({} as never, {} as never)
     const context = residentAuthContext()
@@ -410,6 +644,7 @@ describe("NoticesService resident communications", () => {
     }
     const residentsRepository = {
       getByUserId: vi.fn().mockResolvedValue(resident),
+      getCurrentRoomAssignment: vi.fn(),
     }
     const noticesRepository = {
       getById: vi.fn().mockResolvedValue(acknowledgementNotice),
@@ -512,6 +747,60 @@ describe("NoticesService resident communications", () => {
     expect(adminNotificationsRepository.markNoticeRead).not.toHaveBeenCalled()
     expect(adminNoticeReadsRepository.upsertRead).not.toHaveBeenCalled()
     expect(adminNoticeAcknowledgementsRepository.upsertAcknowledgement).not.toHaveBeenCalled()
+  })
+
+  it("acknowledges role-targeted resident notices when the resident role matches", async () => {
+    const service = new NoticesService({} as never, {} as never)
+    const context = residentAuthContext()
+    const resident = residentFixture({ id: RESIDENT_ID, user_id: context.authUser.id })
+    const roleNotice = noticeFixture({
+      audience_type: "roles",
+      audience_filter: { roles: ["resident"] },
+      requires_acknowledgement: true,
+    })
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(context),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn().mockResolvedValue(resident),
+      getCurrentRoomAssignment: vi.fn(),
+    }
+    const noticesRepository = {
+      getById: vi.fn().mockResolvedValue(roleNotice),
+    }
+    const adminNotificationsRepository = {
+      markNoticeRead: vi.fn().mockResolvedValue([]),
+    }
+    const adminNoticeReadsRepository = {
+      upsertRead: vi.fn().mockResolvedValue({ id: "notice-read-id" }),
+    }
+    const adminNoticeAcknowledgementsRepository = {
+      upsertAcknowledgement: vi.fn().mockResolvedValue({ id: "notice-ack-id" }),
+    }
+
+    Object.assign(service as object, {
+      authService,
+      residentsRepository,
+      noticesRepository,
+      adminNotificationsRepository,
+      adminNoticeReadsRepository,
+      adminNoticeAcknowledgementsRepository,
+    })
+
+    await expect(
+      service.acknowledgeNotice(roleNotice.id, {
+        organizationId: TEST_ORGANIZATION_ID,
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: roleNotice.id,
+        is_acknowledged: true,
+      })
+    )
+
+    expect(residentsRepository.getCurrentRoomAssignment).not.toHaveBeenCalled()
+    expect(adminNoticeAcknowledgementsRepository.upsertAcknowledgement).toHaveBeenCalled()
   })
 
   it("does not acknowledge informational notices", async () => {

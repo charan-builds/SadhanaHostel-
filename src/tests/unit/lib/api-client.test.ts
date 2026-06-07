@@ -157,4 +157,51 @@ describe("api client utilities", () => {
     ).resolves.toEqual({ recovered: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it("does not retry non-idempotent mutations even when retry is requested", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(
+      apiFetch("/api/payments/create", {
+        method: "POST",
+        body: { amount: 1000 },
+        retry: 2,
+      })
+    ).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+    } satisfies Partial<FrontendApiError>)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries idempotent mutations when an idempotency key is present", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: { created: true },
+            message: "ok",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req-idempotent",
+            },
+          }
+        )
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(
+      apiFetch<{ created: boolean }>("/api/payments/create", {
+        method: "POST",
+        body: { amount: 1000, idempotencyKey: "idempotency-key-1" },
+        retry: 1,
+      })
+    ).resolves.toEqual({ created: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

@@ -2,7 +2,7 @@ import "server-only"
 
 import { badRequest } from "@/lib/api/api-error"
 import { areCronJobsEnabled } from "@/config/launch"
-import { logger } from "@/lib/logger"
+import { logger, serializeError } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { OrganizationsRepository } from "@/repositories/organizations.repository"
@@ -74,46 +74,87 @@ export async function executeVercelCron(
   })
 
   for (const organization of organizations) {
-    const setting = await operationsRepository.getAutomationSetting({
-      organizationId: organization.id,
-      jobName: schedule.job.name,
-    })
+    try {
+      const setting = await operationsRepository.getAutomationSetting({
+        organizationId: organization.id,
+        jobName: schedule.job.name,
+      })
 
-    if (setting && !setting.enabled) {
+      if (setting && !setting.enabled) {
+        results.push({
+          organizationId: organization.id,
+          result: {
+            status: "skipped",
+            processed: 0,
+            skipped: 1,
+            failed: 0,
+            message: "Cron skipped because automation job is disabled for this organization.",
+          },
+        })
+        continue
+      }
+
+      const payload = schedule.buildPayload({ organization, now }) as Record<string, unknown>
+      const result = await runJob(
+        schedule.job as JobDefinition<Record<string, unknown>>,
+        payload,
+        {
+          db,
+          runId: `${runId}:${organization.id}`,
+          requestedBy: null,
+          organizationId: organization.id,
+        }
+      )
+
+      results.push({
+        organizationId: organization.id,
+        result,
+      })
+    } catch (error) {
+      incrementMetric("cron.organization_failed", 1, {
+        cronName,
+        organizationId: organization.id,
+        source: auth.source,
+      })
+
+      logger.error({
+        event: "cron.organization_failed",
+        message: "Scheduled cron execution failed for one organization; continuing remaining organizations.",
+        organizationId: organization.id,
+        error: serializeError(error),
+        metadata: {
+          cronName,
+          jobName: schedule.job.name,
+          runId,
+          source: auth.source,
+        },
+      })
+
       results.push({
         organizationId: organization.id,
         result: {
-          status: "skipped",
+          status: "failed",
           processed: 0,
-          skipped: 1,
-          failed: 0,
-          message: "Cron skipped because automation job is disabled for this organization.",
+          skipped: 0,
+          failed: 1,
+          message: "Cron failed for this organization; remaining organizations continued.",
+          metadata: {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Unknown organization cron failure.",
+          },
         },
       })
-      continue
     }
-
-    const payload = schedule.buildPayload({ organization, now }) as Record<string, unknown>
-    const result = await runJob(
-      schedule.job as JobDefinition<Record<string, unknown>>,
-      payload,
-      {
-        db,
-        runId: `${runId}:${organization.id}`,
-        requestedBy: null,
-        organizationId: organization.id,
-      }
-    )
-
-    results.push({
-      organizationId: organization.id,
-      result,
-    })
   }
+
+  const failedOrganizations = results.filter(({ result }) => result.status === "failed").length
 
   incrementMetric("cron.completed", 1, {
     cronName,
     source: auth.source,
+    status: failedOrganizations > 0 ? "partial_failure" : "completed",
   })
 
   logger.info({
@@ -123,6 +164,7 @@ export async function executeVercelCron(
       cronName,
       runId,
       organizationCount: organizations.length,
+      failedOrganizations,
       results,
     },
   })

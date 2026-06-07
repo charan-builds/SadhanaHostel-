@@ -94,7 +94,7 @@ function isActiveRoute(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-const quickActions = [
+export const adminQuickActions = [
   { title: "Add resident", href: "/admin/residents/new", icon: Plus },
   { title: "Record payment", href: "/admin/payments", icon: CreditCard },
   { title: "Publish notice", href: "/admin/notices", icon: Megaphone },
@@ -241,7 +241,7 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
             ) : null}
           </AnimatePresence>
           <div className={cn("grid gap-1", collapsed ? "grid-cols-1" : "grid-cols-3")}>
-            {quickActions.map((item) => {
+            {adminQuickActions.map((item) => {
               const Icon = item.icon
 
               return (

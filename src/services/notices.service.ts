@@ -157,7 +157,13 @@ export class NoticesService {
       throw notFound("Notice not found.")
     }
 
-    if (!noticeTargetsResident(notice, resident)) {
+    const recipient = await this.resolveNoticeRecipientForAudience(
+      notice,
+      resident,
+      context.roles
+    )
+
+    if (!noticeTargetsResident(notice, recipient)) {
       throw forbidden("Notice is not available for this resident.")
     }
 
@@ -228,7 +234,13 @@ export class NoticesService {
       throw notFound("Notice not found.")
     }
 
-    if (!noticeTargetsResident(notice, resident)) {
+    const recipient = await this.resolveNoticeRecipientForAudience(
+      notice,
+      resident,
+      context.roles
+    )
+
+    if (!noticeTargetsResident(notice, recipient)) {
       throw forbidden("Notice is not available for this resident.")
     }
 
@@ -363,9 +375,22 @@ export class NoticesService {
       notice.organization_id,
       notice.hostel_id ?? undefined
     )
+    const roomIdsByResidentId =
+      notice.audience_type === "room"
+        ? await this.residentsRepository.listActiveRoomIdsByResidentIds(
+            notice.organization_id,
+            residents.map((resident) => resident.id)
+          )
+        : new Map<string, string>()
 
     for (const resident of residents) {
-      if (!noticeTargetsResident(notice, resident)) {
+      const recipient = {
+        ...resident,
+        current_room_id: roomIdsByResidentId.get(resident.id) ?? null,
+        roles: ["resident"],
+      }
+
+      if (!noticeTargetsResident(notice, recipient)) {
         continue
       }
 
@@ -426,6 +451,30 @@ export class NoticesService {
           message,
         })
       }
+    }
+  }
+
+  private async resolveNoticeRecipientForAudience(
+    notice: Pick<NoticeRow, "audience_type" | "organization_id">,
+    resident: NonNullable<Awaited<ReturnType<ResidentsRepository["getByUserId"]>>>,
+    roles: readonly string[]
+  ) {
+    if (notice.audience_type !== "room") {
+      return {
+        ...resident,
+        roles,
+      }
+    }
+
+    const roomAssignment = await this.residentsRepository.getCurrentRoomAssignment(
+      resident.id,
+      notice.organization_id
+    )
+
+    return {
+      ...resident,
+      current_room_id: roomAssignment?.roomId ?? null,
+      roles,
     }
   }
 

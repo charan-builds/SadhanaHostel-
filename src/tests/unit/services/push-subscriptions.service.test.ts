@@ -69,4 +69,41 @@ describe("PushSubscriptionsService", () => {
       })
     )
   })
+
+  it("rejects non-HTTPS push endpoints before repository writes", async () => {
+    const service = new PushSubscriptionsService({} as never, {} as never)
+    const authService = {
+      getCurrentContext: vi.fn(),
+      requireOrganizationAccess: vi.fn(),
+      resolveHostelScope: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn(),
+    }
+    const pushSubscriptionsRepository = {
+      upsert: vi.fn(),
+    }
+
+    Object.assign(service as object, {
+      authService,
+      residentsRepository,
+      pushSubscriptionsRepository,
+    })
+
+    await expect(
+      service.subscribe({
+        organizationId: TEST_ORGANIZATION_ID,
+        subscription: {
+          endpoint: "http://push.example.test/send/abc",
+          keys: {
+            p256dh: "a".repeat(88),
+            auth: "b".repeat(24),
+          },
+        },
+      })
+    ).rejects.toThrow("Push endpoint must use HTTPS.")
+
+    expect(authService.getCurrentContext).not.toHaveBeenCalled()
+    expect(pushSubscriptionsRepository.upsert).not.toHaveBeenCalled()
+  })
 })

@@ -18,13 +18,25 @@ type WebPushResult = {
   skipped: number
 }
 
+type WebPushServiceOptions = {
+  maxAttempts?: number
+  retryDelayMs?: number
+}
+
 export class WebPushService {
   private readonly pushSubscriptionsRepository: PushSubscriptionsRepository
   private readonly notificationsRepository: NotificationsRepository
+  private readonly maxAttempts: number
+  private readonly retryDelayMs: number
 
-  constructor(private readonly db: AppSupabaseClient = createSupabaseAdminClient()) {
+  constructor(
+    private readonly db: AppSupabaseClient = createSupabaseAdminClient(),
+    options: WebPushServiceOptions = {}
+  ) {
     this.pushSubscriptionsRepository = new PushSubscriptionsRepository(db)
     this.notificationsRepository = new NotificationsRepository(db)
+    this.maxAttempts = Math.max(1, options.maxAttempts ?? 3)
+    this.retryDelayMs = Math.max(0, options.retryDelayMs ?? 250)
   }
 
   async sendForNotification(notification: NotificationRow): Promise<WebPushResult> {
@@ -49,19 +61,49 @@ export class WebPushService {
 
     let sent = 0
     let failed = 0
+    const payload = JSON.stringify(buildPushPayload(notification))
 
     for (const subscription of subscriptions) {
-      try {
-        const response = await webpush.sendNotification(
-          toWebPushSubscription(subscription),
-          JSON.stringify(buildPushPayload(notification))
-        )
+      const result = await this.sendSubscriptionWithRetry(notification, subscription, payload)
+
+      if (result.status === "sent") {
         sent += 1
         await this.pushSubscriptionsRepository.update(subscription.id, {
           last_sent_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
           failure_count: 0,
         })
+        continue
+      }
+
+      failed += 1
+
+      await this.pushSubscriptionsRepository.update(subscription.id, {
+        failure_count: subscription.failure_count + 1,
+      })
+
+      if (result.shouldRevoke) {
+        await this.pushSubscriptionsRepository.revokeEndpoint({
+          endpoint: subscription.endpoint,
+        })
+      }
+    }
+
+    return { sent, failed, skipped: 0 }
+  }
+
+  private async sendSubscriptionWithRetry(
+    notification: NotificationRow,
+    subscription: PushSubscriptionRow,
+    payload: string
+  ) {
+    for (let attemptNumber = 1; attemptNumber <= this.maxAttempts; attemptNumber += 1) {
+      try {
+        const response = await webpush.sendNotification(
+          toWebPushSubscription(subscription),
+          payload
+        )
+
         await this.notificationsRepository.createLog({
           organization_id: notification.organization_id,
           hostel_id: notification.hostel_id,
@@ -71,27 +113,22 @@ export class WebPushService {
           provider_message_id: response.headers["x-endpoint-message-id"] ?? null,
           status: "sent",
           sent_at: new Date().toISOString(),
+          attempt_number: attemptNumber,
           request_payload: {
             endpoint: maskEndpoint(subscription.endpoint),
             subscription_id: subscription.id,
           },
           response_payload: {
             status_code: response.statusCode,
+            attempts: attemptNumber,
           },
         })
+
+        return { status: "sent" as const, shouldRevoke: false }
       } catch (error) {
-        failed += 1
         const statusCode = webPushStatusCode(error)
-
-        await this.pushSubscriptionsRepository.update(subscription.id, {
-          failure_count: subscription.failure_count + 1,
-        })
-
-        if (statusCode === 404 || statusCode === 410) {
-          await this.pushSubscriptionsRepository.revokeEndpoint({
-            endpoint: subscription.endpoint,
-          })
-        }
+        const retryable = isRetryableWebPushFailure(statusCode)
+        const finalAttempt = attemptNumber >= this.maxAttempts || !retryable
 
         await this.notificationsRepository.createLog({
           organization_id: notification.organization_id,
@@ -100,20 +137,32 @@ export class WebPushService {
           channel: "in_app",
           provider: "web-push",
           status: "failed",
+          attempt_number: attemptNumber,
           request_payload: {
             endpoint: maskEndpoint(subscription.endpoint),
             subscription_id: subscription.id,
           },
           response_payload: {
             status_code: statusCode,
+            retryable,
+            final_attempt: finalAttempt,
           },
           error_message:
             error instanceof Error ? error.message : "Web Push delivery failed.",
         })
+
+        if (finalAttempt) {
+          return {
+            status: "failed" as const,
+            shouldRevoke: statusCode === 404 || statusCode === 410,
+          }
+        }
+
+        await sleep(this.retryDelayMs * attemptNumber)
       }
     }
 
-    return { sent, failed, skipped: 0 }
+    return { status: "failed" as const, shouldRevoke: false }
   }
 }
 
@@ -239,6 +288,26 @@ function webPushStatusCode(error: unknown) {
   }
 
   return null
+}
+
+function isRetryableWebPushFailure(statusCode: number | null) {
+  if (statusCode === 404 || statusCode === 410) {
+    return false
+  }
+
+  if (statusCode === null) {
+    return true
+  }
+
+  return statusCode === 408 || statusCode === 429 || statusCode >= 500
+}
+
+function sleep(ms: number) {
+  if (ms <= 0) {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function maskEndpoint(endpoint: string) {

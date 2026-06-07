@@ -2,8 +2,17 @@ import { z } from "zod"
 
 import { uuidSchema } from "./common.validation"
 
+const pushEndpointSchema = z
+  .string()
+  .trim()
+  .url()
+  .max(2048)
+  .refine((endpoint) => isHttpsUrl(endpoint), {
+    message: "Push endpoint must use HTTPS.",
+  })
+
 export const browserPushSubscriptionSchema = z.object({
-  endpoint: z.string().trim().url().max(2048),
+  endpoint: pushEndpointSchema,
   expirationTime: z.number().nullable().optional(),
   keys: z.object({
     p256dh: z.string().trim().min(20).max(512),
@@ -21,8 +30,16 @@ export const subscribePushSchema = z.object({
 })
 
 export const revokePushSubscriptionSchema = z.object({
-  endpoint: z.string().trim().url().max(2048).optional(),
+  endpoint: pushEndpointSchema.optional(),
 })
 
 export type SubscribePushInput = z.infer<typeof subscribePushSchema>
 export type RevokePushSubscriptionInput = z.infer<typeof revokePushSubscriptionSchema>
+
+function isHttpsUrl(endpoint: string) {
+  try {
+    return new URL(endpoint).protocol === "https:"
+  } catch {
+    return false
+  }
+}

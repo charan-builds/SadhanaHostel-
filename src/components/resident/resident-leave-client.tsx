@@ -4,6 +4,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { CalendarPlus, Loader2, ShieldCheck } from "lucide-react"
+import { useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -12,7 +13,7 @@ import { DataTableShell } from "@/components/shared/data-table-shell"
 import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { APIErrorState, EmptyState } from "@/components/system"
+import { APIErrorState, EmptyState, WorkflowStatus } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -59,6 +60,7 @@ export function ResidentLeaveClient() {
   const { organizationId, session } = useAuth()
   const resident = useCurrentResident(organizationId ?? undefined)
   const hostelId = resident.data?.hostel_id ?? session?.hostelIds[0]
+  const [lastSubmittedLeave, setLastSubmittedLeave] = useState<Tables<"leave_requests"> | null>(null)
   const leaves = useLeaves({
     organizationId: organizationId ?? "",
     hostelId,
@@ -154,7 +156,7 @@ export function ResidentLeaveClient() {
     }
 
     try {
-      await createLeave.mutateAsync({
+      const createdLeave = await createLeave.mutateAsync({
         organizationId,
         hostelId: resident.data.hostel_id,
         residentId: resident.data.id,
@@ -166,6 +168,7 @@ export function ResidentLeaveClient() {
         notes: values.notes || undefined,
       })
       await leaves.refetch()
+      setLastSubmittedLeave(createdLeave)
       reset()
       toast.success("Leave request submitted.")
     } catch (error) {
@@ -184,6 +187,14 @@ export function ResidentLeaveClient() {
         title="Leave"
         description="Apply for leave and track approval or rejection status in realtime."
       />
+
+      {lastSubmittedLeave ? (
+        <WorkflowStatus
+          tone="success"
+          title="Leave request submitted"
+          description={`Your request from ${formatDate(lastSubmittedLeave.from_date)} to ${formatDate(lastSubmittedLeave.to_date)} is pending admin review. Watch the history panel for approval, rejection reason, or return updates.`}
+        />
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <form onSubmit={handleSubmit(submitLeave)} className="rounded-xl border bg-background p-5 shadow-sm">
@@ -205,12 +216,12 @@ export function ResidentLeaveClient() {
           <div className="mt-5 grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="fromDate">From date</Label>
-              <Input id="fromDate" type="date" {...register("fromDate")} />
+              <Input id="fromDate" type="date" aria-invalid={Boolean(errors.fromDate)} {...register("fromDate")} />
               {errors.fromDate ? <p className="text-xs text-destructive">{errors.fromDate.message}</p> : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="toDate">Return date</Label>
-              <Input id="toDate" type="date" {...register("toDate")} />
+              <Input id="toDate" type="date" aria-invalid={Boolean(errors.toDate)} {...register("toDate")} />
               {errors.toDate ? <p className="text-xs text-destructive">{errors.toDate.message}</p> : null}
             </div>
             <div className="grid gap-2">
@@ -234,7 +245,12 @@ export function ResidentLeaveClient() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reason">Reason</Label>
-              <Textarea id="reason" className="min-h-24" {...register("reason")} />
+              <Textarea
+                id="reason"
+                className="min-h-24"
+                aria-invalid={Boolean(errors.reason)}
+                {...register("reason")}
+              />
               {errors.reason ? <p className="text-xs text-destructive">{errors.reason.message}</p> : null}
             </div>
           </div>

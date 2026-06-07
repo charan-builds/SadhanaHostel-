@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
+  Clock3,
   Copy,
   CreditCard,
   Download,
@@ -124,6 +125,7 @@ export function ResidentPaymentsClient() {
   const downloadInvoice = useInvoiceDownloadUrl()
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
+  const [submittedPayment, setSubmittedPayment] = useState<PaymentRecord | null>(null)
   const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() =>
     createRequestId()
   )
@@ -311,7 +313,7 @@ export function ResidentPaymentsClient() {
     }
 
     try {
-      await submitUpiPayment.mutateAsync({
+      const payment = await submitUpiPayment.mutateAsync({
         input: {
           organizationId,
           hostelId: resident.data.hostel_id,
@@ -333,6 +335,7 @@ export function ResidentPaymentsClient() {
       reset()
       setProofFile(null)
       setUploadProgress(null)
+      setSubmittedPayment(payment)
       setPaymentIdempotencyKey(createRequestId())
       toast.success("Payment submitted for admin verification.")
     } catch (error) {
@@ -380,6 +383,13 @@ export function ResidentPaymentsClient() {
         }
       />
 
+      <PaymentStepHeader
+        hasPreparedAmount={preparedPaymentAmount > 0}
+        hasProof={Boolean(proofFile)}
+        pendingVerification={pendingVerification}
+        submittedPayment={submittedPayment}
+      />
+
       <motion.div
         variants={reveal}
         className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-950"
@@ -398,6 +408,18 @@ export function ResidentPaymentsClient() {
           </div>
         </div>
       </motion.div>
+
+      <MobilePayableCard
+        payableDue={payableDue}
+        currentDue={currentDue}
+        pendingVerification={pendingVerification}
+        nextDueDate={nextDueDate}
+        onUsePayableDue={() => {
+          setValue("amount", payableDue, { shouldDirty: true, shouldValidate: true })
+          setValue("isPartial", false, { shouldDirty: true, shouldValidate: true })
+          setValue("isAdvance", false, { shouldDirty: true, shouldValidate: true })
+        }}
+      />
 
       <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <FeeCard
@@ -554,6 +576,21 @@ export function ResidentPaymentsClient() {
             </div>
           ) : null}
 
+          {submittedPayment ? (
+            <div className="mt-4 rounded-xl border border-success/30 bg-success-surface p-4 text-sm text-success-foreground">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold">Payment proof submitted.</p>
+                  <p className="mt-1 leading-6">
+                    {formatCurrency(submittedPayment.amount)} is waiting for admin verification.
+                    Dues update after approval.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-5 grid gap-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
               <div className="grid gap-2">
@@ -669,21 +706,28 @@ export function ResidentPaymentsClient() {
               {proofFile ? <p className="text-xs text-muted-foreground">{proofFile.name}</p> : null}
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" className="min-h-20" {...register("notes")} />
-            </div>
+            <details className="rounded-xl border bg-white/55 p-4">
+              <summary className="min-h-11 cursor-pointer list-none text-sm font-semibold text-foreground">
+                Partial or advance payment
+              </summary>
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                  <label className="flex min-h-11 items-center gap-2 rounded-lg border bg-background p-3">
+                    <input type="checkbox" className="size-4 accent-primary" {...register("isPartial")} />
+                    Mark as partial payment
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 rounded-lg border bg-background p-3">
+                    <input type="checkbox" className="size-4 accent-primary" {...register("isAdvance")} />
+                    Mark as advance payment
+                  </label>
+                </div>
 
-            <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-              <label className="flex items-center gap-2 rounded-lg border bg-white/55 p-3">
-                <input type="checkbox" className="size-4 accent-primary" {...register("isPartial")} />
-                Mark as partial payment
-              </label>
-              <label className="flex items-center gap-2 rounded-lg border bg-white/55 p-3">
-                <input type="checkbox" className="size-4 accent-primary" {...register("isAdvance")} />
-                Mark as advance payment
-              </label>
-            </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea id="notes" className="min-h-20" {...register("notes")} />
+                </div>
+              </div>
+            </details>
           </div>
 
           {submitUpiPayment.isPending ? (
@@ -697,7 +741,7 @@ export function ResidentPaymentsClient() {
 
           <Button
             type="submit"
-            className="mt-5 h-10 w-full"
+            className="sticky bottom-20 z-10 mt-5 min-h-11 w-full shadow-lg lg:static lg:shadow-none"
             disabled={isSubmitting || submitUpiPayment.isPending || !paymentSettings.data}
           >
             {isSubmitting || submitUpiPayment.isPending ? (
@@ -730,6 +774,137 @@ export function ResidentPaymentsClient() {
         onOpenInvoice={openInvoice}
       />
     </motion.div>
+  )
+}
+
+function PaymentStepHeader({
+  hasPreparedAmount,
+  hasProof,
+  pendingVerification,
+  submittedPayment,
+}: {
+  hasPreparedAmount: boolean
+  hasProof: boolean
+  pendingVerification: number
+  submittedPayment: PaymentRecord | null
+}) {
+  const steps = [
+    {
+      label: "Pay",
+      detail: hasPreparedAmount ? "Amount ready" : "Enter amount",
+      icon: CreditCard,
+      complete: hasPreparedAmount,
+    },
+    {
+      label: "Upload proof",
+      detail: hasProof ? "Screenshot selected" : "Screenshot needed",
+      icon: UploadCloud,
+      complete: hasProof || Boolean(submittedPayment),
+    },
+    {
+      label: "Track verification",
+      detail:
+        submittedPayment || pendingVerification > 0
+          ? "Pending admin review"
+          : "After submission",
+      icon: Clock3,
+      complete: Boolean(submittedPayment),
+    },
+  ] satisfies Array<{
+    label: string
+    detail: string
+    icon: LucideIcon
+    complete: boolean
+  }>
+
+  return (
+    <motion.section variants={reveal} className="grid gap-2 sm:grid-cols-3">
+      {steps.map((step, index) => {
+        const Icon = step.icon
+
+        return (
+          <div
+            key={step.label}
+            className="flex min-h-16 items-center gap-3 rounded-xl border bg-card/90 p-3 shadow-soft"
+          >
+            <span
+              className={
+                step.complete
+                  ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-success-surface text-success-foreground ring-1 ring-success/20"
+                  : "flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15"
+              }
+            >
+              {step.complete ? (
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+              ) : (
+                <Icon className="size-4" aria-hidden="true" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                {index + 1}. {step.label}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{step.detail}</p>
+            </div>
+          </div>
+        )
+      })}
+    </motion.section>
+  )
+}
+
+function MobilePayableCard({
+  payableDue,
+  currentDue,
+  pendingVerification,
+  nextDueDate,
+  onUsePayableDue,
+}: {
+  payableDue: number
+  currentDue: number
+  pendingVerification: number
+  nextDueDate: string | null
+  onUsePayableDue: () => void
+}) {
+  return (
+    <motion.section
+      variants={reveal}
+      className="sticky top-20 z-10 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur md:hidden"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-muted-foreground">Payable now</p>
+          <p className="mt-1 text-2xl font-semibold">{formatCurrency(payableDue)}</p>
+        </div>
+        <StatusBadge status={payableDue > 0 ? "pending" : "verified"} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+        <div className="rounded-lg border bg-white/60 p-2">
+          <p>Current due</p>
+          <p className="mt-1 font-semibold text-foreground">{formatCurrency(currentDue)}</p>
+        </div>
+        <div className="rounded-lg border bg-white/60 p-2">
+          <p>Pending proof</p>
+          <p className="mt-1 font-semibold text-foreground">
+            {formatCurrency(pendingVerification)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="min-h-10 flex-1"
+          disabled={payableDue <= 0}
+          onClick={onUsePayableDue}
+        >
+          Pay due
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {nextDueDate ? formatDate(nextDueDate) : "No next due"}
+        </span>
+      </div>
+    </motion.section>
   )
 }
 

@@ -66,6 +66,16 @@ export const RATE_LIMIT_POLICIES = {
     limit: 8,
     windowMs: 60_000,
   },
+  notificationStateWrite: {
+    name: "notifications.state_write",
+    limit: 120,
+    windowMs: 60_000,
+  },
+  pushSubscriptionWrite: {
+    name: "push_subscriptions.write",
+    limit: 20,
+    windowMs: 60_000,
+  },
 } satisfies Record<string, RateLimitPolicy>
 
 const buckets = new Map<string, RateLimitBucket>()

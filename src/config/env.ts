@@ -54,6 +54,7 @@ const publicEnvSchema = z.object({
   NEXT_PUBLIC_MAINTENANCE_MODE: booleanEnvSchema("false"),
   NEXT_PUBLIC_FEATURE_FLAGS: optionalEnvString(),
   NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: optionalEnvString(),
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: optionalEnvString(),
   NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID: optionalEnvString(z.string().uuid()),
   NEXT_PUBLIC_DEFAULT_HOSTEL_ID: optionalEnvString(z.string().uuid()),
 })
@@ -75,6 +76,9 @@ const serverEnvSchema = publicEnvSchema.extend({
   CRON_JOBS_ENABLED: booleanEnvSchema("true"),
   OPERATIONAL_REPAIRS_ENABLED: booleanEnvSchema("true"),
   NOTIFICATIONS_SEND_ENABLED: booleanEnvSchema("false"),
+  VAPID_PRIVATE_KEY: optionalEnvString(),
+  VAPID_SUBJECT: optionalEnvString(),
+  VAPID_CONTACT_EMAIL: optionalEnvString(z.string().email()),
   CRON_SECRET: optionalEnvString(z.string().min(16)),
   RESEND_API_KEY: optionalEnvString(z.string().min(1)),
   EMAIL_FROM: z.string().min(3).default("Sadhana Boys Hostel <onboarding@resend.dev>"),
@@ -106,6 +110,7 @@ function readPublicEnv() {
     NEXT_PUBLIC_MAINTENANCE_MODE: process.env.NEXT_PUBLIC_MAINTENANCE_MODE,
     NEXT_PUBLIC_FEATURE_FLAGS: process.env.NEXT_PUBLIC_FEATURE_FLAGS,
     NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID: process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID,
     NEXT_PUBLIC_DEFAULT_HOSTEL_ID: process.env.NEXT_PUBLIC_DEFAULT_HOSTEL_ID,
   }

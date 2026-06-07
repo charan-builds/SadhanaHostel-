@@ -9,6 +9,7 @@ import { AppQueryProvider } from "@/lib/react-query"
 import { RealtimeProvider } from "@/lib/realtime"
 
 import { MotionProvider } from "./motion-provider"
+import { PwaRuntimeClient } from "./pwa-runtime-client"
 import { SentryContextSync } from "./sentry-context-sync"
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -17,6 +18,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <MotionProvider>
         <ErrorBoundary>{children}</ErrorBoundary>
       </MotionProvider>
+      <PwaRuntimeClient />
       <Toaster richColors closeButton />
     </AppQueryProvider>
   )

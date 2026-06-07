@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ClipboardList, Edit, Loader2, Plus } from "lucide-react"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { WorkflowStatus } from "@/components/system/workflow-status"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -44,6 +46,49 @@ import type { Tables } from "@/types/database"
 const PAGE_SIZE = 10
 const cmsStatuses = ["draft", "published", "archived"] as const
 const audienceTypes = ["all", "hostel", "room", "residents", "roles"] as const
+type AudienceType = (typeof audienceTypes)[number]
+type NoticeOutcome = {
+  tone: "success" | "warning" | "info"
+  title: string
+  description: string
+}
+const audienceOptions = [
+  {
+    value: "all",
+    label: "All residents",
+    description: "Use for general hostel-wide announcements.",
+    disabled: false,
+  },
+  {
+    value: "hostel",
+    label: "This hostel",
+    description: "Best default for Sadhana Boys Hostel notices.",
+    disabled: false,
+  },
+  {
+    value: "room",
+    label: "Room group",
+    description: "Backend-supported, but this editor still needs a room selector.",
+    disabled: true,
+  },
+  {
+    value: "residents",
+    label: "Selected residents",
+    description: "Backend-supported, but this editor still needs resident selection.",
+    disabled: true,
+  },
+  {
+    value: "roles",
+    label: "Role group",
+    description: "Backend-supported, but this editor still needs role selection.",
+    disabled: true,
+  },
+] satisfies Array<{
+  value: AudienceType
+  label: string
+  description: string
+  disabled: boolean
+}>
 
 const noticeFormSchema = z.object({
   title: z.string().trim().min(2).max(160),
@@ -63,6 +108,7 @@ export function AdminNoticesClient() {
   const [status, setStatus] = useState<(typeof cmsStatuses)[number] | "all">("all")
   const [editingNotice, setEditingNotice] = useState<Tables<"notices"> | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [noticeOutcome, setNoticeOutcome] = useState<NoticeOutcome | null>(null)
 
   const noticesQuery = useNotices({
     organizationId: organizationId ?? "",
@@ -96,6 +142,14 @@ export function AdminNoticesClient() {
           value={notices.filter((notice) => notice.is_pinned).length}
         />
       </div>
+
+      {noticeOutcome ? (
+        <WorkflowStatus
+          tone={noticeOutcome.tone}
+          title={noticeOutcome.title}
+          description={noticeOutcome.description}
+        />
+      ) : null}
 
       <Card>
         <CardHeader className="gap-3 md:grid-cols-[1fr_auto]">
@@ -149,6 +203,18 @@ export function AdminNoticesClient() {
             <EmptyState
               title="No notices found"
               message="Create a notice to publish hostel updates to residents."
+              action={
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditingNotice(null)
+                    setIsDialogOpen(true)
+                  }}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  New notice
+                </Button>
+              }
             />
           ) : (
             <div className="grid gap-4">
@@ -159,13 +225,9 @@ export function AdminNoticesClient() {
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={notice.status} />
                         {notice.is_pinned ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                            Pinned
-                          </span>
+                          <Badge variant="secondary">Pinned</Badge>
                         ) : null}
-                        <span className="text-xs text-muted-foreground">
-                          {humanizeEnum(notice.audience_type)}
-                        </span>
+                        <Badge variant="outline">{formatAudienceLabel(notice.audience_type)}</Badge>
                       </div>
                       <h2 className="mt-3 font-semibold">{notice.title}</h2>
                       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -225,6 +287,7 @@ export function AdminNoticesClient() {
         notice={editingNotice}
         organizationId={organizationId}
         hostelId={hostelId}
+        onSaved={setNoticeOutcome}
       />
     </div>
   )
@@ -236,12 +299,14 @@ function NoticeEditorDialog({
   notice,
   organizationId,
   hostelId,
+  onSaved,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   notice: Tables<"notices"> | null
   organizationId: string
   hostelId?: string
+  onSaved: (outcome: NoticeOutcome) => void
 }) {
   const createNotice = useCreateNotice()
   const updateNotice = useUpdateNotice()
@@ -255,8 +320,18 @@ function NoticeEditorDialog({
   }, [form, notice])
 
   async function onSubmit(values: NoticeFormValues) {
-    if (notice) {
-      await updateNotice.mutateAsync({
+    const audienceOption =
+      audienceOptions.find((item) => item.value === values.audienceType) ?? audienceOptions[0]
+
+    if (audienceOption.disabled) {
+      form.setError("audienceType", {
+        message: "This audience type needs a selector before it can be published from this editor.",
+      })
+      return
+    }
+
+    try {
+      const savedNotice = notice ? await updateNotice.mutateAsync({
         noticeId: notice.id,
         organizationId,
         hostelId,
@@ -268,10 +343,7 @@ function NoticeEditorDialog({
         isPinned: values.isPinned,
         isActive: true,
         expiresAt: values.expiresAt || undefined,
-      })
-      toast.success("Notice updated.")
-    } else {
-      await createNotice.mutateAsync({
+      }) : await createNotice.mutateAsync({
         organizationId,
         hostelId,
         title: values.title,
@@ -282,13 +354,30 @@ function NoticeEditorDialog({
         isPinned: values.isPinned,
         expiresAt: values.expiresAt || undefined,
       })
-      toast.success("Notice created.")
-    }
 
-    onOpenChange(false)
+      const published = savedNotice.status === "published"
+      onSaved({
+        tone: published ? "success" : "info",
+        title: published ? "Notice published" : "Notice saved",
+        description: `${savedNotice.title} was saved as ${humanizeEnum(savedNotice.status)} for ${formatAudienceLabel(savedNotice.audience_type)}${savedNotice.expires_at ? ` until ${formatDateTime(savedNotice.expires_at)}` : ""}.`,
+      })
+      toast.success(notice ? "Notice updated." : "Notice created.")
+      onOpenChange(false)
+    } catch (error) {
+      form.setError("root", {
+        message: error instanceof Error ? error.message : "Notice could not be saved.",
+      })
+      toast.error(error instanceof Error ? error.message : "Notice could not be saved.")
+    }
   }
 
   const isPending = createNotice.isPending || updateNotice.isPending
+  const selectedAudience = useWatch({
+    control: form.control,
+    name: "audienceType",
+  })
+  const selectedAudienceOption =
+    audienceOptions.find((item) => item.value === selectedAudience) ?? audienceOptions[0]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -301,9 +390,19 @@ function NoticeEditorDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="mt-5 grid gap-4">
+            {form.formState.errors.root?.message ? (
+              <APIErrorState
+                title="Notice save failed"
+                message={form.formState.errors.root.message}
+              />
+            ) : null}
             <div className="grid gap-2">
-              <Label>Title</Label>
-              <Input {...form.register("title")} />
+              <Label htmlFor="notice-title">Title</Label>
+              <Input
+                id="notice-title"
+                aria-invalid={Boolean(form.formState.errors.title)}
+                {...form.register("title")}
+              />
               {form.formState.errors.title?.message ? (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.title.message}
@@ -311,8 +410,13 @@ function NoticeEditorDialog({
               ) : null}
             </div>
             <div className="grid gap-2">
-              <Label>Body</Label>
-              <Textarea rows={6} {...form.register("body")} />
+              <Label htmlFor="notice-body">Body</Label>
+              <Textarea
+                id="notice-body"
+                rows={6}
+                aria-invalid={Boolean(form.formState.errors.body)}
+                {...form.register("body")}
+              />
               {form.formState.errors.body?.message ? (
                 <p className="text-sm text-destructive">
                   {form.formState.errors.body.message}
@@ -352,15 +456,25 @@ function NoticeEditorDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {audienceTypes.map((item) => (
-                          <SelectItem key={item} value={item}>
-                            {humanizeEnum(item)}
+                        {audienceOptions.map((item) => (
+                          <SelectItem
+                            key={item.value}
+                            value={item.value}
+                            disabled={item.disabled && field.value !== item.value}
+                          >
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   )}
                 />
+                <AudiencePreview option={selectedAudienceOption} />
+                {form.formState.errors.audienceType?.message ? (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.audienceType.message}
+                  </p>
+                ) : null}
               </div>
               <div className="grid gap-2">
                 <Label>Expires at</Label>
@@ -406,6 +520,33 @@ function NoticeEditorDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function AudiencePreview({
+  option,
+}: {
+  option: (typeof audienceOptions)[number]
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/35 p-3 text-xs leading-5 text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={option.disabled ? "destructive" : "secondary"}>
+          {option.disabled ? "Needs selector" : "Publishable"}
+        </Badge>
+        <span className="font-medium text-foreground">{option.label}</span>
+      </div>
+      <p className="mt-2">{option.description}</p>
+      {option.disabled ? (
+        <p className="mt-2">
+          Use This hostel for production notices until the specific selector is available.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function formatAudienceLabel(value: string) {
+  return audienceOptions.find((item) => item.value === value)?.label ?? humanizeEnum(value)
 }
 
 function getNoticeDefaults(notice: Tables<"notices"> | null): NoticeFormValues {

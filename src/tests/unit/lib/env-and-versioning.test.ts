@@ -45,4 +45,17 @@ describe("environment and API version helpers", () => {
       })
     )
   })
+
+  it("accepts optional VAPID public key in public env", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://sadhanaboyshostel.in")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://real-project.supabase.co")
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "real-anon-key")
+    vi.stubEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", "vapid-public-key")
+
+    expect(getPublicEnv()).toEqual(
+      expect.objectContaining({
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: "vapid-public-key",
+      })
+    )
+  })
 })

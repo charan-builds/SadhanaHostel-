@@ -61,7 +61,7 @@ export async function apiFetch<TData, TBody = unknown>(
   path: string,
   options: ApiFetchOptions<TBody> = {}
 ): Promise<TData> {
-  const retryCount = options.retry ?? 1
+  const retryCount = resolveRetryCount(options)
   let lastError: unknown
 
   for (let attempt = 0; attempt <= retryCount; attempt += 1) {
@@ -81,6 +81,21 @@ export async function apiFetch<TData, TBody = unknown>(
   throw lastError
 }
 
+function resolveRetryCount<TBody>(options: ApiFetchOptions<TBody>) {
+  const requestedRetryCount = options.retry ?? 1
+  const method = resolveRequestMethod(options)
+
+  if (method === "GET") {
+    return requestedRetryCount
+  }
+
+  return hasIdempotencyKey(options) ? requestedRetryCount : 0
+}
+
+function resolveRequestMethod<TBody>(options: ApiFetchOptions<TBody>) {
+  return options.method ?? (options.body === undefined || options.body === null ? "GET" : "POST")
+}
+
 async function executeApiFetch<TData, TBody>(
   path: string,
   options: ApiFetchOptions<TBody>
@@ -97,7 +112,7 @@ async function executeApiFetch<TData, TBody>(
 
   try {
     response = await fetch(buildApiUrl(path, options.query), {
-      method: options.method ?? (body ? "POST" : "GET"),
+      method: resolveRequestMethod(options),
       credentials: "include",
       headers,
       body,
@@ -156,6 +171,28 @@ function buildRequestBody<TBody>(body: TBody | undefined, headers: Headers) {
   headers.set("content-type", "application/json")
 
   return JSON.stringify(body)
+}
+
+function hasIdempotencyKey<TBody>(options: ApiFetchOptions<TBody>) {
+  const headers = new Headers(options.headers)
+
+  if (headers.has("x-idempotency-key")) {
+    return true
+  }
+
+  const body = options.body
+
+  if (!body || typeof body !== "object" || body instanceof FormData || body instanceof Blob) {
+    return false
+  }
+
+  if (!("idempotencyKey" in body)) {
+    return false
+  }
+
+  const idempotencyKey = (body as { idempotencyKey?: unknown }).idempotencyKey
+
+  return typeof idempotencyKey === "string" && idempotencyKey.trim().length >= 8
 }
 
 async function parseApiPayload<TData>(

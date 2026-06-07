@@ -40,6 +40,7 @@ export type ResidentWithOnboarding = ResidentRow & {
 
 export type CurrentRoomAssignment = {
   id: string
+  roomId: string
   roomNumber: string | null
   roomName: string | null
   bedLabel: string | null
@@ -174,10 +175,49 @@ export class ResidentsRepository {
 
     return {
       id: allocation.id,
+      roomId: allocation.room_id,
       roomNumber: room?.room_number ?? null,
       roomName: room?.room_name ?? null,
       bedLabel: allocation.bed_label ?? null,
     }
+  }
+
+  async listActiveRoomIdsByResidentIds(
+    organizationId: string,
+    residentIds: string[]
+  ) {
+    const uniqueResidentIds = Array.from(new Set(residentIds))
+
+    if (uniqueResidentIds.length === 0) {
+      return new Map<string, string>()
+    }
+
+    const { data, error } = await this.db
+      .from("room_allocations")
+      .select("resident_id, room_id")
+      .eq("organization_id", organizationId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .in("resident_id", uniqueResidentIds)
+      .order("allocated_from", { ascending: false })
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident room targets.")
+    }
+
+    const roomIdsByResidentId = new Map<string, string>()
+
+    for (const allocation of data ?? []) {
+      if (
+        allocation.resident_id &&
+        allocation.room_id &&
+        !roomIdsByResidentId.has(allocation.resident_id)
+      ) {
+        roomIdsByResidentId.set(allocation.resident_id, allocation.room_id)
+      }
+    }
+
+    return roomIdsByResidentId
   }
 
   async findPasswordResetCandidate(input: {

@@ -2,14 +2,14 @@
 
 import { useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
-import { Loader2, MessageCircle, RotateCcw, Send } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock3, Loader2, MessageCircle, RotateCcw, Send, ShieldCheck, Wrench, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTableShell } from "@/components/shared/data-table-shell"
 import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { APIErrorState, EmptyState } from "@/components/system"
+import { APIErrorState, EmptyState, WorkflowStatus } from "@/components/system"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -60,6 +60,13 @@ export function ResidentSupportClient() {
     summary: string
     steps: string[]
   } | null>(null)
+  const [lastSubmittedRequest, setLastSubmittedRequest] = useState<{
+    id: string
+    subject: string
+    status: string
+    reused: boolean
+  } | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const requests = useSupportRequests({
     organizationId: organizationId ?? "",
     residentId: resident.data?.id,
@@ -106,6 +113,7 @@ export function ResidentSupportClient() {
 
   async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSubmitError(null)
 
     if (!organizationId) {
       return
@@ -123,12 +131,19 @@ export function ResidentSupportClient() {
       })
 
       setLastGuidance(result.guidance)
+      setLastSubmittedRequest({
+        id: result.request.id,
+        subject: result.request.subject,
+        status: result.request.status,
+        reused: result.reused,
+      })
       setDescription("")
       setSubject(defaultSubject(category))
       setIdempotencyKey(createRequestId())
       await requests.refetch()
       toast.success(result.reused ? "Existing recovery request reopened." : "Support request sent.")
     } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to create support request.")
       toast.error(error instanceof Error ? error.message : "Unable to create support request.")
     }
   }
@@ -153,17 +168,56 @@ export function ResidentSupportClient() {
         }
       />
 
+      <SupportCategoryShortcuts
+        onSelect={(nextCategory, nextPriority) => {
+          setCategory(nextCategory)
+          setPriority(nextPriority)
+          setSubject(defaultSubject(nextCategory))
+        }}
+      />
+
+      {lastSubmittedRequest ? (
+        <WorkflowStatus
+          tone={lastSubmittedRequest.reused ? "info" : "success"}
+          title={lastSubmittedRequest.reused ? "Existing request reopened" : "Support request submitted"}
+          description={`${lastSubmittedRequest.subject} is now ${humanizeEnum(lastSubmittedRequest.status)}. Staff can track it from operational alerts and you can follow the timeline below.`}
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setCategory("general")
+                setPriority("medium")
+                setSubject("Support request")
+                setDescription("")
+              }}
+            >
+              Start another request
+            </Button>
+          }
+        />
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <form
           onSubmit={submitRequest}
           className="rounded-xl border bg-background p-5 shadow-sm"
         >
-          <h2 className="text-base font-semibold">Raise a recovery request</h2>
+          <h2 className="text-base font-semibold">Raise a tracked request</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            This creates a tracked request for hostel staff. Include the workflow and what you tried.
+            This creates a tracked request for hostel staff. Pick a category shortcut, add
+            details, and follow status below.
           </p>
 
           <div className="mt-5 grid gap-4">
+            {submitError ? (
+              <APIErrorState
+                title="Support request failed"
+                message={submitError}
+                onRetry={() => setSubmitError(null)}
+              />
+            ) : null}
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Issue type</Label>
@@ -215,8 +269,14 @@ export function ResidentSupportClient() {
                 value={subject}
                 minLength={4}
                 maxLength={180}
+                aria-invalid={subject.trim().length > 0 && subject.trim().length < 4}
                 onChange={(event) => setSubject(event.target.value)}
               />
+              {subject.trim().length > 0 && subject.trim().length < 4 ? (
+                <p className="text-xs text-destructive">
+                  Subject must be at least 4 characters.
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -228,15 +288,24 @@ export function ResidentSupportClient() {
                 maxLength={4000}
                 className="min-h-32"
                 placeholder={descriptionPlaceholder(category)}
+                aria-invalid={description.trim().length > 0 && description.trim().length < 10}
                 onChange={(event) => setDescription(event.target.value)}
               />
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>
+                  {description.trim().length > 0 && description.trim().length < 10
+                    ? "Add a little more detail so staff can act."
+                    : "Include room, time, payment reference, or screenshot context when relevant."}
+                </span>
+                <span>{description.length}/4000</span>
+              </div>
             </div>
           </div>
 
           <Button
             type="submit"
             className="mt-5 w-full"
-            disabled={createRequest.isPending || description.trim().length < 10}
+            disabled={createRequest.isPending || subject.trim().length < 4 || description.trim().length < 10}
           >
             {createRequest.isPending ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -285,12 +354,35 @@ export function ResidentSupportClient() {
             <EmptyState
               title="No support requests yet"
               message="Raise a request when profile, uploads, payment, or account access gets stuck."
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCategory("general")
+                    setPriority("medium")
+                    setSubject(defaultSubject("general"))
+                  }}
+                >
+                  Prepare request
+                </Button>
+              }
             />
           ) : undefined
         }
       >
-        {requests.isLoading ? (
-          <div className="p-5 text-sm text-muted-foreground">Loading support requests...</div>
+        {requests.isError ? (
+          <div className="p-4">
+            <APIErrorState
+              title="Support requests could not be loaded"
+              error={requests.error}
+              onRetry={() => void requests.refetch()}
+            />
+          </div>
+        ) : requests.isLoading ? (
+          <div className="p-4">
+            <LoadingState variant="table" />
+          </div>
         ) : (
           <div className="divide-y">
             {requests.data?.data.map((request) => (
@@ -308,6 +400,7 @@ export function ResidentSupportClient() {
                       {request.resolution_notes}
                     </p>
                   ) : null}
+                  <SupportRequestTimeline status={request.status} />
                 </div>
               </article>
             ))}
@@ -316,6 +409,143 @@ export function ResidentSupportClient() {
       </DataTableShell>
     </div>
   )
+}
+
+function SupportCategoryShortcuts({
+  onSelect,
+}: {
+  onSelect: (category: Category, priority: Priority) => void
+}) {
+  const shortcuts: Array<{
+    category: Category
+    priority: Priority
+    title: string
+    description: string
+    icon: LucideIcon
+  }> = [
+    {
+      category: "maintenance",
+      priority: "medium",
+      title: "Maintenance",
+      description: "Fan, light, water, cleaning, or room facility issue.",
+      icon: Wrench,
+    },
+    {
+      category: "safety",
+      priority: "urgent",
+      title: "Safety",
+      description: "Security, night lighting, access, or urgent concern.",
+      icon: ShieldCheck,
+    },
+    {
+      category: "payment",
+      priority: "high",
+      title: "Payment",
+      description: "Rejected proof, pending verification, or fee question.",
+      icon: AlertTriangle,
+    },
+    {
+      category: "lost_found",
+      priority: "medium",
+      title: "Lost / found",
+      description: "Report a missing or found item with place and time.",
+      icon: MessageCircle,
+    },
+  ]
+
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {shortcuts.map((item) => {
+        const Icon = item.icon
+
+        return (
+          <button
+            key={item.category}
+            type="button"
+            className="rounded-xl border bg-card p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:shadow-lifted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            onClick={() => onSelect(item.category, item.priority)}
+          >
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+              <Icon className="size-5" aria-hidden="true" />
+            </span>
+            <span className="mt-3 block text-sm font-semibold">{item.title}</span>
+            <span className="mt-1 block text-sm leading-5 text-muted-foreground">
+              {item.description}
+            </span>
+          </button>
+        )
+      })}
+    </section>
+  )
+}
+
+function SupportRequestTimeline({ status }: { status: string }) {
+  const steps = [
+    { key: "open", label: "Submitted", icon: Send },
+    { key: "in_progress", label: "Staff reviewing", icon: Clock3 },
+    { key: "waiting_on_resident", label: "Needs resident info", icon: MessageCircle },
+    { key: "resolved", label: "Resolved", icon: CheckCircle2 },
+  ]
+  const activeIndex = Math.max(
+    0,
+    steps.findIndex((step) => step.key === status)
+  )
+  const resolved = status === "resolved" || status === "closed"
+  const explanation = getSupportStatusExplanation(status)
+
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg border bg-background/70 p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs font-semibold uppercase text-muted-foreground">Request timeline</p>
+        <p className="text-xs text-muted-foreground">{explanation.window}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-4">
+        {steps.map((step, index) => {
+          const Icon = step.icon
+          const complete = resolved || index <= activeIndex
+
+          return (
+            <div
+              key={step.key}
+              className={complete ? "rounded-lg bg-primary/10 p-2 text-primary" : "rounded-lg bg-muted/50 p-2 text-muted-foreground"}
+            >
+              <Icon className="size-3.5" aria-hidden="true" />
+              <p className="mt-1 text-xs font-medium">{step.label}</p>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-xs leading-5 text-muted-foreground">{explanation.message}</p>
+    </div>
+  )
+}
+
+function getSupportStatusExplanation(status: string) {
+  if (status === "waiting_on_resident") {
+    return {
+      window: "Waiting on you",
+      message: "Staff needs more information before they can close this request.",
+    }
+  }
+
+  if (status === "in_progress") {
+    return {
+      window: "Staff reviewing",
+      message: "The request is being worked on. Add a new request only if this is a different issue.",
+    }
+  }
+
+  if (status === "resolved" || status === "closed") {
+    return {
+      window: "Completed",
+      message: "Review the resolution notes. Raise a new request if the same issue returns.",
+    }
+  }
+
+  return {
+    window: "Expected response: next admin review",
+    message: "Your request is submitted and visible to hostel staff.",
+  }
 }
 
 function parseCategory(value: string | null): Category {

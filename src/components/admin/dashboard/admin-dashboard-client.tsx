@@ -13,6 +13,7 @@ import {
   FileCheck2,
   IndianRupee,
   KeyRound,
+  LifeBuoy,
   Plus,
   Sparkles,
   TrendingUp,
@@ -49,7 +50,7 @@ import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 import { useRealtimeAdmissions, useRealtimeLeaves, useRealtimePayments } from "@/lib/realtime"
 import { cn } from "@/lib/utils"
-import { useDashboardAnalytics, useLeaves, usePayments, useResidents } from "@/hooks"
+import { useDashboardAnalytics, useLeaves, usePayments, useResidents, useSupportRequests } from "@/hooks"
 
 const dashboardStagger: Variants = {
   hidden: { opacity: 0 },
@@ -111,6 +112,12 @@ export function AdminDashboardClient() {
     page: 1,
     pageSize: 5,
   })
+  const supportRequests = useSupportRequests({
+    organizationId: organizationId ?? "",
+    hostelId,
+    page: 1,
+    pageSize: 1,
+  })
 
   if (!organizationId) {
     return (
@@ -147,6 +154,7 @@ export function AdminDashboardClient() {
   const activeLeaves = metrics?.operations.activeLeaves ?? 0
   const newAdmissions = metrics?.operations.newAdmissions ?? 0
   const pendingInvites = metrics?.operations.pendingInvites ?? 0
+  const supportQueueCount = supportRequests.data?.meta.total ?? 0
 
   const operationalAlerts = buildOperationalAlerts({
     registeredResidents: totalResidents,
@@ -155,6 +163,16 @@ export function AdminDashboardClient() {
     pendingPayments,
     newAdmissions,
     pendingInvites,
+  })
+  const todayActions = buildTodayActions({
+    onboardingResidents,
+    pendingVerification,
+    pendingPayments,
+    pendingInvites,
+    activeLeaves,
+    newAdmissions,
+    supportQueueCount,
+    registeredResidents: totalResidents,
   })
 
   const kpis = [
@@ -303,6 +321,10 @@ export function AdminDashboardClient() {
           {kpis.map((kpi) => (
             <AnimatedKpiCard key={kpi.title} {...kpi} />
           ))}
+        </motion.section>
+
+        <motion.section variants={dashboardItem}>
+          <TodayNeedsAttention actions={todayActions} />
         </motion.section>
 
         <section className="grid gap-6">
@@ -507,6 +529,85 @@ function RevenuePanel({
             <p className="mt-1 text-xl font-semibold">{pendingPayments}</p>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TodayNeedsAttention({
+  actions,
+}: {
+  actions: Array<{
+    title: string
+    detail: string
+    href: string
+    action: string
+    tone: Tone
+    icon: LucideIcon
+  }>
+}) {
+  if (actions.length === 0) {
+    return (
+      <Card className="border-success/25 bg-success-surface/70">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/70 text-success-foreground ring-1 ring-success/20">
+              <UserCheck className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-success-foreground">
+                Today is clear
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-success-foreground/80">
+                No payment reviews, onboarding blockers, support requests, or leave/gate
+                exceptions need immediate action.
+              </p>
+            </div>
+          </div>
+          <Button asChild variant="outline" className="bg-background">
+            <Link href={"/admin/residents/new" as Route}>Add resident</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Today Needs Attention</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ranked daily queue across money, resident access, support, admissions, and
+              leave/gate status.
+            </p>
+          </div>
+          <Badge variant="secondary">{actions.length} priority actions</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        {actions.map((item) => {
+          const Icon = item.icon
+
+          return (
+            <Link
+              key={`${item.href}-${item.title}`}
+              href={item.href as Route}
+              className="group rounded-xl border bg-card/90 p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-lifted"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl ring-1", toneClasses[item.tone])}>
+                  <Icon className="size-5" aria-hidden="true" />
+                </span>
+                <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+              </div>
+              <h3 className="mt-4 text-sm font-semibold">{item.title}</h3>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">{item.detail}</p>
+              <p className="mt-3 text-xs font-semibold text-primary">{item.action}</p>
+            </Link>
+          )
+        })}
       </CardContent>
     </Card>
   )
@@ -841,6 +942,105 @@ function buildOperationalAlerts(input: {
   }
 
   return alerts
+}
+
+function buildTodayActions(input: {
+  onboardingResidents: number
+  pendingVerification: number
+  pendingPayments: number
+  pendingInvites: number
+  activeLeaves: number
+  newAdmissions: number
+  supportQueueCount: number
+  registeredResidents: number
+}) {
+  const actions: Array<{
+    title: string
+    detail: string
+    href: string
+    action: string
+    tone: Tone
+    icon: LucideIcon
+  }> = []
+
+  if (input.pendingPayments > 0) {
+    actions.push({
+      title: `${input.pendingPayments} payment proof${input.pendingPayments === 1 ? "" : "s"} waiting`,
+      detail: "Verify or reject uploaded payment proof before dues stay stale.",
+      href: "/admin/payments",
+      action: "Open payment queue",
+      tone: "warning",
+      icon: CreditCard,
+    })
+  }
+
+  if (input.supportQueueCount > 0) {
+    actions.push({
+      title: `${input.supportQueueCount} support request${input.supportQueueCount === 1 ? "" : "s"} open`,
+      detail: "Review maintenance, safety, account, and resident recovery requests.",
+      href: "/admin/alerts",
+      action: "Review support queue",
+      tone: "danger",
+      icon: LifeBuoy,
+    })
+  }
+
+  if (input.pendingVerification > 0 || input.onboardingResidents > 0) {
+    actions.push({
+      title: "Resident onboarding needs completion",
+      detail: `${input.onboardingResidents} draft and ${input.pendingVerification} follow-up profile${input.pendingVerification === 1 ? "" : "s"} need action.`,
+      href: "/admin/residents",
+      action: "Open residents",
+      tone: "warning",
+      icon: FileCheck2,
+    })
+  }
+
+  if (input.pendingInvites > 0) {
+    actions.push({
+      title: `${input.pendingInvites} invite${input.pendingInvites === 1 ? "" : "s"} pending`,
+      detail: "Residents have not activated portal access yet.",
+      href: "/admin/residents",
+      action: "Follow up invites",
+      tone: "warning",
+      icon: KeyRound,
+    })
+  }
+
+  if (input.activeLeaves > 0) {
+    actions.push({
+      title: `${input.activeLeaves} resident${input.activeLeaves === 1 ? "" : "s"} away`,
+      detail: "Use the leave queue as today’s gate-pass and return tracking surface.",
+      href: "/admin/leaves",
+      action: "Check leave/gate status",
+      tone: "info",
+      icon: CalendarDays,
+    })
+  }
+
+  if (input.newAdmissions > 0) {
+    actions.push({
+      title: `${input.newAdmissions} admission lead${input.newAdmissions === 1 ? "" : "s"} to contact`,
+      detail: "Convert fresh inquiries before joining dates pass.",
+      href: "/admin/leads",
+      action: "Open leads",
+      tone: "info",
+      icon: UserRoundPlus,
+    })
+  }
+
+  if (input.registeredResidents === 0) {
+    actions.push({
+      title: "Add the first resident",
+      detail: "Start the daily operations flow by creating the first resident profile.",
+      href: "/admin/residents/new",
+      action: "Add resident",
+      tone: "info",
+      icon: Plus,
+    })
+  }
+
+  return actions.slice(0, 6)
 }
 
 const toneClasses = {

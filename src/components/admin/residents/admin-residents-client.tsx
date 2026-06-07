@@ -33,7 +33,7 @@ import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { ResponsiveContainer } from "@/components/shared/responsive-container"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { APIErrorState, EmptyState } from "@/components/system"
+import { APIErrorState, EmptyState, WorkflowStatus } from "@/components/system"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -100,6 +100,11 @@ type ResidentStatusFilter =
   | "checked_out"
   | "archived"
 type ResidentTypeFilter = "all" | "student" | "employee" | "other"
+type ResidentOutcome = {
+  tone: "success" | "warning" | "info" | "danger"
+  title: string
+  description: string
+}
 
 const stagger: Variants = {
   hidden: { opacity: 0 },
@@ -130,6 +135,7 @@ export function AdminResidentsClient() {
   const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
   const [repairTarget, setRepairTarget] = useState<Tables<"residents"> | null>(null)
   const [profileTarget, setProfileTarget] = useState<Tables<"residents"> | null>(null)
+  const [residentOutcome, setResidentOutcome] = useState<ResidentOutcome | null>(null)
   const deactivateResident = useDeactivateResident()
   const checkoutResident = useCheckoutResident()
   const repairResidentLifecycle = useRepairResidentLifecycle()
@@ -147,6 +153,7 @@ export function AdminResidentsClient() {
     residentType: residentType === "all" ? undefined : residentType,
   })
   const residentRows = useMemo(() => query.data?.data ?? [], [query.data?.data])
+  const hasActiveResidentFilters = search.trim().length > 0 || status !== "all" || residentType !== "all"
 
   const summary = useMemo(() => {
     const rows = residentRows
@@ -179,9 +186,16 @@ export function AdminResidentsClient() {
       return
     }
 
+    const targetResident = deactivateTarget
     await deactivateResident.mutateAsync({
-      residentId: deactivateTarget.id,
+      residentId: targetResident.id,
       organizationId,
+    })
+    await query.refetch()
+    setResidentOutcome({
+      tone: "warning",
+      title: "Resident deactivated",
+      description: `${targetResident.full_name} was archived through the production API. Financial records remain available for history and reconciliation.`,
     })
     toast.success("Resident deactivated.")
     setDeactivateTarget(null)
@@ -192,11 +206,18 @@ export function AdminResidentsClient() {
       return
     }
 
+    const targetResident = checkoutTarget
     await checkoutResident.mutateAsync({
-      residentId: checkoutTarget.id,
+      residentId: targetResident.id,
       organizationId,
       checkoutDate: new Date().toISOString().slice(0, 10),
       reason: "Resident left the hostel from admin residents table.",
+    })
+    await query.refetch()
+    setResidentOutcome({
+      tone: "success",
+      title: "Checkout completed",
+      description: `${targetResident.full_name} was marked as left. Active room occupancy was released and the resident stays visible for operational history.`,
     })
     toast.success("Resident marked as left and room occupancy released.")
     setCheckoutTarget(null)
@@ -207,8 +228,9 @@ export function AdminResidentsClient() {
       return
     }
 
+    const targetResident = repairTarget
     const result = await repairResidentLifecycle.mutateAsync({
-      residentId: repairTarget.id,
+      residentId: targetResident.id,
       organizationId,
       dryRun: false,
     })
@@ -217,6 +239,15 @@ export function AdminResidentsClient() {
       0
     )
 
+    await query.refetch()
+    setResidentOutcome({
+      tone: repairCount > 0 ? "success" : "info",
+      title: repairCount > 0 ? "Lifecycle repaired" : "Lifecycle already clean",
+      description:
+        repairCount > 0
+          ? `${targetResident.full_name} had ${repairCount} lifecycle update${repairCount === 1 ? "" : "s"} applied. Review the profile if access or occupancy still looks unusual.`
+          : `${targetResident.full_name} was checked and no repair was needed.`,
+    })
     toast.success(
       repairCount > 0
         ? `Resident lifecycle repaired (${repairCount} updates applied).`
@@ -274,6 +305,14 @@ export function AdminResidentsClient() {
         />
       ) : null}
 
+      {residentOutcome ? (
+        <WorkflowStatus
+          tone={residentOutcome.tone}
+          title={residentOutcome.title}
+          description={residentOutcome.description}
+        />
+      ) : null}
+
       <DataTableShell
         title="Resident Records"
         description="Server-side search, filters, pagination, and production API actions."
@@ -323,7 +362,13 @@ export function AdminResidentsClient() {
               placeholder="Search name, phone, email, admission"
             />
           </label>
-          <Select value={residentType} onValueChange={(value) => setResidentType(value as ResidentTypeFilter)}>
+          <Select
+            value={residentType}
+            onValueChange={(value) => {
+              setPage(1)
+              setResidentType(value as ResidentTypeFilter)
+            }}
+          >
             <SelectTrigger className="h-9 min-w-40" aria-label="Filter resident type">
               <SelectValue placeholder="Resident type" />
             </SelectTrigger>
@@ -334,7 +379,13 @@ export function AdminResidentsClient() {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={status} onValueChange={(value) => setStatus(value as ResidentStatusFilter)}>
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setPage(1)
+              setStatus(value as ResidentStatusFilter)
+            }}
+          >
             <SelectTrigger className="h-9 min-w-40" aria-label="Filter resident status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -350,6 +401,39 @@ export function AdminResidentsClient() {
           </Select>
         </motion.div>
 
+        {hasActiveResidentFilters ? (
+          <div className="flex flex-wrap items-center gap-2 border-b bg-white/35 px-4 py-3 text-xs text-muted-foreground">
+            {search.trim() ? (
+              <span className="rounded-full border bg-background px-2.5 py-1">
+                Search: {search.trim()}
+              </span>
+            ) : null}
+            {residentType !== "all" ? (
+              <span className="rounded-full border bg-background px-2.5 py-1">
+                Type: {residentType}
+              </span>
+            ) : null}
+            {status !== "all" ? (
+              <span className="rounded-full border bg-background px-2.5 py-1">
+                Status: {status}
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPage(1)
+                setSearch("")
+                setStatus("all")
+                setResidentType("all")
+              }}
+            >
+              Reset filters
+            </Button>
+          </div>
+        ) : null}
+
         {query.isLoading ? (
           <LoadingState variant="table" />
         ) : (
@@ -358,9 +442,9 @@ export function AdminResidentsClient() {
               variants={stagger}
               initial="hidden"
               animate="show"
-              className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+              className="grid gap-4 lg:hidden"
             >
-              {residentRows.slice(0, 6).map((resident) => (
+              {residentRows.map((resident) => (
                 <ResidentProfileTile
                   key={resident.id}
                   resident={resident}
@@ -375,7 +459,7 @@ export function AdminResidentsClient() {
               ))}
             </motion.div>
 
-            <div className="overflow-hidden rounded-xl border bg-white/55">
+            <div className="hidden overflow-hidden rounded-xl border bg-white/55 lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -476,6 +560,18 @@ export function AdminResidentsClient() {
         onInvite={() => {
           if (profileTarget) {
             setInviteTarget(profileTarget)
+            setProfileTarget(null)
+          }
+        }}
+        onRepair={() => {
+          if (profileTarget) {
+            setRepairTarget(profileTarget)
+            setProfileTarget(null)
+          }
+        }}
+        onCheckout={() => {
+          if (profileTarget) {
+            setCheckoutTarget(profileTarget)
             setProfileTarget(null)
           }
         }}
@@ -642,6 +738,17 @@ function ResidentProfileTile({
             </span>
           </div>
         </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <Button type="button" className="min-h-11 flex-1" onClick={onPreview}>
+            <Eye className="size-4" aria-hidden="true" />
+            Preview
+          </Button>
+          <Button type="button" variant="outline" className="min-h-11" onClick={onEdit}>
+            <Edit className="size-4" aria-hidden="true" />
+            Edit
+          </Button>
+        </div>
       </div>
     </motion.article>
   )
@@ -720,13 +827,19 @@ function ResidentProfileSheet({
   onOpenChange,
   onEdit,
   onInvite,
+  onRepair,
+  onCheckout,
 }: {
   resident: Tables<"residents"> | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: () => void
   onInvite: () => void
+  onRepair: () => void
+  onCheckout: () => void
 }) {
+  const lifecycle = resident ? getResidentLifecycleSummary(resident) : null
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">
@@ -751,10 +864,19 @@ function ResidentProfileSheet({
             </SheetHeader>
 
             <div className="grid gap-5 p-6">
+              {lifecycle ? (
+                <WorkflowStatus
+                  tone={lifecycle.tone}
+                  title={lifecycle.title}
+                  description={lifecycle.description}
+                />
+              ) : null}
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <ProfileMetric label="Joined" value={formatDate(resident.joined_on ?? resident.created_at)} />
                 <ProfileMetric label="Identity mode" value={formatResidentIdentityMode(getResidentIdentityMode(resident))} />
                 <ProfileMetric label="Resident type" value={resident.resident_type} />
+                <ProfileMetric label="Monthly fee" value={resident.monthly_fee_amount.toLocaleString("en-IN")} />
               </div>
 
               <section className="rounded-xl border bg-white/55 p-4">
@@ -775,6 +897,44 @@ function ResidentProfileSheet({
                     label="Portal"
                     value={resident.user_id ? "Linked to auth user" : "Invite required"}
                   />
+                  <TimelineRow
+                    label="Room action"
+                    value={
+                      resident.status === "checked_out" || resident.checkout_on
+                        ? "Room already released"
+                        : "Checkout releases active allocation"
+                    }
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-white/55 p-4">
+                <h3 className="text-sm font-semibold text-foreground">Action readiness</h3>
+                <div className="mt-4 grid gap-3">
+                  <ResidentChecklistItem
+                    label="Portal access"
+                    complete={Boolean(resident.user_id)}
+                    detail={resident.user_id ? "Resident can use the portal." : "Send an invite before expecting resident self-service."}
+                  />
+                  <ResidentChecklistItem
+                    label="Identity document"
+                    complete={Boolean(resident.aadhaar_document_id)}
+                    detail={resident.aadhaar_document_id ? "Document is linked." : "Aadhaar document is still pending."}
+                  />
+                  <ResidentChecklistItem
+                    label="Contact path"
+                    complete={Boolean(resident.phone || resident.email)}
+                    detail={resident.phone || resident.email ? "At least one direct contact is available." : "Add phone or email before follow-up."}
+                  />
+                  <ResidentChecklistItem
+                    label="Parent/emergency contact"
+                    complete={Boolean(resident.parent_phone || resident.emergency_contact_phone)}
+                    detail={
+                      resident.parent_phone || resident.emergency_contact_phone
+                        ? "Family or emergency contact is present."
+                        : "Add parent or emergency contact before sensitive actions."
+                    }
+                  />
                 </div>
               </section>
 
@@ -789,9 +949,21 @@ function ResidentProfileSheet({
                 </Button>
                 <Button asChild variant="outline">
                   <Link href={`/admin/residents/${resident.id}` as Route}>
-                    <Eye className="size-4" aria-hidden="true" />
-                    Full profile
-                  </Link>
+                  <Eye className="size-4" aria-hidden="true" />
+                  Full profile
+                </Link>
+              </Button>
+                <Button variant="outline" onClick={onRepair}>
+                  <Wrench className="size-4" aria-hidden="true" />
+                  Repair lifecycle
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={resident.status === "checked_out" || resident.status === "archived"}
+                  onClick={onCheckout}
+                >
+                  <LogOut className="size-4" aria-hidden="true" />
+                  Mark left
                 </Button>
               </div>
             </div>
@@ -799,6 +971,83 @@ function ResidentProfileSheet({
         ) : null}
       </SheetContent>
     </Sheet>
+  )
+}
+
+function getResidentLifecycleSummary(resident: Tables<"residents">): ResidentOutcome {
+  if (resident.status === "checked_out" || resident.checkout_on) {
+    return {
+      tone: "info",
+      title: "Resident has left the hostel",
+      description:
+        "Keep this record for operational history. Reactivation should go through a deliberate admission or profile update flow.",
+    }
+  }
+
+  if (!resident.user_id) {
+    return {
+      tone: "warning",
+      title: "Activation is still pending",
+      description:
+        "The next useful action is sending an invite. Until then, the resident cannot complete self-service payments, support, or leave requests.",
+    }
+  }
+
+  if (!resident.aadhaar_document_id) {
+    return {
+      tone: "warning",
+      title: "Identity document needs follow-up",
+      description:
+        "Portal access is linked, but the resident profile still needs document completion before lifecycle operations feel fully reliable.",
+    }
+  }
+
+  if (resident.status === "active") {
+    return {
+      tone: "success",
+      title: "Resident is operationally active",
+      description:
+        "Portal access, active status, and core profile state are ready. Use repair only if finance, invite, or occupancy state looks inconsistent.",
+    }
+  }
+
+  return {
+    tone: "info",
+    title: "Review lifecycle state",
+    description:
+      "Check access, documents, room status, and financial follow-up before taking an irreversible action.",
+  }
+}
+
+function ResidentChecklistItem({
+  label,
+  complete,
+  detail,
+}: {
+  label: string
+  complete: boolean
+  detail: string
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border bg-background/70 p-3">
+      <span
+        className={
+          complete
+            ? "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-success-surface text-success-foreground ring-1 ring-success/20"
+            : "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-warning-surface text-warning-foreground ring-1 ring-warning/25"
+        }
+      >
+        {complete ? (
+          <ShieldCheck className="size-3.5" aria-hidden="true" />
+        ) : (
+          <Wrench className="size-3.5" aria-hidden="true" />
+        )}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+      </div>
+    </div>
   )
 }
 

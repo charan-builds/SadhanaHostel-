@@ -1,4 +1,9 @@
-import { parseJsonBody, successResponse, withApiRoute } from "@/lib/api"
+import {
+  parseJsonBody,
+  RATE_LIMIT_POLICIES,
+  successResponse,
+  withApiRoute,
+} from "@/lib/api"
 import { NotificationService } from "@/services/notifications"
 
 export const dynamic = "force-dynamic"
@@ -12,6 +17,7 @@ export async function POST(request: Request, context: NotificationArchiveRouteCo
     request,
     {
       route: "notifications.archive",
+      rateLimit: RATE_LIMIT_POLICIES.notificationStateWrite,
     },
     async () => {
       const { id } = await context.params
