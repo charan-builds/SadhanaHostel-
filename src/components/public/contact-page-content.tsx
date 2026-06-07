@@ -5,7 +5,6 @@ import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapEmbedHref, mapSearchHref, whatsappHref } from "@/constants/hostel"
-import { AppQueryProvider } from "@/lib/react-query"
 import {
   trackContactAction,
   trackWhatsAppClick,
@@ -130,9 +129,7 @@ export function ContactPageContent() {
             </article>
           </div>
 
-          <AppQueryProvider>
-            <ContactInquiryForm />
-          </AppQueryProvider>
+          <ContactInquiryForm />
         </div>
       </section>
     </main>

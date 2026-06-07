@@ -1,0 +1,1668 @@
+ .gitignore                                         |     1 +
+ FINAL_PRODUCTION_READINESS_REPORT.md               |   218 +
+ MANUAL_DR_SIGNOFF.md                               |    86 +
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 527392 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 1277232 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 1528552 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 28672 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |   Bin 0 -> 14904 bytes
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 1142 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 164832 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 178 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../b42de066-2ef1-4d30-8f5e-0d7e145d2dab/index"    |   Bin 0 -> 24 bytes
+ .../index-dir/the-real-index"                      |   Bin 0 -> 48 bytes
+ .../index.txt"                                     |   Bin 0 -> 172 bytes
+ .../Default/Service Worker/Database/000003.log"    |   Bin 0 -> 211 bytes
+ .../Default/Service Worker/Database/CURRENT"       |     1 +
+ .../Default/Service Worker/Database/LOCK"          |     0
+ .../Default/Service Worker/Database/LOG"           |     2 +
+ .../Service Worker/Database/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Service Worker/ScriptCache/index"      |   Bin 0 -> 24 bytes
+ .../ScriptCache/index-dir/the-real-index"          |   Bin 0 -> 72 bytes
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 156 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425271075094426"    |   Bin 0 -> 4620 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 12824 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 502672 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 556232 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 972352 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 24576 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 1142 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 30 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 486 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425234908337617"    |   Bin 0 -> 4740 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 8720 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 502672 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 453232 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 972352 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 20480 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 896 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 30 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 486 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425235245471371"    |   Bin 0 -> 4788 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 8720 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 1252512 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 1417312 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 1326672 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 36864 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 1142 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 176 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 486 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425233513486467"    |   Bin 0 -> 4740 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 8720 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../extensions_crx_cache/metadata.json"            |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 1268992 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 1194832 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 1680992 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 28672 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 1142 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 179 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../a61ad1d3-b0c6-42af-8265-301a0275cf14/index"    |   Bin 0 -> 24 bytes
+ .../index-dir/the-real-index"                      |   Bin 0 -> 48 bytes
+ .../index.txt"                                     |   Bin 0 -> 172 bytes
+ .../Default/Service Worker/Database/000003.log"    |   Bin 0 -> 211 bytes
+ .../Default/Service Worker/Database/CURRENT"       |     1 +
+ .../Default/Service Worker/Database/LOCK"          |     0
+ .../Default/Service Worker/Database/LOG"           |     2 +
+ .../Service Worker/Database/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Service Worker/ScriptCache/index"      |   Bin 0 -> 24 bytes
+ .../ScriptCache/index-dir/the-real-index"          |   Bin 0 -> 48 bytes
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 486 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425222094402319"    |   Bin 0 -> 5756 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 12824 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../extensions_crx_cache/metadata.json"            |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 440872 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 531512 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 782832 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 20480 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 896 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 30 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 156 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425235719635503"    |   Bin 0 -> 3956 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 8720 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 1087712 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 1034152 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 1380232 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 28672 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |     0
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 650 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 243112 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 30 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 486 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425223599079101"    |   Bin 0 -> 4740 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 8720 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../extensions_crx_cache/metadata.json"            |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ .../Default/Account Web Data"                      |   Bin 0 -> 77824 bytes
+ .../Default/Account Web Data-journal"              |     0
+ .../Default/Affiliation Database"                  |   Bin 0 -> 53248 bytes
+ .../Default/Affiliation Database-journal"          |     0
+ .../Default/AutofillAiModelCache/LOCK"             |     0
+ .../Default/AutofillAiModelCache/LOG"              |     0
+ .../Default/AutofillStrikeDatabase/LOCK"           |     0
+ .../Default/AutofillStrikeDatabase/LOG"            |     0
+ .../Default/BookmarkMergedSurfaceOrdering"         |     2 +
+ .../Default/BudgetDatabase/LOCK"                   |     0
+ .../Default/BudgetDatabase/LOG"                    |     0
+ .../Default/Cache/Cache_Data/index"                |     1 +
+ .../Default/Cache/Cache_Data/sqldb0"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb0-wal"           |   Bin 0 -> 527392 bytes
+ .../Default/Cache/Cache_Data/sqldb1"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb1-wal"           |   Bin 0 -> 1429672 bytes
+ .../Default/Cache/Cache_Data/sqldb2"               |   Bin 0 -> 4096 bytes
+ .../Default/Cache/Cache_Data/sqldb2-wal"           |   Bin 0 -> 1281352 bytes
+ .../Default/Cache/No_Vary_Search/journal.baj"      |     1 +
+ .../Default/Cache/No_Vary_Search/snapshot.baf"     |   Bin 0 -> 20 bytes
+ .../Default/ClientCertificates/LOCK"               |     0
+ .../Default/ClientCertificates/LOG"                |     0
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.db"        |   Bin 0 -> 32768 bytes
+ .../Code Cache/pc/5bb[`6`2`29@0-95@ab`2.journal"   |     0
+ .../Default/Collaboration/MessageDB"               |   Bin 0 -> 20480 bytes
+ .../Default/Collaboration/MessageDB-journal"       |     0
+ .../Default/Cookies"                               |   Bin 0 -> 20480 bytes
+ .../Default/Cookies-journal"                       |     0
+ .../Default/DIPS"                                  |   Bin 0 -> 4096 bytes
+ .../Default/DIPS-wal"                              |   Bin 0 -> 45352 bytes
+ .../Default/DataSharing/DataSharingDB"             |   Bin 0 -> 20480 bytes
+ .../Default/DataSharing/DataSharingDB-journal"     |     0
+ .../Default/DawnGraphiteCache/data_0"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_1"              |   Bin 0 -> 270336 bytes
+ .../Default/DawnGraphiteCache/data_2"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/data_3"              |   Bin 0 -> 8192 bytes
+ .../Default/DawnGraphiteCache/index"               |   Bin 0 -> 262512 bytes
+ .../Default/DawnWebGPUCache/data_0"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_1"                |   Bin 0 -> 270336 bytes
+ .../Default/DawnWebGPUCache/data_2"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/data_3"                |   Bin 0 -> 8192 bytes
+ .../Default/DawnWebGPUCache/index"                 |   Bin 0 -> 262512 bytes
+ .../Default/Extension Rules/000003.log"            |   Bin 0 -> 76 bytes
+ .../Default/Extension Rules/CURRENT"               |     1 +
+ .../Default/Extension Rules/LOCK"                  |     0
+ .../Default/Extension Rules/LOG"                   |     2 +
+ .../Default/Extension Rules/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Extension Scripts/000003.log"          |   Bin 0 -> 38 bytes
+ .../Default/Extension Scripts/CURRENT"             |     1 +
+ .../Default/Extension Scripts/LOCK"                |     0
+ .../Default/Extension Scripts/LOG"                 |     2 +
+ .../Default/Extension Scripts/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Extension State/000003.log"            |   Bin 0 -> 114 bytes
+ .../Default/Extension State/CURRENT"               |     1 +
+ .../Default/Extension State/LOCK"                  |     0
+ .../Default/Extension State/LOG"                   |     2 +
+ .../Default/Extension State/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Favicons"                              |   Bin 0 -> 20480 bytes
+ .../Default/Favicons-journal"                      |   Bin 0 -> 14904 bytes
+ .../Default/GCM Store/000003.log"                  |   Bin 0 -> 650 bytes
+ .../Default/GCM Store/CURRENT"                     |     1 +
+ .../Default/GCM Store/LOCK"                        |     0
+ .../Default/GCM Store/LOG"                         |     2 +
+ .../Default/GCM Store/MANIFEST-000001"             |   Bin 0 -> 41 bytes
+ .../Default/GPUCache/data_0"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_1"                       |   Bin 0 -> 270336 bytes
+ .../Default/GPUCache/data_2"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/data_3"                       |   Bin 0 -> 8192 bytes
+ .../Default/GPUCache/index"                        |   Bin 0 -> 262512 bytes
+ .../Default/History"                               |   Bin 0 -> 4096 bytes
+ .../Default/History-shm"                           |   Bin 0 -> 32768 bytes
+ .../Default/History-wal"                           |   Bin 0 -> 164832 bytes
+ .../Default/LOCK"                                  |     0
+ .../Default/LOG"                                   |     0
+ .../Default/Local Storage/leveldb/000003.log"      |   Bin 0 -> 178 bytes
+ .../Default/Local Storage/leveldb/CURRENT"         |     1 +
+ .../Default/Local Storage/leveldb/LOCK"            |     0
+ .../Default/Local Storage/leveldb/LOG"             |     2 +
+ .../Default/Local Storage/leveldb/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Login Data"                            |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account"                |   Bin 0 -> 40960 bytes
+ .../Default/Login Data For Account-journal"        |     0
+ .../Default/Login Data-journal"                    |     0
+ .../Default/Network Action Predictor"              |   Bin 0 -> 53248 bytes
+ .../Default/Network Action Predictor-journal"      |     0
+ .../Default/Network Persistent State"              |     1 +
+ .../Default/PersistentOriginTrials/LOCK"           |     0
+ .../Default/PersistentOriginTrials/LOG"            |     0
+ .../Default/Preferences"                           |     1 +
+ .../Default/PreferredApps"                         |     1 +
+ .../Default/README"                                |     1 +
+ .../Default/Reporting and NEL"                     |   Bin 0 -> 36864 bytes
+ .../Default/Reporting and NEL-journal"             |     0
+ .../Default/SCT Auditing Pending Reports"          |     1 +
+ .../Default/Safe Browsing Cookies"                 |   Bin 0 -> 20480 bytes
+ .../Default/Safe Browsing Cookies-journal"         |     0
+ .../Default/Secure Preferences"                    |     1 +
+ .../Segmentation Platform/SegmentInfoDB/LOCK"      |     0
+ .../Segmentation Platform/SegmentInfoDB/LOG"       |     0
+ .../Default/Segmentation Platform/SignalDB/LOCK"   |     0
+ .../Default/Segmentation Platform/SignalDB/LOG"    |     0
+ .../SignalStorageConfigDB/LOCK"                    |     0
+ .../SignalStorageConfigDB/LOG"                     |     0
+ .../Default/ServerCertificate"                     |   Bin 0 -> 20480 bytes
+ .../Default/ServerCertificate-journal"             |     0
+ .../d775123a-4532-4b52-beb3-8d1fdcc0b65c/index"    |   Bin 0 -> 24 bytes
+ .../index-dir/the-real-index"                      |   Bin 0 -> 48 bytes
+ .../index.txt"                                     |   Bin 0 -> 172 bytes
+ .../Default/Service Worker/Database/000003.log"    |   Bin 0 -> 211 bytes
+ .../Default/Service Worker/Database/CURRENT"       |     1 +
+ .../Default/Service Worker/Database/LOCK"          |     0
+ .../Default/Service Worker/Database/LOG"           |     2 +
+ .../Service Worker/Database/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Service Worker/ScriptCache/index"      |   Bin 0 -> 24 bytes
+ .../ScriptCache/index-dir/the-real-index"          |   Bin 0 -> 48 bytes
+ .../Default/Session Storage/000003.log"            |   Bin 0 -> 156 bytes
+ .../Default/Session Storage/CURRENT"               |     1 +
+ .../Default/Session Storage/LOCK"                  |     0
+ .../Default/Session Storage/LOG"                   |     2 +
+ .../Default/Session Storage/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/Sessions/Session_13425271050683406"    |   Bin 0 -> 4524 bytes
+ .../Default/Shared Dictionary/cache/index"         |   Bin 0 -> 24 bytes
+ .../cache/index-dir/the-real-index"                |   Bin 0 -> 48 bytes
+ .../Default/Shared Dictionary/db"                  |   Bin 0 -> 45056 bytes
+ .../Default/Shared Dictionary/db-journal"          |     0
+ .../Default/Shortcuts"                             |   Bin 0 -> 20480 bytes
+ .../Default/Shortcuts-journal"                     |     0
+ .../Site Characteristics Database/000003.log"      |   Bin 0 -> 100 bytes
+ .../Default/Site Characteristics Database/CURRENT" |     1 +
+ .../Default/Site Characteristics Database/LOCK"    |     0
+ .../Default/Site Characteristics Database/LOG"     |     2 +
+ .../Site Characteristics Database/MANIFEST-000001" |   Bin 0 -> 41 bytes
+ .../Default/Sync Data/LevelDB/000003.log"          |   Bin 0 -> 137 bytes
+ .../Default/Sync Data/LevelDB/CURRENT"             |     1 +
+ .../Default/Sync Data/LevelDB/LOCK"                |     0
+ .../Default/Sync Data/LevelDB/LOG"                 |     2 +
+ .../Default/Sync Data/LevelDB/MANIFEST-000001"     |   Bin 0 -> 41 bytes
+ .../Default/Top Sites"                             |   Bin 0 -> 20480 bytes
+ .../Default/Top Sites-journal"                     |     0
+ .../Default/TransportSecurity"                     |     1 +
+ .../Default/Trust Tokens"                          |   Bin 0 -> 36864 bytes
+ .../Default/Trust Tokens-journal"                  |     0
+ .../Default/Web Data"                              |   Bin 0 -> 155648 bytes
+ .../Default/Web Data-journal"                      |     0
+ .../Default/WebStorage/QuotaManager"               |   Bin 0 -> 40960 bytes
+ .../Default/WebStorage/QuotaManager-journal"       |   Bin 0 -> 12824 bytes
+ .../Default/chrome_cart_db/LOCK"                   |     0
+ .../Default/chrome_cart_db/LOG"                    |     0
+ .../Default/commerce_subscription_db/LOCK"         |     0
+ .../Default/commerce_subscription_db/LOG"          |     0
+ .../Default/discount_infos_db/LOCK"                |     0
+ .../Default/discount_infos_db/LOG"                 |     0
+ .../Default/discounts_db/LOCK"                     |     0
+ .../Default/discounts_db/LOG"                      |     0
+ .../Default/heavy_ad_intervention_opt_out.db"      |   Bin 0 -> 16384 bytes
+ .../heavy_ad_intervention_opt_out.db-journal"      |     0
+ .../Default/parcel_tracking_db/LOCK"               |     0
+ .../Default/parcel_tracking_db/LOG"                |     0
+ .../Default/shared_proto_db/000003.log"            |   Bin 0 -> 8193 bytes
+ .../Default/shared_proto_db/CURRENT"               |     1 +
+ .../Default/shared_proto_db/LOCK"                  |     0
+ .../Default/shared_proto_db/LOG"                   |     2 +
+ .../Default/shared_proto_db/MANIFEST-000001"       |   Bin 0 -> 41 bytes
+ .../Default/shared_proto_db/metadata/000003.log"   |   Bin 0 -> 880 bytes
+ .../Default/shared_proto_db/metadata/CURRENT"      |     1 +
+ .../Default/shared_proto_db/metadata/LOCK"         |     0
+ .../Default/shared_proto_db/metadata/LOG"          |     2 +
+ .../shared_proto_db/metadata/MANIFEST-000001"      |   Bin 0 -> 41 bytes
+ .../Default/trusted_vault.pb"                      |     2 +
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db"     |   Bin 0 -> 4096 bytes
+ .../KEKVTFUW5VSNRTCSERJ3GD6SQKFOGHXC/cache.db-wal" |   Bin 0 -> 12392 bytes
+ .../cache.journal"                                 |     0
+ .../GraphiteDawnCache/data_0"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_1"                      |   Bin 0 -> 270336 bytes
+ .../GraphiteDawnCache/data_2"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/data_3"                      |   Bin 0 -> 8192 bytes
+ .../GraphiteDawnCache/index"                       |   Bin 0 -> 262512 bytes
+ .../Last Version"                                  |     1 +
+ .../Local State"                                   |     1 +
+ .../SingletonCookie"                               |     1 +
+ .../SingletonLock"                                 |     1 +
+ .../SingletonSocket"                               |     1 +
+ .../Variations"                                    |     1 +
+ .../component_crx_cache/metadata.json"             |     1 +
+ .../first_party_sets.db"                           |   Bin 0 -> 49152 bytes
+ .../first_party_sets.db-journal"                   |     0
+ .../segmentation_platform/ukm_db"                  |   Bin 0 -> 49152 bytes
+ .../segmentation_platform/ukm_db-wal"              |     0
+ artifacts/hero-screenshots/after-desktop.png       |   Bin 0 -> 1039273 bytes
+ artifacts/hero-screenshots/after-mobile.png        |   Bin 0 -> 256317 bytes
+ artifacts/hero-screenshots/before-desktop.png      |   Bin 0 -> 1362806 bytes
+ artifacts/hero-screenshots/before-mobile.png       |   Bin 0 -> 314803 bytes
+ .../admin-notices-auth-redirect.png                |   Bin 0 -> 84388 bytes
+ .../owner-dashboard-auth-redirect.png              |   Bin 0 -> 86151 bytes
+ .../resident-dashboard-auth-redirect.png           |   Bin 0 -> 110228 bytes
+ .../resident-notices-auth-redirect.png             |   Bin 0 -> 110742 bytes
+ artifacts/preprod/after-bundles.json               |   165 +
+ artifacts/preprod/baseline-bundles.json            |   165 +
+ artifacts/preprod/final-bundles.json               |   172 +
+ .../preprod/lighthouse-after-public.report.html    |  2897 ++++
+ .../preprod/lighthouse-after-public.report.json    | 13103 ++++++++++++++++
+ .../preprod/lighthouse-after-resident.report.html  |  2897 ++++
+ .../preprod/lighthouse-after-resident.report.json  |  6145 ++++++++
+ artifacts/preprod/lighthouse-after-summary.json    |    34 +
+ .../preprod/lighthouse-before-public.report.html   |  2897 ++++
+ .../preprod/lighthouse-before-public.report.json   | 14760 +++++++++++++++++++
+ .../preprod/lighthouse-before-resident.report.html |  2897 ++++
+ .../preprod/lighthouse-before-resident.report.json | 11773 +++++++++++++++
+ artifacts/preprod/lighthouse-before-summary.json   |    34 +
+ artifacts/preprod/lighthouse-comparison.json       |    70 +
+ artifacts/preprod/notification-test-matrix.md      |    52 +
+ .../performance-recovery-after-bundles.json        |  2331 +++
+ ...rmance-recovery-after-public.report.report.html |  2897 ++++
+ ...rmance-recovery-after-public.report.report.json | 11595 +++++++++++++++
+ .../performance-recovery-after-summary.json        |    47 +
+ .../performance-recovery-before-bundles.json       |  2114 +++
+ ...mance-recovery-before-public.report.report.html |  2897 ++++
+ ...mance-recovery-before-public.report.report.json | 13111 ++++++++++++++++
+ .../performance-recovery-before-summary.json       |    18 +
+ .../performance-recovery-final-bundles.json        |   411 +
+ ...ance-recovery-webpack-public.report.report.html |  2897 ++++
+ ...ance-recovery-webpack-public.report.report.json | 12905 ++++++++++++++++
+ .../performance-recovery-webpack-summary.json      |    47 +
+ ...resident-finance-after-mobile-login-blocked.png |   Bin 0 -> 107958 bytes
+ ...sident-finance-before-login-fallback-mobile.png |   Bin 0 -> 9113 bytes
+ .../preprod/resident-finance-before-mobile.png     |   Bin 0 -> 32035 bytes
+ ...resident-finance-mobile-performance-impact.json |   111 +
+ artifacts/preprod/resident-login-smoke.png         |   Bin 0 -> 76295 bytes
+ artifacts/pwa/install-flow-ios.png                 |   Bin 0 -> 3386587 bytes
+ artifacts/pwa/lighthouse-report.report.html        |  2897 ++++
+ artifacts/pwa/lighthouse-report.report.json        | 14473 ++++++++++++++++++
+ .../pwa/lighthouse-resident-login.report.html      |  2897 ++++
+ .../pwa/lighthouse-resident-login.report.json      | 11708 +++++++++++++++
+ artifacts/pwa/mobile-home.png                      |   Bin 0 -> 3835825 bytes
+ artifacts/pwa/resident-mobile-entry.png            |   Bin 0 -> 201401 bytes
+ .../lighthouse-resident-login-mobile.json          | 11449 ++++++++++++++
+ .../lighthouse-resident-login.json                 | 11331 ++++++++++++++
+ .../resident-login-blocked-mobile.png              |   Bin 0 -> 248198 bytes
+ .../admin-notices-auth-redirect.png                |   Bin 0 -> 86016 bytes
+ .../resident-dashboard-auth-redirect.png           |   Bin 0 -> 110236 bytes
+ .../owner-dashboard-auth-redirect.png              |   Bin 0 -> 85354 bytes
+ .../resident-dashboard-auth-redirect.png           |   Bin 0 -> 109169 bytes
+ .../manual-disaster-recovery-google-drive.md       |   161 +
+ next.config.ts                                     |    29 +
+ package-lock.json                                  |   140 +
+ package.json                                       |     6 +
+ pnpm-lock.yaml                                     |    88 +
+ public/sw.js                                       |   215 +
+ scripts/recovery/manual-dr-common.ts               |   430 +
+ scripts/recovery/manual-dr-validation.ts           |   425 +
+ scripts/recovery/manual-google-drive-backup.ts     |   338 +
+ scripts/recovery/manual-storage-restore.ts         |   183 +
+ scripts/recovery/restore-db.sh                     |    62 +
+ scripts/recovery/restore-storage.sh                |     9 +
+ src/app/(admin)/error.tsx                          |     5 +-
+ src/app/(admin)/layout.tsx                         |     2 +-
+ src/app/(auth)/layout.tsx                          |     7 +-
+ src/app/(public)/error.tsx                         |    34 +-
+ src/app/(public)/layout.tsx                        |     5 +-
+ src/app/(public)/loading.tsx                       |     8 +-
+ src/app/(public)/not-found.tsx                     |    27 +-
+ src/app/(resident)/error.tsx                       |     5 +-
+ src/app/(resident)/layout.tsx                      |     2 +-
+ src/app/api/notices/[id]/acknowledge/route.ts      |    30 +
+ src/app/api/notices/[id]/read/route.ts             |    24 +
+ src/app/api/notifications/[id]/archive/route.ts    |    24 +
+ .../push-subscriptions/revoke/route.ts             |    19 +
+ .../api/notifications/push-subscriptions/route.ts  |    19 +
+ src/app/api/platform/branding/upload/route.ts      |    29 +
+ src/app/global-error.tsx                           |     5 +-
+ src/app/layout.tsx                                 |    25 +-
+ src/app/manifest.ts                                |    45 +-
+ src/app/pwa-icon/[size]/route.tsx                  |    27 +
+ .../admin/analytics/owner-dashboard-client.tsx     |    71 +-
+ .../admin/finance/finance-section-nav.tsx          |    18 +-
+ .../admin/notices/admin-notices-client.tsx         |   265 +-
+ .../admin/operations/admin-automation-client.tsx   |    11 +-
+ .../admin/settings/admin-settings-client.tsx       |   314 +-
+ src/components/analytics/google-analytics-slot.tsx |    23 +
+ src/components/layout/dashboard-shell.tsx          |   102 +-
+ src/components/layout/dashboard-user-actions.tsx   |   381 +-
+ src/components/layout/mobile-bottom-nav.tsx        |    53 +
+ src/components/layout/public-shell.tsx             |     3 +-
+ .../providers/app-client-enhancements.tsx          |    80 +
+ src/components/providers/app-providers.tsx         |    37 +-
+ src/components/providers/session-providers.tsx     |    30 +
+ src/components/public/about-preview.tsx            |    37 +-
+ src/components/public/contact-page-content.tsx     |     5 +-
+ src/components/public/facilities-preview.tsx       |   135 +-
+ src/components/public/final-cta.tsx                |    39 +-
+ src/components/public/gallery-preview.tsx          |    52 +-
+ src/components/public/home-hero.tsx                |   191 +-
+ src/components/public/home-highlights.tsx          |    78 +-
+ src/components/public/inquiry-section.tsx          |    82 +-
+ src/components/public/language-switcher.tsx        |    23 +-
+ .../public/lazy-contact-inquiry-form.tsx           |    32 +
+ src/components/public/local-search-links.tsx       |    17 +-
+ src/components/public/location-cta.tsx             |    69 +-
+ src/components/public/public-footer.tsx            |    96 +-
+ src/components/public/public-mobile-menu.tsx       |    22 +-
+ .../public/public-nav-client-controls.tsx          |    61 +
+ src/components/public/public-navbar.tsx            |   138 +-
+ src/components/public/testimonials-section.tsx     |    37 +-
+ src/components/pwa/pwa-install-prompt.tsx          |   125 +
+ src/components/pwa/pwa-lifecycle.tsx               |    19 +
+ .../resident/resident-dashboard-client.tsx         |   486 +-
+ .../resident/resident-notices-client.tsx           |   425 +-
+ .../resident/resident-payments-client.tsx          |  1342 +-
+ src/components/shared/brand-mark.tsx               |     9 +-
+ src/components/system/error-boundary.tsx           |    11 +-
+ src/components/ui/avatar.tsx                       |     2 +-
+ src/components/ui/badge.tsx                        |     4 +-
+ src/components/ui/button.tsx                       |     4 +-
+ src/components/ui/dialog.tsx                       |     2 +-
+ src/components/ui/dropdown-menu.tsx                |     2 +-
+ src/components/ui/label.tsx                        |     2 +-
+ src/components/ui/select.tsx                       |     2 +-
+ src/components/ui/separator.tsx                    |     2 +-
+ src/components/ui/sheet.tsx                        |     2 +-
+ src/components/ui/tabs.tsx                         |     2 +-
+ src/hooks/index.ts                                 |     1 +
+ src/hooks/use-notices.ts                           |    58 +
+ src/hooks/use-notifications.ts                     |    23 +
+ src/hooks/use-platform.ts                          |    16 +
+ src/hooks/use-web-push.ts                          |   149 +
+ src/instrumentation-client.ts                      |    66 +-
+ src/jobs/payment-reminder.job.ts                   |   109 +-
+ src/jobs/scheduled-notices.job.ts                  |    17 +-
+ src/jobs/scheduler/cron-registry.ts                |    11 +-
+ src/lib/analytics/google-analytics.ts              |    16 +-
+ src/lib/finance/resident-due-status.ts             |    72 +
+ src/lib/notices/audience.ts                        |    42 +
+ src/lib/notices/notification-classification.ts     |    44 +
+ src/lib/notifications/catalog.ts                   |    82 +
+ src/lib/pwa/client.ts                              |    38 +
+ src/lib/realtime/useRealtimeNotifications.ts       |     4 +
+ src/repositories/index.ts                          |     3 +
+ .../notice-acknowledgements.repository.ts          |    86 +
+ src/repositories/notice-reads.repository.ts        |    83 +
+ src/repositories/notices.repository.ts             |    30 +
+ src/repositories/notifications.repository.ts       |   259 +
+ src/repositories/push-subscriptions.repository.ts  |   123 +
+ src/repositories/residents.repository.ts           |    50 +
+ src/sdk/analytics.sdk.ts                           |    25 +
+ src/sdk/notices.sdk.ts                             |    21 +-
+ src/sdk/notifications.sdk.ts                       |    26 +
+ src/sdk/platform.sdk.ts                            |    23 +
+ src/sdk/residents.sdk.ts                           |     3 +-
+ src/services/analytics.service.ts                  |    78 +
+ src/services/auth.service.ts                       |    23 +
+ src/services/notices.service.ts                    |   319 +-
+ src/services/notifications/notification.service.ts |    59 +-
+ src/services/notifications/types.ts                |     6 +
+ src/services/platform.service.ts                   |   140 +
+ src/services/pwa/push-subscriptions.service.ts     |    87 +
+ src/services/pwa/web-push.service.ts               |   250 +
+ src/services/residents.service.ts                  |    24 +-
+ src/services/support.service.ts                    |    59 +-
+ .../security/migration-security-static.test.ts     |    78 +
+ src/tests/security/tenant-isolation-static.test.ts |     3 +
+ .../components/admin-settings-branding.test.ts     |    24 +
+ .../resident-dashboard-fee-status.test.ts          |    61 +
+ .../components/resident-finance-mobile-ux.test.ts  |    49 +
+ .../resident-mobile-experience-v2.test.ts          |    75 +
+ src/tests/unit/jobs/payment-reminder-smart.test.ts |    27 +
+ .../lib/notice-notification-classification.test.ts |    25 +
+ src/tests/unit/lib/notifications-catalog.test.ts   |    41 +
+ src/tests/unit/pwa/pwa-static.test.ts              |    73 +
+ src/tests/unit/scripts/manual-dr-common.test.ts    |    35 +
+ .../unit/scripts/recovery-dr-contracts.test.ts     |    45 +
+ src/tests/unit/services/analytics.service.test.ts  |    70 +
+ src/tests/unit/services/notices.service.test.ts    |   428 +
+ .../unit/services/notification.service.test.ts     |    95 +
+ .../services/push-subscriptions.service.test.ts    |    72 +
+ src/tests/unit/services/residents.service.test.ts  |    36 +
+ src/tests/unit/services/support.service.test.ts    |   156 +
+ src/tests/unit/services/web-push.service.test.ts   |    50 +
+ .../admin-operational.validation.test.ts           |    10 +
+ src/types/database.ts                              |   328 +
+ src/types/notices.ts                               |    18 +
+ src/types/residents.ts                             |     7 +
+ src/validations/notice.validation.ts               |    59 +-
+ src/validations/notification.validation.ts         |     9 +
+ src/validations/platform.validation.ts             |     6 +
+ src/validations/pwa.validation.ts                  |    28 +
+ .../20260606001000_resident_notice_reads.sql       |    72 +
+ .../20260606002000_smart_notification_center.sql   |    78 +
+ .../20260606003000_notice_acknowledgements.sql     |    91 +
+ .../20260606004000_pwa_push_subscriptions.sql      |    93 +
+ .../Local/lighthouse.22461161/chrome-err.log       |     1 +
+ .../Local/lighthouse.22461161/chrome-out.log       |     0
+ .../AppData/Local/lighthouse.22461161/chrome.pid   |     1 +
+ .../Local/lighthouse.36574410/chrome-err.log       |     1 +
+ .../Local/lighthouse.36574410/chrome-out.log       |     0
+ .../AppData/Local/lighthouse.36574410/chrome.pid   |     1 +
+ 1667 files changed, 175213 insertions(+), 1843 deletions(-)

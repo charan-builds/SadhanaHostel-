@@ -19,8 +19,10 @@ import {
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
 import { publicNavItems } from "@/constants/public-content"
 import { cn } from "@/lib/utils"
+import { PublicAuthActions } from "@/components/public/public-auth-actions"
 
 type PublicMobileMenuProps = {
+  currentPathname?: string
   logoUrl?: string | null
   defaultOpen?: boolean
 }
@@ -29,9 +31,14 @@ function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function PublicMobileMenu({ logoUrl, defaultOpen = false }: PublicMobileMenuProps) {
+export function PublicMobileMenu({
+  currentPathname: providedCurrentPathname,
+  logoUrl,
+  defaultOpen = false,
+}: PublicMobileMenuProps) {
   const [open, setOpen] = useState(defaultOpen)
-  const currentPathname = usePathname()
+  const pathname = usePathname()
+  const currentPathname = providedCurrentPathname ?? pathname
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -87,18 +94,7 @@ export function PublicMobileMenu({ logoUrl, defaultOpen = false }: PublicMobileM
           </div>
 
           <div className="grid gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <Button asChild className="justify-start">
-                <Link href="/resident/login" onClick={() => setOpen(false)}>
-                  Resident
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="justify-start">
-                <Link href="/admin/login" onClick={() => setOpen(false)}>
-                  Admin
-                </Link>
-              </Button>
-            </div>
+            <PublicAuthActions mode="mobile" onNavigate={() => setOpen(false)} />
             <Button asChild className="justify-start">
               <a href={callHref} onClick={() => setOpen(false)}>
                 <Phone className="size-4" aria-hidden="true" />

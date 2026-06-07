@@ -1,8 +1,52 @@
+"use client"
+
+import Link from "next/link"
 import Image from "next/image"
+import { motion } from "framer-motion"
+import type { LucideIcon } from "lucide-react"
+import {
+  Bath,
+  Bed,
+  Camera,
+  Cctv,
+  Droplets,
+  ParkingCircle,
+  ShieldCheck,
+  Sparkles,
+  ThermometerSun,
+  Utensils,
+  WashingMachine,
+  Wifi,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
 import { hostelImages } from "@/constants/hostel-images"
 import { fallbackFacilities } from "@/constants/public-content"
 import { pickGalleryImage } from "@/lib/public-gallery"
 import type { FacilityItem, GalleryItem } from "@/types/frontend"
+
+const iconMap: Record<string, LucideIcon> = {
+  bath: Bath,
+  Bath,
+  bed: Bed,
+  Bed,
+  camera: Camera,
+  Cctv,
+  cctv: Cctv,
+  droplets: Droplets,
+  Droplets,
+  "parking-circle": ParkingCircle,
+  ParkingCircle,
+  "shield-check": ShieldCheck,
+  sparkles: Sparkles,
+  Sparkles,
+  "thermometer-sun": ThermometerSun,
+  utensils: Utensils,
+  Utensils,
+  "washing-machine": WashingMachine,
+  wifi: Wifi,
+  Wifi,
+}
 
 export function FacilitiesPreview({
   facilities = fallbackFacilities,
@@ -26,25 +70,36 @@ export function FacilitiesPreview({
               Everything residents need for a steady routine.
             </h2>
           </div>
-          <a
-            href="/facilities"
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-white px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            View Facilities
-          </a>
+          <Button asChild variant="outline" className="bg-white">
+            <Link href="/facilities">View Facilities</Link>
+          </Button>
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-stretch">
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
+            whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
             className="group relative min-h-80 overflow-hidden rounded-2xl border shadow-lifted"
           >
-            <Image
-              src={facilityImageUrl}
-              alt="Sadhana Boys Hostel facility exterior"
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              sizes="(min-width: 1024px) 42vw, 100vw"
-            />
+            {facilityImageUrl.startsWith("/") ? (
+              <Image
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facility exterior"
+                fill
+                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                sizes="(min-width: 1024px) 42vw, 100vw"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={facilityImageUrl}
+                alt="Sadhana Boys Hostel facility exterior"
+                className="absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-105"
+                loading="lazy"
+              />
+            )}
             <div className="absolute inset-0 bg-linear-to-t from-slate-950/78 via-slate-950/12 to-transparent" />
             <div className="absolute bottom-0 p-6 text-white">
               <p className="text-sm font-medium text-cyan-100">Actual hostel view</p>
@@ -53,26 +108,42 @@ export function FacilitiesPreview({
                 Food, water, WiFi, CCTV, parking, and maintained common spaces for a steady routine.
               </p>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-          {selectedFacilities.map((facility) => (
-            <article
-              key={facility.title}
-              className="rounded-xl border bg-card/90 p-5 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted"
-            >
-              <div className="flex gap-4">
-                <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-                <div>
-                  <h3 className="font-semibold text-foreground">{facility.title}</h3>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    {facility.description}
-                  </p>
+          <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          {selectedFacilities.map((facility) => {
+            const Icon = iconMap[facility.icon] ?? Sparkles
+
+            return (
+              <motion.article
+                key={facility.title}
+                variants={{
+                  hidden: { opacity: 0, y: 18, filter: "blur(8px)" },
+                  show: { opacity: 1, y: 0, filter: "blur(0px)" },
+                }}
+                className="rounded-xl border bg-card/90 p-5 shadow-soft backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lifted"
+              >
+                <div className="flex gap-4">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="size-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h3 className="font-semibold text-foreground">{facility.title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      {facility.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
-          </div>
+              </motion.article>
+            )
+          })}
+          </motion.div>
         </div>
       </div>
     </section>

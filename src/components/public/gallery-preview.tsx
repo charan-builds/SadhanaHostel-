@@ -1,5 +1,11 @@
-import Image from "next/image"
+"use client"
 
+import Link from "next/link"
+import Image from "next/image"
+import { motion } from "framer-motion"
+import { Building2, ImageIcon } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
 import { fallbackGalleryItems } from "@/constants/public-content"
 import { formatGalleryCategory, hydrateGalleryItems } from "@/lib/public-gallery"
 import type { GalleryItem } from "@/types/frontend"
@@ -21,36 +27,52 @@ export function GalleryPreview({
               A quick look at the hostel spaces.
             </h2>
           </div>
-          <a
-            href="/gallery"
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border/80 bg-background/80 px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            View Gallery
-          </a>
+          <Button asChild variant="outline">
+            <Link href="/gallery">View Gallery</Link>
+          </Button>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.div
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+          className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {previewItems.map((item, index) => (
-            <article
+            <motion.article
               key={galleryItemKey(item, index)}
+              variants={{
+                hidden: { opacity: 0, y: 18, filter: "blur(8px)" },
+                show: { opacity: 1, y: 0, filter: "blur(0px)" },
+              }}
               className={index === 0 ? "group overflow-hidden rounded-2xl border bg-card shadow-soft sm:col-span-2" : "group overflow-hidden rounded-2xl border bg-card shadow-soft"}
             >
-              {item.imageUrl ? (
+              {item.imageUrl?.startsWith("/") ? (
                 <div className="relative aspect-[4/3] overflow-hidden">
                   <Image
                     src={item.imageUrl}
                     alt={item.alt}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
+                    loading={index === 0 ? "eager" : "lazy"}
                     sizes={index === 0 ? "(min-width: 1024px) 66vw, 100vw" : "(min-width: 1024px) 33vw, 100vw"}
                   />
                 </div>
+              ) : item.imageUrl ? (
+                <div
+                  role="img"
+                  aria-label={item.alt}
+                  className="aspect-[4/3] bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+                  style={{ backgroundImage: `url("${item.imageUrl}")` }}
+                />
               ) : (
                 <div className="flex aspect-[4/3] items-center justify-center bg-[linear-gradient(135deg,#eff6ff_0%,#e2e8f0_100%)]">
-                  <span className="rounded-full bg-blue-700 px-3 py-1 text-xs font-semibold text-white">
-                    Photo
-                  </span>
+                  {index === 0 ? (
+                    <Building2 className="size-10 text-blue-700" aria-hidden="true" />
+                  ) : (
+                    <ImageIcon className="size-10 text-blue-700" aria-hidden="true" />
+                  )}
                 </div>
               )}
               <div className="p-4">
@@ -59,9 +81,9 @@ export function GalleryPreview({
                   {formatGalleryCategory(item.category)}
                 </p>
               </div>
-            </article>
+            </motion.article>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   )
