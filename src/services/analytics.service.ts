@@ -30,7 +30,7 @@ import {
   isResidentEligibleForBilling,
 } from "./analytics/operational-metrics"
 
-const DASHBOARD_CACHE_TTL_MS = 0
+const DASHBOARD_CACHE_TTL_MS = 30_000
 const OWNER_ANALYTICS_CACHE_TTL_MS = 60_000
 
 export class AnalyticsService {
@@ -406,12 +406,58 @@ export class AnalyticsService {
       reservations,
       payments,
       feeRecords,
+      rooms,
+      allocations,
+      admissionLeads,
+      supportRequests,
+      leaves,
+      noticesPublished,
+      noticeReads,
+      noticeAcknowledgements,
       communicationAnalytics,
     ] = await Promise.all([
       this.analyticsRepository.listOwnerResidents(organizationId, hostelId),
       this.analyticsRepository.listOwnerReservations(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listPaymentsInRange(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listOwnerFeeRecords(organizationId, fromDate, toDate, hostelId),
+      this.analyticsRepository.listOwnerRooms(organizationId, hostelId),
+      this.analyticsRepository.listRoomAllocationsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listAdmissionLeadsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listSupportRequestsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listLeavesInRange(organizationId, fromDate, toDate, hostelId),
+      this.analyticsRepository.listNoticesPublishedInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listNoticeReadsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listNoticeAcknowledgementsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
       this.notificationsRepository.getCommunicationAnalytics({ organizationId, hostelId }),
     ])
     const acknowledgementNotices =
@@ -467,12 +513,25 @@ export class AnalyticsService {
       isDateInRange(resident.checkout_on, fromDate, toDate)
     ).length
     const joinedResidents = operationalResidents.filter((resident) => resident.joined_on)
+    const roomCapacity = sum(
+      rooms
+        .filter((room) => room.status === "active")
+        .map((room) => room.capacity)
+    )
     const monthly = months.map((month) =>
       buildMonthlyOwnerBucket(month, {
         residents: operationalResidents,
         reservations,
         payments,
         feeRecords: billingFeeRecords,
+        allocations,
+        admissionLeads,
+        supportRequests,
+        leaves,
+        noticesPublished,
+        noticeReads,
+        noticeAcknowledgements,
+        roomCapacity,
       })
     )
     const financeMonthly = hostelModules.startupFinanceZero
@@ -481,6 +540,8 @@ export class AnalyticsService {
           revenue: 0,
           billed: 0,
           dues: 0,
+          collectionAmount: 0,
+          collectionCount: 0,
           reservationAdvance: 0,
           paymentConversion: 0,
         }))
@@ -679,8 +740,33 @@ function buildMonthlyOwnerBucket(
       balance_amount: number
       status: string
     }>
+    allocations: Array<{
+      resident_id: string
+      allocated_from: string
+      allocated_to: string | null
+      status: string
+    }>
+    admissionLeads: Array<{ created_at: string; status: string }>
+    supportRequests: Array<{
+      category: string
+      created_at: string
+      metadata: unknown
+      priority: string
+      status: string
+    }>
+    leaves: Array<{ created_at: string; status: string; resident_id: string }>
+    noticesPublished: Array<{
+      created_at: string
+      published_at: string | null
+      requires_acknowledgement: boolean
+      status: string
+    }>
+    noticeReads: Array<{ read_at: string }>
+    noticeAcknowledgements: Array<{ acknowledged_at: string }>
+    roomCapacity: number
   }
 ) {
+  const monthEnd = new Date(month.end)
   const monthPayments = data.payments.filter(
     (payment) => monthKey(payment.created_at) === month.key
   )
@@ -696,19 +782,61 @@ function buildMonthlyOwnerBucket(
   const monthReservations = data.reservations.filter(
     (reservation) => monthKey(reservation.created_at) === month.key
   )
+  const newResidents = data.residents.filter((resident) =>
+    monthKey(resident.joined_on ?? resident.created_at) === month.key
+  ).length
+  const churnedResidents = data.residents.filter((resident) =>
+    monthKey(resident.checkout_on ?? "") === month.key
+  ).length
+  const occupiedResidentIds = new Set(
+    data.allocations
+      .filter((allocation) => isAllocationActiveAtMonthEnd(allocation, monthEnd))
+      .map((allocation) => allocation.resident_id)
+  )
+  const monthAdmissionLeads = data.admissionLeads.filter(
+    (lead) => monthKey(lead.created_at) === month.key
+  )
+  const monthSupportRequests = data.supportRequests.filter(
+    (request) => monthKey(request.created_at) === month.key
+  )
+  const monthComplaints = monthSupportRequests.filter(isComplaintRequest)
+  const monthLeaves = data.leaves.filter((leave) => monthKey(leave.created_at) === month.key)
+  const monthNoticeReads = data.noticeReads.filter((read) => monthKey(read.read_at) === month.key)
+  const monthNoticeAcknowledgements = data.noticeAcknowledgements.filter(
+    (acknowledgement) => monthKey(acknowledgement.acknowledged_at) === month.key
+  )
+  const monthNoticesPublished = data.noticesPublished.filter((notice) =>
+    monthKey(notice.published_at ?? notice.created_at) === month.key
+  )
+  const noticeEngagement =
+    monthNoticeReads.length + monthNoticeAcknowledgements.length
+  const residentActivity =
+    monthPayments.length +
+    monthLeaves.length +
+    monthSupportRequests.length +
+    monthNoticeReads.length +
+    monthNoticeAcknowledgements.length +
+    newResidents +
+    churnedResidents
+  const revenue = sum(monthVerifiedPayments.map((payment) => payment.amount))
+
   return {
     month: month.key,
-    revenue: sum(
-      monthVerifiedPayments.map((payment) => payment.amount)
-    ),
+    revenue,
+    collectionAmount: revenue,
+    collectionCount: monthVerifiedPayments.length,
     billed: sum(monthFeeRecords.map((record) => record.total_amount)),
     dues: sum(monthFeeRecords.map((record) => record.balance_amount)),
-    newResidents: data.residents.filter((resident) =>
-      monthKey(resident.joined_on ?? resident.created_at) === month.key
-    ).length,
-    churnedResidents: data.residents.filter((resident) =>
-      monthKey(resident.checkout_on ?? "") === month.key
-    ).length,
+    outstandingDues: sum(monthFeeRecords.map((record) => record.balance_amount)),
+    occupancyResidents: occupiedResidentIds.size,
+    capacity: data.roomCapacity,
+    occupancyRate: data.roomCapacity > 0
+      ? percent(occupiedResidentIds.size, data.roomCapacity)
+      : 0,
+    admissions: newResidents,
+    admissionInquiries: monthAdmissionLeads.length,
+    newResidents,
+    churnedResidents,
     reservations: monthReservations.length,
     confirmedReservations: monthReservations.filter((reservation) =>
       ["confirmed", "converted_to_resident"].includes(reservation.status)
@@ -721,7 +849,54 @@ function buildMonthlyOwnerBucket(
             monthPayments.filter((payment) => payment.status === "verified").length,
             monthPayments.length
           ),
+    complaints: monthComplaints.length,
+    openComplaints: monthComplaints.filter((request) =>
+      ["open", "in_progress", "waiting_on_resident"].includes(request.status)
+    ).length,
+    noticesPublished: monthNoticesPublished.length,
+    noticeReads: monthNoticeReads.length,
+    noticeAcknowledgements: monthNoticeAcknowledgements.length,
+    noticeEngagement,
+    residentActivity,
+    paymentSubmissions: monthPayments.length,
+    leaveRequests: monthLeaves.length,
   }
+}
+
+function isAllocationActiveAtMonthEnd(
+  allocation: { allocated_from: string; allocated_to: string | null; status: string },
+  monthEnd: Date
+) {
+  if (allocation.status === "cancelled") {
+    return false
+  }
+
+  const allocatedFrom = new Date(allocation.allocated_from)
+  const allocatedTo = allocation.allocated_to ? new Date(allocation.allocated_to) : null
+
+  return allocatedFrom <= monthEnd && (!allocatedTo || allocatedTo >= monthEnd)
+}
+
+function isComplaintRequest(request: {
+  category: string
+  metadata: unknown
+}) {
+  const complaintCategories = new Set([
+    "gate_pass",
+    "general",
+    "lost_found",
+    "maintenance",
+    "room",
+    "safety",
+    "visitor",
+  ])
+  const metadata = recordFromUnknown(request.metadata)
+
+  return (
+    complaintCategories.has(request.category) ||
+    metadata.workflow === "resident_report" ||
+    metadata.workflow === "complaint"
+  )
 }
 
 function buildDuesAging(
@@ -839,14 +1014,29 @@ function buildOwnerAnalyticsCsv(
     ["Resident Churn", `${dashboard.summary.residentChurn}%`],
     ["Average Stay Days", String(dashboard.summary.averageStayDurationDays)],
     [],
-    ["Month", "Revenue", "Billed", "Dues", "Reservations", "New Residents"],
+    [
+      "Month",
+      "Revenue",
+      "Collections",
+      "Billed",
+      "Dues",
+      "Occupancy",
+      "Admissions",
+      "Complaints",
+      "Notice Engagement",
+      "Resident Activity",
+    ],
     ...dashboard.trends.map((trend) => [
       trend.month,
       String(trend.revenue),
+      String(trend.collectionCount),
       String(trend.billed),
       String(trend.dues),
-      String(trend.reservations),
-      String(trend.newResidents),
+      `${trend.occupancyRate}%`,
+      String(trend.admissions),
+      String(trend.complaints),
+      String(trend.noticeEngagement),
+      String(trend.residentActivity),
     ]),
     [],
     ["Insight", "Severity", "Action"],
@@ -919,7 +1109,7 @@ async function buildOwnerAnalyticsPdf(
 
   for (const trend of dashboard.trends.slice(-8)) {
     page.drawText(
-      `${trend.month}: Revenue INR ${trend.revenue}, Billed INR ${trend.billed}, Dues INR ${trend.dues}`,
+      `${trend.month}: Revenue INR ${trend.revenue}, Dues INR ${trend.dues}, Occupancy ${trend.occupancyRate}%, Complaints ${trend.complaints}`,
       { x: 48, y, size: 9, font }
     )
     y -= 14
@@ -963,6 +1153,14 @@ function average(values: number[]) {
   }
 
   return Number((sum(cleanValues) / cleanValues.length).toFixed(2))
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+
+  return value as Record<string, unknown>
 }
 
 function daysBetween(from?: string | null, to?: string | null) {

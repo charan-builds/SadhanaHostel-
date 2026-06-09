@@ -13,6 +13,9 @@ describe("leave validation", () => {
       organizationId: TEST_ORGANIZATION_ID,
       hostelId: TEST_HOSTEL_ID,
       residentId: RESIDENT_ID,
+      fullName: "Resident User",
+      mobileNumber: "90000 00002",
+      whatsappNumber: "90000 00002",
       fromDate: "2026-06-01",
       toDate: "2026-06-03",
       reason: "Family function",
@@ -20,6 +23,7 @@ describe("leave validation", () => {
     })
 
     expect(result.fromDate).toBe("2026-06-01")
+    expect(result.mobileNumber).toBe("+919000000002")
     expect(result.travelMode).toBe("bus")
   })
 
@@ -28,8 +32,24 @@ describe("leave validation", () => {
       organizationId: TEST_ORGANIZATION_ID,
       hostelId: TEST_HOSTEL_ID,
       residentId: RESIDENT_ID,
+      fullName: "Resident User",
+      mobileNumber: "90000 00002",
+      whatsappNumber: "90000 00002",
       fromDate: "2026-06-03",
       toDate: "2026-06-01",
+      reason: "Family function",
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it("requires student contact fields for simplified leave requests", () => {
+    const result = createLeaveRequestSchema.safeParse({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      residentId: RESIDENT_ID,
+      fromDate: "2026-06-01",
+      toDate: "2026-06-03",
       reason: "Family function",
     })
 

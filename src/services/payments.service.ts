@@ -56,6 +56,21 @@ type PaymentSettingsAuditContext = {
   requestId?: string | null
 }
 
+type IdempotentPaymentExpectation = {
+  organizationId: string
+  hostelId: string
+  residentId: string
+  monthlyFeeRecordId?: string | null
+  invoiceId?: string | null
+  amount: number
+  method: PaymentRow["method"]
+  transactionId?: string | null
+  manualReference?: string | null
+  isAdvance?: boolean
+  isPartial?: boolean
+  conflictMessage: string
+}
+
 export class PaymentsService {
   private readonly authService: AuthService
   private readonly paymentSettingsRepository: PaymentSettingsRepository
@@ -145,16 +160,43 @@ export class PaymentsService {
       throw conflict("Payment hostel does not match resident hostel.")
     }
 
-    if (values.idempotencyKey) {
-      const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
-        values.organizationId,
-        values.idempotencyKey
-      )
+    const existingIdempotentPayment = values.idempotencyKey
+      ? await this.paymentsRepository.findByIdempotencyKey(
+          values.organizationId,
+          values.idempotencyKey
+        )
+      : null
 
-      if (existingPayment) {
-        return existingPayment
-      }
+    if (existingIdempotentPayment) {
+      this.assertIdempotentPaymentMatches(existingIdempotentPayment, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.monthlyFeeRecordId ?? null,
+        invoiceId: values.invoiceId ?? null,
+        amount: values.amount,
+        method: values.method,
+        transactionId: values.transactionId ?? null,
+        manualReference: values.manualReference ?? null,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        conflictMessage:
+          "This payment idempotency key is already used for a different payment.",
+      })
+
+      return existingIdempotentPayment
     }
+
+    await this.assertPaymentSettingPolicy(values)
+    await this.assertResidentPaymentAmount({
+      organizationId: values.organizationId,
+      hostelId: values.hostelId,
+      residentId: values.residentId,
+      monthlyFeeRecordId: values.monthlyFeeRecordId,
+      amount: values.amount,
+      isPartial: values.isPartial,
+      isAdvance: values.isAdvance,
+    })
 
     const payment = await this.paymentsRepository.create({
       organization_id: values.organizationId,
@@ -225,13 +267,24 @@ export class PaymentsService {
     )
 
     if (payment) {
-      if (
-        payment.resident_id !== values.residentId ||
-        payment.hostel_id !== values.hostelId ||
-        payment.organization_id !== values.organizationId
-      ) {
-        throw conflict("This in-person payment reference is already used for another resident.")
-      }
+      this.assertIdempotentPaymentMatches(payment, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.isAdvance ? null : values.monthlyFeeRecordId ?? null,
+        amount: values.amount,
+        method: values.method,
+        transactionId:
+          (values.method === "bank_transfer" || values.method === "upi") &&
+          values.manualReference
+            ? values.manualReference
+            : null,
+        manualReference: values.manualReference || null,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        conflictMessage:
+          "This in-person payment reference is already used for a different payment.",
+      })
 
       if (payment.status === "verified") {
         return payment
@@ -364,36 +417,71 @@ export class PaymentsService {
       this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     }
 
-    await this.assertPaymentSettingPolicy({
-      ...values,
-      requireTransactionReference: false,
-    })
-    await this.assertResidentPaymentAmount({
-      organizationId: values.organizationId,
-      hostelId: values.hostelId,
-      residentId: values.residentId,
-      monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
-      amount: values.amount,
-      isPartial: values.isPartial,
-      isAdvance: values.isAdvance,
-    })
-
     const transactionId =
       values.transactionId ?? createScreenshotPaymentReference(values.idempotencyKey)
 
-    let payment = await this.paymentsRepository.createResidentUpiDraft({
-      organizationId: values.organizationId,
-      hostelId: values.hostelId,
-      residentId: values.residentId,
-      monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
-      amount: values.amount,
-      transactionId,
-      idempotencyKey: values.idempotencyKey,
-      notes: values.notes,
-      isAdvance: values.isAdvance,
-      isPartial: values.isPartial,
-      actorUserId: context.authUser.id,
-    })
+    let payment = await this.paymentsRepository.findByIdempotencyKey(
+      values.organizationId,
+      values.idempotencyKey
+    )
+
+    if (payment) {
+      this.assertIdempotentPaymentMatches(payment, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.isAdvance ? null : values.monthlyFeeRecordId ?? null,
+        amount: values.amount,
+        method: values.method,
+        transactionId,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        conflictMessage:
+          "This payment idempotency key is already used for a different payment.",
+      })
+    } else {
+      await this.assertPaymentSettingPolicy({
+        ...values,
+        requireTransactionReference: false,
+      })
+      await this.assertResidentPaymentAmount({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
+        amount: values.amount,
+        isPartial: values.isPartial,
+        isAdvance: values.isAdvance,
+      })
+
+      payment = await this.paymentsRepository.createResidentUpiDraft({
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.isAdvance ? undefined : values.monthlyFeeRecordId,
+        amount: values.amount,
+        transactionId,
+        idempotencyKey: values.idempotencyKey,
+        notes: values.notes,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        actorUserId: context.authUser.id,
+      })
+
+      this.assertIdempotentPaymentMatches(payment, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.isAdvance ? null : values.monthlyFeeRecordId ?? null,
+        amount: values.amount,
+        method: values.method,
+        transactionId,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        conflictMessage:
+          "Created payment does not match the requested payment details.",
+      })
+    }
 
     const existingProof = await this.uploadsRepository.findLatestPaymentProof(
       values.organizationId,
@@ -483,6 +571,35 @@ export class PaymentsService {
       this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
     }
 
+    if (!values.transactionId) {
+      throw conflict("UPI transaction reference is required.")
+    }
+
+    const existingIdempotentPayment = values.idempotencyKey
+      ? await this.paymentsRepository.findByIdempotencyKey(
+          values.organizationId,
+          values.idempotencyKey
+        )
+      : null
+
+    if (existingIdempotentPayment) {
+      this.assertIdempotentPaymentMatches(existingIdempotentPayment, {
+        organizationId: values.organizationId,
+        hostelId: values.hostelId,
+        residentId: values.residentId,
+        monthlyFeeRecordId: values.monthlyFeeRecordId ?? null,
+        amount: values.amount,
+        method: values.method,
+        transactionId: values.transactionId,
+        isAdvance: values.isAdvance,
+        isPartial: values.isPartial,
+        conflictMessage:
+          "This payment idempotency key is already used for a different payment.",
+      })
+
+      return existingIdempotentPayment
+    }
+
     await this.assertPaymentSettingPolicy(values)
     await this.assertResidentPaymentAmount({
       organizationId: values.organizationId,
@@ -493,21 +610,6 @@ export class PaymentsService {
       isPartial: values.isPartial,
       isAdvance: values.isAdvance,
     })
-
-    if (values.idempotencyKey) {
-      const existingPayment = await this.paymentsRepository.findByIdempotencyKey(
-        values.organizationId,
-        values.idempotencyKey
-      )
-
-      if (existingPayment) {
-        return existingPayment
-      }
-    }
-
-    if (!values.transactionId) {
-      throw conflict("UPI transaction reference is required.")
-    }
 
     const payment = await this.paymentsRepository.createResidentUpiDraft({
       organizationId: values.organizationId,
@@ -1516,6 +1618,13 @@ export class PaymentsService {
     actorUserId: string,
     failureEvent: string
   ) {
+    if (
+      payment.invoice_finalization_status === "succeeded" &&
+      payment.invoice_id
+    ) {
+      return payment
+    }
+
     await this.paymentsRepository.markInvoiceFinalizationInProgress(
       payment.id,
       payment.organization_id,
@@ -1823,6 +1932,34 @@ export class PaymentsService {
     })
   }
 
+  private assertIdempotentPaymentMatches(
+    payment: PaymentRow,
+    expected: IdempotentPaymentExpectation
+  ) {
+    const monthlyFeeRecordId = expected.monthlyFeeRecordId ?? null
+    const invoiceId = expected.invoiceId ?? null
+    const transactionId = normalizePaymentReference(expected.transactionId)
+    const manualReference = normalizePaymentReference(expected.manualReference)
+    const mismatches = [
+      payment.organization_id !== expected.organizationId,
+      payment.hostel_id !== expected.hostelId,
+      payment.resident_id !== expected.residentId,
+      payment.monthly_fee_record_id !== monthlyFeeRecordId,
+      expected.invoiceId !== undefined && payment.invoice_id !== invoiceId,
+      !moneyAmountsMatch(payment.amount, expected.amount),
+      payment.method !== expected.method,
+      normalizePaymentReference(payment.transaction_id) !== transactionId,
+      expected.manualReference !== undefined &&
+        normalizePaymentReference(payment.manual_reference) !== manualReference,
+      Boolean(payment.is_advance) !== Boolean(expected.isAdvance),
+      Boolean(payment.is_partial) !== Boolean(expected.isPartial),
+    ]
+
+    if (mismatches.some(Boolean)) {
+      throw conflict(expected.conflictMessage)
+    }
+  }
+
   private assertPayableAmount(values: {
     amount: number
     payableDue: number
@@ -1882,6 +2019,16 @@ function createScreenshotPaymentReference(idempotencyKey: string) {
   const compactKey = idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 32)
 
   return `SCREENSHOT-${compactKey || crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+}
+
+function normalizePaymentReference(value?: string | null) {
+  const normalized = value?.trim()
+
+  return normalized ? normalized.toUpperCase() : null
+}
+
+function moneyAmountsMatch(left: number, right: number) {
+  return Math.abs(Number(left) - Number(right)) < 0.005
 }
 
 function compareFeeRecordsByDueDate(

@@ -1,5 +1,6 @@
 import {
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
   withApiRoute,
 } from "@/lib/api"
@@ -12,14 +13,21 @@ type StaffUserRouteContext = {
 }
 
 export async function PATCH(request: Request, context: StaffUserRouteContext) {
-  return withApiRoute(request, { route: "staff_access.users.update" }, async () => {
-    const { id } = await context.params
-    const service = await StaffAccessService.create()
-    const assignment = await service.updateStaff({
-      ...(await parseJsonBody(request)),
-      targetUserId: id,
-    })
+  return withApiRoute(
+    request,
+    {
+      route: "staff_access.users.update",
+      rateLimit: RATE_LIMIT_POLICIES.staffAccessWrite,
+    },
+    async () => {
+      const { id } = await context.params
+      const service = await StaffAccessService.create()
+      const assignment = await service.updateStaff({
+        ...(await parseJsonBody(request)),
+        targetUserId: id,
+      })
 
-    return successResponse(assignment, "Staff access updated successfully.")
-  })
+      return successResponse(assignment, "Staff access updated successfully.")
+    }
+  )
 }

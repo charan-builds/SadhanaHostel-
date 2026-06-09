@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, Pin, Search } from "lucide-react"
+import { Bell, CheckCircle2, Eye, Pin, Search } from "lucide-react"
+import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -17,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
-import { useCurrentResident, useNotices } from "@/hooks"
+import { useAcknowledgeNotice, useCurrentResident, useMarkNoticeRead, useNotices } from "@/hooks"
 import { useRealtimeNotifications } from "@/lib/realtime/useRealtimeNotifications"
 
 const PAGE_SIZE = 8
@@ -27,6 +29,8 @@ export function ResidentNoticesClient() {
   const residentQuery = useCurrentResident(organizationId ?? undefined)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
+  const markNoticeRead = useMarkNoticeRead()
+  const acknowledgeNotice = useAcknowledgeNotice()
 
   useRealtimeNotifications({
     enabled: Boolean(organizationId && residentQuery.data?.id),
@@ -54,12 +58,50 @@ export function ResidentNoticesClient() {
   const notices = noticesQuery.data?.data ?? []
   const meta = noticesQuery.data?.meta
   const pinnedCount = notices.filter((notice) => notice.is_pinned).length
+  const unreadCount = notices.filter((notice) => !notice.is_read).length
+  const pendingAcknowledgements = notices.filter(
+    (notice) => notice.requires_acknowledgement && !notice.is_acknowledged
+  ).length
+
+  async function markRead(noticeId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await markNoticeRead.mutateAsync({
+        organizationId,
+        noticeId,
+      })
+      toast.success("Notice marked as read.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to mark notice as read.")
+    }
+  }
+
+  async function acknowledge(noticeId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await acknowledgeNotice.mutateAsync({
+        organizationId,
+        noticeId,
+      })
+      toast.success("Notice acknowledged.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to acknowledge notice.")
+    }
+  }
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <NoticeMetric label="Visible notices" value={meta?.total ?? 0} />
         <NoticeMetric label="Pinned" value={pinnedCount} />
+        <NoticeMetric label="Unread" value={unreadCount} />
+        <NoticeMetric label="Pending ack" value={pendingAcknowledgements} />
         <NoticeMetric label="Page" value={`${meta?.page ?? page}/${meta?.totalPages ?? 1}`} />
       </div>
 
@@ -118,6 +160,14 @@ export function ResidentNoticesClient() {
                           </span>
                         ) : null}
                         <StatusBadge status={notice.status} />
+                        <Badge variant={notice.is_read ? "secondary" : "outline"}>
+                          {notice.is_read ? "Read" : "Unread"}
+                        </Badge>
+                        {notice.requires_acknowledgement ? (
+                          <Badge variant={notice.is_acknowledged ? "secondary" : "destructive"}>
+                            {notice.is_acknowledged ? "Acknowledged" : "Acknowledgement required"}
+                          </Badge>
+                        ) : null}
                       </div>
                       <h2 className="mt-3 text-base font-semibold">{notice.title}</h2>
                       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
@@ -129,6 +179,37 @@ export function ResidentNoticesClient() {
                         ? formatDateTime(notice.published_at)
                         : "Not scheduled"}
                     </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {!notice.is_read ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={markNoticeRead.isPending}
+                        onClick={() => void markRead(notice.id)}
+                      >
+                        <Eye className="size-3.5" aria-hidden="true" />
+                        Mark as read
+                      </Button>
+                    ) : null}
+                    {notice.requires_acknowledgement && !notice.is_acknowledged ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={acknowledgeNotice.isPending}
+                        onClick={() => void acknowledge(notice.id)}
+                      >
+                        <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                        Acknowledge notice
+                      </Button>
+                    ) : null}
+                    {notice.requires_acknowledgement && notice.is_acknowledged ? (
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-800">
+                        <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                        Acknowledged
+                      </span>
+                    ) : null}
                   </div>
                 </article>
               ))}

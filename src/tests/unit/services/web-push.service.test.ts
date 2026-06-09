@@ -94,9 +94,12 @@ describe("WebPushService", () => {
     expect(result).toEqual({ sent: 1, failed: 0, skipped: 0 })
     expect(mocks.sendNotification).toHaveBeenCalledTimes(2)
     expect(mocks.updateSubscription).toHaveBeenCalledWith(
-      "00000000-0000-4000-8000-000000000401",
       expect.objectContaining({
-        failure_count: 0,
+        subscriptionId: "00000000-0000-4000-8000-000000000401",
+        organizationId: TEST_ORGANIZATION_ID,
+        values: expect.objectContaining({
+          failure_count: 0,
+        }),
       })
     )
     expect(mocks.revokeEndpoint).not.toHaveBeenCalled()
@@ -132,12 +135,16 @@ describe("WebPushService", () => {
     expect(result).toEqual({ sent: 0, failed: 1, skipped: 0 })
     expect(mocks.sendNotification).toHaveBeenCalledTimes(1)
     expect(mocks.updateSubscription).toHaveBeenCalledWith(
-      "00000000-0000-4000-8000-000000000401",
       expect.objectContaining({
-        failure_count: 3,
+        subscriptionId: "00000000-0000-4000-8000-000000000401",
+        organizationId: TEST_ORGANIZATION_ID,
+        values: expect.objectContaining({
+          failure_count: 3,
+        }),
       })
     )
     expect(mocks.revokeEndpoint).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
       endpoint: "https://push.example.test/subscription/000000000401",
     })
     expect(mocks.createLog).toHaveBeenCalledWith(

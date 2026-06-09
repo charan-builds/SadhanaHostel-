@@ -5,6 +5,7 @@ import Link from "next/link"
 import type { Route } from "next"
 import {
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -24,6 +25,10 @@ import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { ResponsiveContainer } from "@/components/shared/responsive-container"
 import { StatCard } from "@/components/shared/stat-card"
+import {
+  MonthwiseDateRangeControls,
+  type MonthwiseDateBasis,
+} from "@/components/admin/analytics/monthwise-date-range-controls"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -46,9 +51,13 @@ import {
 import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
+import {
+  getMonthwiseQuickFilterRange,
+  type MonthwiseDateRange,
+  type MonthwiseQuickFilter,
+} from "@/lib/monthwise-analytics"
 import { useRealtimeOwnerAnalytics } from "@/lib/realtime"
 import {
-  useAdmissionsVacancy,
   useFinanceDashboard,
   useHostels,
   useLeaves,
@@ -64,15 +73,31 @@ import type { Tables } from "@/types/database"
 
 type ExportFormat = "csv" | "pdf"
 
+type OwnerAction = {
+  title: string
+  detail: string
+  href: string
+  action: string
+  icon: LucideIcon
+  tone: "warning" | "info" | "success"
+}
+
 export function OwnerDashboardClient() {
   const { organizationId, session } = useAuth()
   const defaultHostelId = session?.hostelIds[0]
   const hostels = useHostels(Boolean(organizationId))
   const [hostelFilter, setHostelFilter] = useState(defaultHostelId ?? "all")
-  const [fromDate, setFromDate] = useState(() => monthsAgoInput(5))
-  const [toDate, setToDate] = useState(() => todayInput())
+  const [quickFilter, setQuickFilter] =
+    useState<MonthwiseQuickFilter>("last-6-months")
+  const [range, setRange] = useState<MonthwiseDateRange>(() =>
+    getMonthwiseQuickFilterRange("last-6-months")
+  )
+  const dateBasis: MonthwiseDateBasis = "revenue"
   const [downloading, setDownloading] = useState<ExportFormat | null>(null)
   const hostelId = hostelFilter === "all" ? defaultHostelId : hostelFilter
+  const fromDate = range.fromDate
+  const toDate = range.toDate
+  const invalidDateRange = fromDate > toDate
   const ownerAnalytics = useOwnerAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
@@ -91,22 +116,25 @@ export function OwnerDashboardClient() {
     organizationId: organizationId ?? "",
     hostelId,
     status: "pending",
+    fromDate,
+    toDate,
+    dateBasis: "activity",
     page: 1,
     pageSize: 5,
-  })
-  const vacancy = useAdmissionsVacancy({
-    organizationId: organizationId ?? "",
-    hostelId,
   })
   const residents = useResidents({
     organizationId: organizationId ?? "",
     hostelId,
+    fromDate,
+    toDate,
     page: 1,
     pageSize: 5,
   })
   const leaves = useLeaves({
     organizationId: organizationId ?? "",
     hostelId,
+    fromDate,
+    toDate,
     page: 1,
     pageSize: 5,
   })
@@ -114,6 +142,8 @@ export function OwnerDashboardClient() {
     organizationId: organizationId ?? "",
     hostelId,
     activeOnly: true,
+    fromDate,
+    toDate,
     page: 1,
     pageSize: 5,
   })
@@ -121,6 +151,8 @@ export function OwnerDashboardClient() {
     organizationId: organizationId ?? "",
     hostelId,
     status: "open",
+    fromDate,
+    toDate,
     page: 1,
     pageSize: 5,
   })
@@ -129,6 +161,8 @@ export function OwnerDashboardClient() {
     hostelId,
     status: "open",
     workflow: "resident_report",
+    fromDate,
+    toDate,
     page: 1,
     pageSize: 5,
   })
@@ -218,10 +252,9 @@ export function OwnerDashboardClient() {
   const collectionTarget = finance?.kpis.expectedCollection
     ? Math.round(((finance.owner.summary.revenue ?? data.summary.revenue) / finance.kpis.expectedCollection) * 100)
     : data.summary.paymentConversion
-  const totalCapacity = vacancy.data?.summary?.total_beds ?? selectedHostel?.capacity ?? 0
-  const occupiedBeds = vacancy.data?.summary?.occupied_beds ?? data.summary.activeResidents
-  const availableBeds =
-    vacancy.data?.summary?.available_beds ?? Math.max(totalCapacity - occupiedBeds, 0)
+  const totalCapacity = selectedHostel?.capacity ?? 0
+  const occupiedBeds = data.summary.activeResidents
+  const availableBeds = Math.max(totalCapacity - occupiedBeds, 0)
   const occupancyRate = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0
   const supportTotal = supportRequests.data?.meta.total ?? 0
   const residentReportTotal = residentReports.data?.meta.total ?? 0
@@ -294,6 +327,57 @@ export function OwnerDashboardClient() {
         }
       />
 
+      <section className="grid gap-4 xl:grid-cols-[0.7fr_1.3fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Hostel Scope</CardTitle>
+            <CardDescription>{selectedHostelLabel}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="owner-hostel-filter">Hostel</Label>
+              {showHostelFilter ? (
+                <Select value={hostelFilter} onValueChange={setHostelFilter}>
+                  <SelectTrigger id="owner-hostel-filter" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hostels.data?.map((hostel) => (
+                      <SelectItem key={hostel.id} value={hostel.id}>
+                        {hostel.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input id="owner-hostel-filter" value={selectedHostelLabel} readOnly />
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={invalidDateRange}
+              onClick={() => void ownerAnalytics.refetch()}
+            >
+              <BarChart3 className="size-4" aria-hidden="true" />
+              Refresh analysis
+            </Button>
+          </CardContent>
+        </Card>
+
+        <MonthwiseDateRangeControls
+          title="Monthwise Analytics"
+          description="Select a month or range for revenue, collections, dues, occupancy, admissions, complaints, notices, and resident activity."
+          range={range}
+          quickFilter={quickFilter}
+          onRangeChange={setRange}
+          onQuickFilterChange={setQuickFilter}
+          dateBasis={dateBasis}
+          invalid={invalidDateRange}
+        />
+      </section>
+
       <OwnerHealthBrief
         collectionTarget={collectionTarget}
         todayRevenue={finance?.owner.summary.todayRevenue ?? 0}
@@ -302,6 +386,35 @@ export function OwnerDashboardClient() {
         activeResidents={data.summary.activeResidents}
         occupancyRate={occupancyRate}
         actionCount={actionCount}
+      />
+
+      <OwnerDailyDigest
+        todayRevenue={finance?.owner.summary.todayRevenue ?? 0}
+        pendingCollection={finance?.kpis.pendingAmount ?? data.summary.pendingDues}
+        overdueCollection={finance?.kpis.overdueAmount ?? 0}
+        occupancyRate={occupancyRate}
+        totalCapacity={totalCapacity}
+        availableBeds={availableBeds}
+        pendingPaymentTotal={pendingPaymentTotal}
+        unreadNotices={data.communications.unreadNotices}
+        noticeAcknowledgementPending={
+          data.communications.noticeAcknowledgementRates.pending
+        }
+        supportTotal={supportTotal}
+        residentReportTotal={residentReportTotal}
+      />
+
+      <OwnerForecastPanel
+        data={data}
+        occupancyRate={occupancyRate}
+        totalCapacity={totalCapacity}
+        availableBeds={availableBeds}
+        pendingPaymentTotal={pendingPaymentTotal}
+        noticeAcknowledgementPending={
+          data.communications.noticeAcknowledgementRates.pending
+        }
+        supportTotal={supportTotal}
+        residentReportTotal={residentReportTotal}
       />
 
       <OwnerDecisionQueue actions={ownerActions} />
@@ -316,104 +429,7 @@ export function OwnerDashboardClient() {
         actionCount={actionCount}
       />
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-            <div>
-              <CardTitle>Dashboard Scope</CardTitle>
-              <CardDescription>
-                Current range: {fromDate} to {toDate}
-              </CardDescription>
-            </div>
-            <Badge variant="secondary">{selectedHostelLabel}</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="grid gap-2">
-            <Label htmlFor="owner-hostel-filter">Hostel</Label>
-            {showHostelFilter ? (
-              <Select value={hostelFilter} onValueChange={setHostelFilter}>
-                <SelectTrigger id="owner-hostel-filter" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {hostels.data?.map((hostel) => (
-                    <SelectItem key={hostel.id} value={hostel.id}>
-                      {hostel.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input id="owner-hostel-filter" value={selectedHostelLabel} readOnly />
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="owner-from-date">From</Label>
-            <Input
-              id="owner-from-date"
-              type="date"
-              value={fromDate}
-              onChange={(event) => setFromDate(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="owner-to-date">To</Label>
-            <Input
-              id="owner-to-date"
-              type="date"
-              value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
-            />
-          </div>
-          <div className="flex items-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => void ownerAnalytics.refetch()}
-            >
-              <BarChart3 className="size-4" aria-hidden="true" />
-              Refresh
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFromDate(todayInput())
-                setToDate(todayInput())
-              }}
-            >
-              Today
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFromDate(monthsAgoInput(0))
-                setToDate(todayInput())
-              }}
-            >
-              This month
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setFromDate(monthsAgoInput(5))
-                setToDate(todayInput())
-              }}
-            >
-              Last 6 months
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <MonthwiseHistoricalPanel trends={data.trends} />
 
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <MoneyControlCenter
@@ -678,6 +694,104 @@ function TrendChart({
   )
 }
 
+function MonthwiseHistoricalPanel({
+  trends,
+}: {
+  trends: OwnerAnalytics["trends"]
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Monthwise Historical Analysis</CardTitle>
+        <CardDescription>
+          Revenue, collections, dues, occupancy, admissions, complaints, notices, and resident activity from real platform records.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {trends.length === 0 ? (
+          <EmptyState
+            title="No monthwise history"
+            message="Historical analytics appear after payments, residents, notices, support requests, or allocations exist in the selected range."
+          />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {trends.map((trend) => (
+              <article key={trend.month} className="rounded-lg border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold">{formatMonthLabel(trend.month)}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {trend.occupancyRate}% occupied · {trend.residentActivity} resident events
+                    </p>
+                  </div>
+                  <Badge variant="secondary">{trend.collectionCount} collections</Badge>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <MonthMetric label="Revenue" value={formatCurrency(trend.revenue)} />
+                  <MonthMetric
+                    label="Collections"
+                    value={formatCurrency(trend.collectionAmount)}
+                    detail={`${trend.collectionCount} verified`}
+                  />
+                  <MonthMetric
+                    label="Outstanding dues"
+                    value={formatCurrency(trend.outstandingDues)}
+                  />
+                  <MonthMetric
+                    label="Occupancy"
+                    value={`${trend.occupancyRate}%`}
+                    detail={`${trend.occupancyResidents}/${trend.capacity || 0} capacity`}
+                  />
+                  <MonthMetric
+                    label="Admissions"
+                    value={trend.admissions}
+                    detail={`${trend.admissionInquiries} inquiries`}
+                  />
+                  <MonthMetric
+                    label="Complaints"
+                    value={trend.complaints}
+                    detail={`${trend.openComplaints} open`}
+                  />
+                  <MonthMetric
+                    label="Notice engagement"
+                    value={trend.noticeEngagement}
+                    detail={`${trend.noticeReads} reads, ${trend.noticeAcknowledgements} acknowledgements`}
+                  />
+                  <MonthMetric
+                    label="Resident activity"
+                    value={trend.residentActivity}
+                    detail={`${trend.paymentSubmissions} payments, ${trend.leaveRequests} leaves`}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function MonthMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string | number
+  detail?: string
+}) {
+  return (
+    <div className="rounded-lg border bg-white/70 p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+      {detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
+    </div>
+  )
+}
+
 function OwnerHealthBrief({
   collectionTarget,
   todayRevenue,
@@ -747,14 +861,7 @@ function OwnerHealthBrief({
 function OwnerDecisionQueue({
   actions,
 }: {
-  actions: Array<{
-    title: string
-    detail: string
-    href: string
-    action: string
-    icon: LucideIcon
-    tone: "warning" | "info" | "success"
-  }>
+  actions: OwnerAction[]
 }) {
   if (actions.length === 0) {
     return (
@@ -777,6 +884,9 @@ function OwnerDecisionQueue({
     )
   }
 
+  const primaryAction = actions[0]
+  const secondaryActions = actions.slice(1)
+
   return (
     <Card>
       <CardHeader>
@@ -785,30 +895,313 @@ function OwnerDecisionQueue({
           Highest-value actions based on collection, verification, and resident lifecycle signals.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {actions.map((item) => {
-          const Icon = item.icon
+      <CardContent className="grid gap-4">
+        <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-primary">
+            Top owner action
+          </p>
+          <OwnerActionCard action={primaryAction} emphasis="primary" />
+        </div>
 
-          return (
-            <Link
-              key={`${item.href}-${item.title}`}
-              href={item.href as Route}
-              className="group rounded-xl border bg-card p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lifted"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
-                  <Icon className="size-5" aria-hidden="true" />
-                </span>
-                <Badge variant={item.tone === "warning" ? "destructive" : "secondary"}>
-                  {humanizeEnum(item.tone)}
-                </Badge>
-              </div>
-              <h3 className="mt-4 text-sm font-semibold">{item.title}</h3>
-              <p className="mt-1 text-sm leading-5 text-muted-foreground">{item.detail}</p>
-              <p className="mt-3 text-xs font-semibold text-primary">{item.action}</p>
-            </Link>
-          )
-        })}
+        {secondaryActions.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {secondaryActions.map((item) => (
+              <OwnerActionCard key={`${item.href}-${item.title}`} action={item} />
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function OwnerDailyDigest({
+  todayRevenue,
+  pendingCollection,
+  overdueCollection,
+  occupancyRate,
+  totalCapacity,
+  availableBeds,
+  pendingPaymentTotal,
+  unreadNotices,
+  noticeAcknowledgementPending,
+  supportTotal,
+  residentReportTotal,
+}: {
+  todayRevenue: number
+  pendingCollection: number
+  overdueCollection: number
+  occupancyRate: number
+  totalCapacity: number
+  availableBeds: number
+  pendingPaymentTotal: number
+  unreadNotices: number
+  noticeAcknowledgementPending: number
+  supportTotal: number
+  residentReportTotal: number
+}) {
+  const digestItems = [
+    {
+      label: "Money",
+      headline:
+        overdueCollection > 0
+          ? `${formatCurrency(overdueCollection)} overdue`
+          : pendingCollection > 0
+            ? `${formatCurrency(pendingCollection)} pending`
+            : `${formatCurrency(todayRevenue)} collected today`,
+      detail:
+        pendingPaymentTotal > 0
+          ? `${pendingPaymentTotal} payment proof${pendingPaymentTotal === 1 ? "" : "s"} to verify`
+          : "No payment proof is waiting",
+      href: "/admin/finance/collections",
+      cta: pendingPaymentTotal > 0 ? "Verify payments" : "Open collections",
+    },
+    {
+      label: "Occupancy",
+      headline: totalCapacity > 0 ? `${occupancyRate}% occupied` : "Capacity not set",
+      detail:
+        totalCapacity > 0
+          ? `${availableBeds} bed${availableBeds === 1 ? "" : "s"} available`
+          : "Set hostel capacity to unlock occupancy health",
+      href: "/admin/residents",
+      cta: "Review residents",
+    },
+    {
+      label: "Communication",
+      headline:
+        noticeAcknowledgementPending > 0
+          ? `${noticeAcknowledgementPending} acknowledgements pending`
+          : unreadNotices > 0
+            ? `${unreadNotices} unread notice${unreadNotices === 1 ? "" : "s"}`
+            : "Notices clear",
+      detail: "Review notice reach and publish follow-ups when needed",
+      href: "/admin/notices",
+      cta: "Review notices",
+    },
+    {
+      label: "Support",
+      headline:
+        supportTotal + residentReportTotal > 0
+          ? `${supportTotal + residentReportTotal} open item${supportTotal + residentReportTotal === 1 ? "" : "s"}`
+          : "Support clear",
+      detail:
+        residentReportTotal > 0
+          ? `${residentReportTotal} resident report${residentReportTotal === 1 ? "" : "s"} open`
+          : "Complaints and resident reports are clear",
+      href: "/admin/alerts",
+      cta: "Open support",
+    },
+  ] as const
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Daily Owner Digest</CardTitle>
+            <CardDescription>
+              What requires attention today across money, occupancy, communication, and support.
+            </CardDescription>
+          </div>
+          <Badge variant="secondary">Today</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {digestItems.map((item) => (
+          <div key={item.label} className="rounded-xl border bg-background/70 p-4">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
+              {item.label}
+            </p>
+            <h3 className="mt-3 text-base font-semibold">{item.headline}</h3>
+            <p className="mt-2 min-h-10 text-sm leading-5 text-muted-foreground">
+              {item.detail}
+            </p>
+            <Button asChild size="sm" variant="outline" className="mt-4 w-full">
+              <Link href={item.href as Route}>
+                {item.cta}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function OwnerActionCard({
+  action,
+  emphasis = "default",
+}: {
+  action: OwnerAction
+  emphasis?: "default" | "primary"
+}) {
+  const Icon = action.icon
+
+  return (
+    <Link
+      href={action.href as Route}
+      className={`group rounded-xl border p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lifted ${
+        emphasis === "primary" ? "bg-background" : "bg-card"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+        <Badge variant={action.tone === "warning" ? "destructive" : "secondary"}>
+          {humanizeEnum(action.tone)}
+        </Badge>
+      </div>
+      <h3 className="mt-4 text-sm font-semibold">{action.title}</h3>
+      <p className="mt-1 text-sm leading-5 text-muted-foreground">{action.detail}</p>
+      <p className="mt-3 text-xs font-semibold text-primary">{action.action}</p>
+    </Link>
+  )
+}
+
+function OwnerForecastPanel({
+  data,
+  occupancyRate,
+  totalCapacity,
+  availableBeds,
+  pendingPaymentTotal,
+  noticeAcknowledgementPending,
+  supportTotal,
+  residentReportTotal,
+}: {
+  data: OwnerAnalytics
+  occupancyRate: number
+  totalCapacity: number
+  availableBeds: number
+  pendingPaymentTotal: number
+  noticeAcknowledgementPending: number
+  supportTotal: number
+  residentReportTotal: number
+}) {
+  const forecast = data.forecasts.revenue
+  const collectionRisk =
+    forecast.expectedCollectionRate < 85 || forecast.riskAdjustedPendingDues > 0
+  const occupancyRisk =
+    totalCapacity <= 0
+      ? "Capacity setup needed"
+      : occupancyRate < 70
+        ? "Occupancy risk"
+        : occupancyRate >= 95
+          ? "Near full"
+          : "Stable occupancy"
+  const recommendations = [
+    collectionRisk
+      ? {
+          title: "Follow up revenue risk",
+          detail: `${formatCurrency(forecast.riskAdjustedPendingDues)} risk-adjusted dues`,
+          href: "/admin/finance/followups",
+        }
+      : null,
+    pendingPaymentTotal > 0
+      ? {
+          title: "Verify payment proofs",
+          detail: `${pendingPaymentTotal} proof${pendingPaymentTotal === 1 ? "" : "s"} waiting`,
+          href: "/admin/payments",
+        }
+      : null,
+    totalCapacity > 0 && occupancyRate < 80
+      ? {
+          title: "Improve occupancy",
+          detail: `${availableBeds} bed${availableBeds === 1 ? "" : "s"} available`,
+          href: "/admin/residents",
+        }
+      : null,
+    noticeAcknowledgementPending > 0
+      ? {
+          title: "Close notice acknowledgement gap",
+          detail: `${noticeAcknowledgementPending} acknowledgement${noticeAcknowledgementPending === 1 ? "" : "s"} pending`,
+          href: "/admin/notices",
+        }
+      : null,
+    supportTotal + residentReportTotal > 0
+      ? {
+          title: "Reduce complaint risk",
+          detail: `${supportTotal + residentReportTotal} support item${supportTotal + residentReportTotal === 1 ? "" : "s"} open`,
+          href: "/admin/alerts",
+        }
+      : null,
+  ].filter((item): item is { title: string; detail: string; href: string } => Boolean(item))
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle>Forecast and Risk Alerts</CardTitle>
+            <CardDescription>
+              Revenue forecast, occupancy forecast, and recommended owner actions.
+            </CardDescription>
+          </div>
+          <Badge variant={collectionRisk ? "destructive" : "secondary"}>
+            {collectionRisk ? "Revenue risk" : "Forecast stable"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <OwnerMiniMetric
+            label="Expected billing"
+            value={formatCurrency(forecast.nextMonthExpectedBilling)}
+            detail="Next month forecast"
+          />
+          <OwnerMiniMetric
+            label="Expected collection"
+            value={`${forecast.expectedCollectionRate}%`}
+            detail={formatCurrency(forecast.expectedCollectedRevenue)}
+          />
+          <OwnerMiniMetric
+            label="Risk-adjusted dues"
+            value={formatCurrency(forecast.riskAdjustedPendingDues)}
+            detail={collectionRisk ? "Needs follow-up" : "No forecast risk"}
+          />
+          <OwnerMiniMetric
+            label="Occupancy forecast"
+            value={totalCapacity > 0 ? `${occupancyRate}%` : "Not set"}
+            detail={occupancyRisk}
+          />
+        </div>
+
+        <div className="rounded-xl border bg-background/70 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Recommended owner actions</h3>
+            <Badge variant={recommendations.length > 0 ? "destructive" : "secondary"}>
+              {recommendations.length}
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {recommendations.length === 0 ? (
+              <p className="rounded-lg border border-success/25 bg-success-surface px-3 py-2 text-sm text-success-foreground">
+                Forecasts look stable. Keep monitoring collections and occupancy.
+              </p>
+            ) : (
+              recommendations.slice(0, 4).map((item) => (
+                <Button
+                  key={item.title}
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-auto justify-between gap-3 py-2 text-left"
+                >
+                  <Link href={item.href as Route}>
+                    <span>
+                      <span className="block font-medium">{item.title}</span>
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        {item.detail}
+                      </span>
+                    </span>
+                    <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+                  </Link>
+                </Button>
+              ))
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   )
@@ -1421,16 +1814,14 @@ function BarList({
   )
 }
 
-function todayInput() {
-  return new Date().toISOString().slice(0, 10)
-}
+function formatMonthLabel(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number)
 
-function monthsAgoInput(months: number) {
-  const date = new Date()
-  date.setUTCMonth(date.getUTCMonth() - months)
-  date.setUTCDate(1)
-
-  return date.toISOString().slice(0, 10)
+  return new Date(Date.UTC(year, monthNumber - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  })
 }
 
 function sumTrend(
@@ -1457,14 +1848,7 @@ type OwnerActionInput = {
 }
 
 function buildOwnerActions(input: OwnerActionInput) {
-  const actions: Array<{
-    title: string
-    detail: string
-    href: string
-    action: string
-    icon: LucideIcon
-    tone: "warning" | "info" | "success"
-  }> = []
+  const actions: OwnerAction[] = []
 
   if (input.pendingPaymentTotal > 0) {
     actions.push({

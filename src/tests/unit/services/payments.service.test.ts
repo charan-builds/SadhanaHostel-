@@ -190,6 +190,125 @@ describe("PaymentsService", () => {
     vi.unstubAllEnvs()
   })
 
+  it("returns a matching UPI idempotency retry before stale pending balance checks", async () => {
+    const harness = createServiceHarness()
+    const existing = paymentFixture({
+      idempotency_key: "resident-upi-payment-test",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      transaction_id: "UPI-EXISTING-123",
+      amount: 6500,
+      status: "pending",
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(residentFixture())
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(existing)
+
+    await expect(
+      harness.service.createUpiPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: FEE_RECORD_ID,
+        amount: 6500,
+        method: "upi",
+        transactionId: "UPI-EXISTING-123",
+        idempotencyKey: "resident-upi-payment-test",
+      })
+    ).resolves.toEqual(existing)
+
+    expect(harness.paymentSettingsRepository.getActive).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.listResidentPayments).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.createResidentUpiDraft).not.toHaveBeenCalled()
+  })
+
+  it("rejects UPI idempotency keys reused for a different payment", async () => {
+    const harness = createServiceHarness()
+    const existing = paymentFixture({
+      idempotency_key: "resident-upi-payment-test",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      transaction_id: "UPI-EXISTING-123",
+      amount: 2500,
+      status: "pending",
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(residentFixture())
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(existing)
+
+    await expect(
+      harness.service.createUpiPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        monthlyFeeRecordId: FEE_RECORD_ID,
+        amount: 6500,
+        method: "upi",
+        transactionId: "UPI-EXISTING-123",
+        idempotencyKey: "resident-upi-payment-test",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "This payment idempotency key is already used for a different payment.",
+    })
+
+    expect(harness.paymentSettingsRepository.getActive).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.createResidentUpiDraft).not.toHaveBeenCalled()
+  })
+
+  it("rejects legacy payment-create idempotency keys reused for different details", async () => {
+    const harness = createServiceHarness()
+    const existing = paymentFixture({
+      idempotency_key: "legacy-payment-create-test",
+      transaction_id: "UPI-MANUAL-001",
+      amount: 2500,
+      status: "pending",
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(residentFixture())
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(existing)
+
+    await expect(
+      harness.service.recordManualPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        amount: 6500,
+        method: "upi",
+        transactionId: "UPI-MANUAL-001",
+        idempotencyKey: "legacy-payment-create-test",
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "This payment idempotency key is already used for a different payment.",
+    })
+
+    expect(harness.paymentSettingsRepository.getActive).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.create).not.toHaveBeenCalled()
+  })
+
+  it("short-circuits already finalized verified payments without duplicate invoice work", async () => {
+    const harness = createServiceHarness()
+    const finalized = paymentFixture({
+      status: "verified",
+      invoice_id: "00000000-0000-4000-8000-000000000155",
+      invoice_finalization_status: "succeeded",
+      invoice_finalized_at: "2026-06-04T12:00:00.000Z",
+    })
+
+    harness.paymentsRepository.getById.mockResolvedValue(finalized)
+
+    await expect(
+      harness.service.verifyPayment({
+        organizationId: TEST_ORGANIZATION_ID,
+        paymentId: PAYMENT_ID,
+      })
+    ).resolves.toEqual(finalized)
+
+    expect(harness.paymentsRepository.markInvoiceFinalizationInProgress).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generatePaymentReceiptInvoice).not.toHaveBeenCalled()
+    expect(harness.invoicesService.generateVerifiedMonthlyFeePaymentInvoice).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.updateInvoiceLink).not.toHaveBeenCalled()
+  })
+
   it("reconciles an already verified payment by ensuring receipt invoice linkage", async () => {
     const harness = createServiceHarness()
     const verified = paymentFixture({ status: "verified", is_advance: true })
@@ -856,6 +975,7 @@ describe("PaymentsService", () => {
       amount: 10,
       status: "initiated",
       monthly_fee_record_id: FEE_RECORD_ID,
+      transaction_id: "SCREENSHOT-residentpaymentprooftest",
       is_partial: true,
       created_by: context.authUser.id,
     })
@@ -913,6 +1033,66 @@ describe("PaymentsService", () => {
         actorUserId: context.authUser.id,
       })
     )
+    expect(harness.uploadsService.uploadPaymentProof).toHaveBeenCalledWith(
+      expect.objectContaining({
+        residentId: RESIDENT_ID,
+        paymentId: PAYMENT_ID,
+      }),
+      file
+    )
+  })
+
+  it("continues an existing screenshot-payment idempotency retry without stale balance failure", async () => {
+    const harness = createServiceHarness()
+    const context = residentAuthContext()
+    const file = new File(["proof"], "payment-proof.png", { type: "image/png" })
+    const draftPayment = paymentFixture({
+      amount: 10,
+      status: "initiated",
+      monthly_fee_record_id: FEE_RECORD_ID,
+      idempotency_key: "resident-payment-proof-test",
+      transaction_id: "SCREENSHOT-RESIDENTPAYMENTPROOFTEST",
+      is_partial: true,
+      created_by: context.authUser.id,
+    })
+    const submittedPayment = paymentFixture({
+      ...draftPayment,
+      status: "pending",
+    })
+
+    harness.authService.getCurrentContext.mockResolvedValue(context)
+    harness.residentsRepository.getById.mockResolvedValue(
+      residentFixture({
+        user_id: context.authUser.id,
+        status: "active",
+      })
+    )
+    harness.paymentsRepository.findByIdempotencyKey.mockResolvedValue(draftPayment)
+    harness.uploadsRepository.findLatestPaymentProof.mockResolvedValue(null)
+    harness.uploadsService.uploadPaymentProof.mockResolvedValue({
+      document: { id: "payment-proof-document-id" },
+    })
+    harness.paymentsRepository.finalizeSubmission.mockResolvedValue(submittedPayment)
+
+    await expect(
+      harness.service.submitUpiPaymentWithProof(
+        {
+          organizationId: TEST_ORGANIZATION_ID,
+          hostelId: TEST_HOSTEL_ID,
+          residentId: RESIDENT_ID,
+          monthlyFeeRecordId: FEE_RECORD_ID,
+          amount: 10,
+          method: "upi",
+          isPartial: true,
+          idempotencyKey: "resident-payment-proof-test",
+        },
+        file
+      )
+    ).resolves.toEqual(submittedPayment)
+
+    expect(harness.paymentSettingsRepository.getActive).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.listResidentPayments).not.toHaveBeenCalled()
+    expect(harness.paymentsRepository.createResidentUpiDraft).not.toHaveBeenCalled()
     expect(harness.uploadsService.uploadPaymentProof).toHaveBeenCalledWith(
       expect.objectContaining({
         residentId: RESIDENT_ID,

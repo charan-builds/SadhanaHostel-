@@ -1,10 +1,20 @@
 "use client"
 
-import { Activity, Building2, Clock, ShieldAlert, Users } from "lucide-react"
+import Link from "next/link"
+import type { Route } from "next"
+import {
+  Activity,
+  ArrowRight,
+  Building2,
+  ShieldAlert,
+  UserRoundCheck,
+  Users,
+  type LucideIcon,
+} from "lucide-react"
 
-import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -12,36 +22,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { useAdmissionsAnalytics, useAdmissionsVacancy } from "@/hooks"
+import { HOSTEL_TOTAL_CAPACITY } from "@/constants/hostel"
+import { useDashboardAnalytics } from "@/hooks"
 import { useAuth } from "@/lib/auth"
-import { formatDateTime } from "@/lib/format"
-import { useRealtimeAdmissions } from "@/lib/realtime"
 
 export function AdminVacancyClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
-  const vacancy = useAdmissionsVacancy({
+  const analytics = useDashboardAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
   })
-  const analytics = useAdmissionsAnalytics({
-    organizationId: organizationId ?? "",
-    hostelId,
-  })
-  const summary = vacancy.data?.summary
-  const rooms = vacancy.data?.rooms ?? []
-  const totalCapacity = summary?.total_beds ?? 0
-  const occupiedStudents = summary?.occupied_beds ?? 0
-  const studentVacancy = Math.max(totalCapacity - occupiedStudents, 0)
-  useRealtimeAdmissions({ enabled: Boolean(organizationId) })
+  const lifecycle = analytics.data?.residentLifecycle
+  const activeResidents = lifecycle?.activeResidents ?? 0
+  const registeredResidents = analytics.data?.totalResidents ?? lifecycle?.registeredResidents ?? 0
+  const pendingVerification = lifecycle?.pendingVerification ?? 0
+  const availableCapacity = Math.max(HOSTEL_TOTAL_CAPACITY - activeResidents, 0)
 
   if (!organizationId) {
     return (
@@ -52,12 +48,12 @@ export function AdminVacancyClient() {
     )
   }
 
-  if (vacancy.isError) {
+  if (analytics.isError) {
     return (
       <APIErrorState
-        title="Vacancy could not be loaded"
-        error={vacancy.error}
-        onRetry={() => void vacancy.refetch()}
+        title="Occupancy snapshot could not be loaded"
+        error={analytics.error}
+        onRetry={() => void analytics.refetch()}
       />
     )
   }
@@ -67,137 +63,82 @@ export function AdminVacancyClient() {
       <div>
         <p className="text-sm font-medium text-blue-700">Admissions</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
-          Live Vacancy
+          Occupancy Snapshot
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-          Sadhana Boys Hostel vacancy is tracked as total student capacity minus occupied
-          students.
+          Vacancy tracking has been removed from this launch. Capacity insight now comes
+          from resident lifecycle data and the configured launch capacity.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <VacancyMetric
-          title="Total Capacity"
-          value={totalCapacity}
+        <OccupancyMetric
+          title="Launch Capacity"
+          value={HOSTEL_TOTAL_CAPACITY}
           icon={Building2}
         />
-        <VacancyMetric
-          title="Occupied Students"
-          value={occupiedStudents}
+        <OccupancyMetric
+          title="Active Residents"
+          value={activeResidents}
           icon={Users}
+          loading={analytics.isLoading}
         />
-        <VacancyMetric
-          title="Admission Holds"
-          value={summary?.reserved_beds ?? 0}
-          icon={Clock}
-        />
-        <VacancyMetric
-          title="Vacancy"
-          value={studentVacancy}
+        <OccupancyMetric
+          title="Available Capacity"
+          value={availableCapacity}
           icon={Activity}
+          loading={analytics.isLoading}
         />
-        <VacancyMetric
-          title="Unavailable"
-          value={summary?.maintenance_blocked_beds ?? 0}
+        <OccupancyMetric
+          title="Registered Residents"
+          value={registeredResidents}
+          icon={UserRoundCheck}
+          loading={analytics.isLoading}
+        />
+        <OccupancyMetric
+          title="Pending Verification"
+          value={pendingVerification}
           icon={ShieldAlert}
-        />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <VacancyMetric
-          title="New inquiries"
-          value={analytics.data?.newInquiries ?? 0}
-          icon={Activity}
-        />
-        <VacancyMetric
-          title="Active reservations"
-          value={analytics.data?.activeReservations ?? 0}
-          icon={Clock}
-        />
-        <VacancyMetric
-          title="Conversion rate"
-          value={`${analytics.data?.conversionRate ?? 0}%`}
-          icon={Building2}
+          loading={analytics.isLoading}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Room-wise Vacancy</CardTitle>
+          <CardTitle>Room-wise vacancy retired</CardTitle>
           <CardDescription>
-            Room vacancy is shown as room capacity minus currently occupied students.
+            Room-wise vacancy tables are disabled for this launch so admins do not rely
+            on the removed vacancy endpoint.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {vacancy.isLoading ? (
-            <div className="grid gap-3">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="h-14 rounded-lg border bg-muted/50" />
-              ))}
-            </div>
-          ) : rooms.length === 0 ? (
-            <EmptyState
-              title="No room capacity found"
-              message="Create rooms before vacancy can be calculated room by room."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Room</TableHead>
-                    <TableHead>Capacity</TableHead>
-                    <TableHead>Occupied</TableHead>
-                    <TableHead>Admission holds</TableHead>
-                    <TableHead>Unavailable</TableHead>
-                    <TableHead>Vacancy</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rooms.map((room) => (
-                    <TableRow key={room.room_id}>
-                      <TableCell>
-                        <div className="font-medium">{room.room_number}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {room.room_name ?? room.room_type}
-                        </div>
-                      </TableCell>
-                      <TableCell>{room.total_beds}</TableCell>
-                      <TableCell>{room.occupied_beds}</TableCell>
-                      <TableCell>{room.reserved_beds}</TableCell>
-                      <TableCell>{room.maintenance_blocked_beds}</TableCell>
-                      <TableCell className="font-medium">
-                        {Math.max(room.total_beds - room.occupied_beds, 0)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={room.room_status} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          {summary ? (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Last calculated {formatDateTime(summary.calculated_at)}
-            </p>
-          ) : null}
+        <CardContent className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+          <p className="text-sm leading-6 text-muted-foreground">
+            Use resident lifecycle, admissions follow-ups, and room management for daily
+            operating decisions. Operations Center and Intelligence use the same safe
+            occupancy signals.
+          </p>
+          <Button asChild variant="outline">
+            <Link href={"/admin/residents" as Route}>
+              Open residents
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function VacancyMetric({
+function OccupancyMetric({
   title,
   value,
   icon: Icon,
+  loading,
 }: {
   title: string
   value: string | number
-  icon: typeof Building2
+  icon: LucideIcon
+  loading?: boolean
 }) {
   return (
     <Card>
@@ -205,7 +146,7 @@ function VacancyMetric({
         <CardDescription>{title}</CardDescription>
         <CardTitle className="flex items-center gap-2 text-2xl">
           <Icon className="size-5 text-blue-700" aria-hidden="true" />
-          {value}
+          {loading ? "..." : value}
         </CardTitle>
       </CardHeader>
     </Card>

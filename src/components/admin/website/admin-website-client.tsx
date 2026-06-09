@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { FilePenLine, Globe, ImageIcon, Loader2, Plus, Sparkles, UploadCloud } from "lucide-react"
 import {
@@ -65,6 +65,14 @@ const settingFormSchema = z.object({
   fields: z.record(z.string(), z.string().max(5000)).default({}),
 })
 
+const leadFormSectionSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  subtitle: z.string().trim().min(5).max(220),
+  description: z.string().trim().min(5).max(260),
+  ctaText: z.string().trim().min(2).max(60),
+  imageUrl: z.string().trim().max(1000).optional().or(z.literal("")),
+})
+
 const facilityFormSchema = z.object({
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(2).max(120).regex(/^[a-z0-9-]+$/),
@@ -77,6 +85,8 @@ const facilityFormSchema = z.object({
 
 type SettingFormInput = z.input<typeof settingFormSchema>
 type SettingFormValues = z.output<typeof settingFormSchema>
+type LeadFormSectionInput = z.input<typeof leadFormSectionSchema>
+type LeadFormSectionValues = z.output<typeof leadFormSectionSchema>
 type FacilityFormInput = z.input<typeof facilityFormSchema>
 type FacilityFormValues = z.output<typeof facilityFormSchema>
 
@@ -103,12 +113,17 @@ export function AdminWebsiteClient() {
   )
   const [isFacilityDialogOpen, setIsFacilityDialogOpen] = useState(false)
   const [galleryFiles, setGalleryFiles] = useState<File[]>([])
+  const [leadImageFile, setLeadImageFile] = useState<File | null>(null)
   const [galleryProgress, setGalleryProgress] = useState<number | null>(null)
   const [galleryForm, setGalleryForm] = useState({
     title: "",
     description: "",
     altText: "",
     category: "exterior-surroundings",
+  })
+  const leadForm = useForm<LeadFormSectionInput, unknown, LeadFormSectionValues>({
+    resolver: zodResolver(leadFormSectionSchema),
+    defaultValues: getLeadFormDefaults(null),
   })
 
   const settingsQuery = useWebsiteSettings({
@@ -130,6 +145,17 @@ export function AdminWebsiteClient() {
     pageSize: 12,
   })
   const uploadGalleryImage = useUploadGalleryImage()
+  const uploadLeadImage = useUploadGalleryImage()
+  const updateLeadSetting = useUpdateWebsiteSetting()
+  const settings = settingsQuery.data?.data ?? []
+  const facilities = facilitiesQuery.data?.data ?? []
+  const galleryItems = galleryQuery.data?.data ?? []
+  const contactSetting = settings.find((setting) => setting.section_key === "contact") ?? null
+  const leadFormPreviewValues = useWatch({ control: leadForm.control })
+
+  useEffect(() => {
+    leadForm.reset(getLeadFormDefaults(contactSetting))
+  }, [contactSetting, leadForm])
 
   if (!organizationId) {
     return (
@@ -140,9 +166,7 @@ export function AdminWebsiteClient() {
     )
   }
 
-  const settings = settingsQuery.data?.data ?? []
-  const facilities = facilitiesQuery.data?.data ?? []
-  const galleryItems = galleryQuery.data?.data ?? []
+  const activeOrganizationId = organizationId
 
   async function uploadGalleryImages(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -206,6 +230,79 @@ export function AdminWebsiteClient() {
     }
   }
 
+  async function uploadLeadSectionImage() {
+    if (!leadImageFile || !contactSetting) {
+      toast.error("Choose a lead section image first.")
+      return
+    }
+
+    const uploadOrganizationId = contactSetting.organization_id || galleryOrganizationId
+
+    if (!uploadOrganizationId) {
+      toast.error("Website gallery source is not ready yet.")
+      return
+    }
+
+    const title =
+      leadForm.getValues("title") ||
+      leadImageFile.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ")
+
+    try {
+      const result = await uploadLeadImage.mutateAsync({
+        file: leadImageFile,
+        input: {
+          organizationId: uploadOrganizationId,
+          hostelId: contactSetting.hostel_id ?? galleryHostelId,
+          title,
+          description: "Lead form section image",
+          altText: title,
+          category: "lead-form",
+          sortOrder: galleryItems.length,
+          status: "published",
+        },
+      })
+
+      leadForm.setValue("imageUrl", result.gallery.imageUrl ?? "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      setLeadImageFile(null)
+      toast.success("Lead image uploaded. Save the lead form section to publish it.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lead image upload failed.")
+    }
+  }
+
+  async function saveLeadFormSection(values: LeadFormSectionValues) {
+    if (!contactSetting) {
+      toast.error("Contact website section is not available yet.")
+      return
+    }
+
+    if (!contactSetting.id) {
+      toast.error("Lead form section cannot be saved until the contact section has an id.")
+      return
+    }
+
+    await updateLeadSetting.mutateAsync({
+      settingId: contactSetting.id,
+      organizationId: activeOrganizationId,
+      title: contactSetting.title ?? "Contact Information",
+      seoTitle: contactSetting.seo_title ?? undefined,
+      seoDescription: contactSetting.seo_description ?? undefined,
+      status: contactSetting.status,
+      content: {
+        ...contentRecord(contactSetting.content),
+        lead_form_title: values.title,
+        lead_form_subtitle: values.subtitle,
+        lead_form_description: values.description,
+        lead_form_cta_text: values.ctaText,
+        lead_form_image_url: values.imageUrl || undefined,
+      },
+    })
+    toast.success("Lead form section saved.")
+  }
+
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-3">
@@ -216,6 +313,133 @@ export function AdminWebsiteClient() {
         />
         <CmsMetric label="Facilities" value={facilities.length} />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Lead Form Section</CardTitle>
+          <CardDescription>
+            Edit the homepage inquiry title, copy, button text, and image without code changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {settingsQuery.isLoading ? (
+            <CmsSkeleton />
+          ) : settingsQuery.isError ? (
+            <APIErrorState
+              title="Lead form settings could not be loaded"
+              error={settingsQuery.error}
+              onRetry={() => void settingsQuery.refetch()}
+            />
+          ) : !contactSetting ? (
+            <EmptyState
+              title="Lead form section is not ready"
+              message="The contact website section must exist before lead form content can be edited."
+            />
+          ) : (
+            <form
+              className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]"
+              onSubmit={leadForm.handleSubmit(saveLeadFormSection)}
+            >
+              <div className="grid gap-4">
+                <LeadFormField
+                  label="Lead Form Title"
+                  inputId="lead-form-title"
+                  error={leadForm.formState.errors.title?.message}
+                >
+                  <Input id="lead-form-title" {...leadForm.register("title")} />
+                </LeadFormField>
+                <LeadFormField
+                  label="Lead Form Subtitle"
+                  inputId="lead-form-subtitle"
+                  error={leadForm.formState.errors.subtitle?.message}
+                >
+                  <Input id="lead-form-subtitle" {...leadForm.register("subtitle")} />
+                </LeadFormField>
+                <LeadFormField
+                  label="Lead Form Description"
+                  inputId="lead-form-description"
+                  error={leadForm.formState.errors.description?.message}
+                >
+                  <Textarea
+                    id="lead-form-description"
+                    rows={3}
+                    {...leadForm.register("description")}
+                  />
+                </LeadFormField>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <LeadFormField
+                    label="CTA Button Text"
+                    inputId="lead-form-cta"
+                    error={leadForm.formState.errors.ctaText?.message}
+                  >
+                    <Input id="lead-form-cta" {...leadForm.register("ctaText")} />
+                  </LeadFormField>
+                  <LeadFormField
+                    label="Lead Form Image"
+                    inputId="lead-form-image-url"
+                    error={leadForm.formState.errors.imageUrl?.message}
+                  >
+                    <Input
+                      id="lead-form-image-url"
+                      placeholder="Upload or paste image URL"
+                      {...leadForm.register("imageUrl")}
+                    />
+                  </LeadFormField>
+                </div>
+                <div className="grid gap-3 rounded-xl border bg-muted/30 p-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="lead-section-image-upload">Upload Lead Section Image</Label>
+                    <Input
+                      id="lead-section-image-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) =>
+                        setLeadImageFile(event.target.files?.[0] ?? null)
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!leadImageFile || uploadLeadImage.isPending}
+                      onClick={() => {
+                        void uploadLeadSectionImage()
+                      }}
+                    >
+                      {uploadLeadImage.isPending ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <UploadCloud className="size-4" aria-hidden="true" />
+                      )}
+                      Replace Existing Image
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={updateLeadSetting.isPending}
+                      className="gap-2"
+                    >
+                      {updateLeadSetting.isPending ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Globe className="size-4" aria-hidden="true" />
+                      )}
+                      Save Lead Form
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <LeadFormPreview
+                title={leadFormPreviewValues.title ?? ""}
+                subtitle={leadFormPreviewValues.subtitle ?? ""}
+                description={leadFormPreviewValues.description ?? ""}
+                ctaText={leadFormPreviewValues.ctaText ?? ""}
+                imageUrl={leadFormPreviewValues.imageUrl}
+              />
+            </form>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -538,6 +762,67 @@ export function AdminWebsiteClient() {
         hostelId={hostelId}
       />
     </div>
+  )
+}
+
+function LeadFormField({
+  label,
+  inputId,
+  error,
+  children,
+}: {
+  label: string
+  inputId: string
+  error?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={inputId}>{label}</Label>
+      {children}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  )
+}
+
+function LeadFormPreview({
+  title,
+  subtitle,
+  description,
+  ctaText,
+  imageUrl,
+}: LeadFormSectionValues) {
+  return (
+    <aside className="grid content-start gap-3 rounded-xl border bg-background p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">Preview Image</p>
+        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+          Lead Form
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-xl border bg-muted">
+        {imageUrl ? (
+          <div
+            role="img"
+            aria-label="Lead section preview image"
+            className="aspect-[4/3] bg-cover bg-center"
+            style={{ backgroundImage: `url("${imageUrl}")` }}
+          />
+        ) : (
+          <div className="grid aspect-[4/3] place-items-center">
+            <ImageIcon className="size-9 text-muted-foreground" aria-hidden="true" />
+          </div>
+        )}
+      </div>
+      <div className="rounded-xl border bg-muted/30 p-4">
+        <p className="text-lg font-semibold">{title}</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>
+        <p className="mt-2 text-sm font-medium text-primary">{description}</p>
+        <div className="mt-4 rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground">
+          {ctaText}
+        </div>
+      </div>
+    </aside>
   )
 }
 
@@ -1150,6 +1435,29 @@ function getSettingDefaults(setting: Tables<"website_settings"> | null): Setting
   }
 }
 
+function getLeadFormDefaults(
+  setting: Tables<"website_settings"> | null
+): LeadFormSectionValues {
+  const content = contentRecord(setting?.content)
+
+  return {
+    title:
+      stringFromContent(content, ["lead_form_title", "leadFormTitle"]) ||
+      "Send an inquiry",
+    subtitle:
+      stringFromContent(content, ["lead_form_subtitle", "leadFormSubtitle"]) ||
+      "Submit your details so the hostel team can call back and explain the joining process.",
+    description:
+      stringFromContent(content, ["lead_form_description", "leadFormDescription"]) ||
+      "Only three fields. The hostel office will call you back quickly.",
+    ctaText:
+      stringFromContent(content, ["lead_form_cta_text", "leadFormCtaText"]) ||
+      "Request callback",
+    imageUrl:
+      stringFromContent(content, ["lead_form_image_url", "leadFormImageUrl"]) || "",
+  }
+}
+
 function normalizeSettingValues(
   values: Partial<Omit<SettingFormValues, "fields">> & {
     fields?: Record<string, string | undefined>
@@ -1296,6 +1604,40 @@ const sectionFields: Record<string, SettingField[]> = {
     { name: "address", label: "Address", key: "address", multiline: true, rows: 3 },
     { name: "city", label: "City", key: "city" },
     { name: "mapLink", label: "Google Maps link", key: "map_link", aliases: ["mapLink"], inputType: "url" },
+    {
+      name: "leadFormTitle",
+      label: "Lead Form Title",
+      key: "lead_form_title",
+      aliases: ["leadFormTitle"],
+    },
+    {
+      name: "leadFormSubtitle",
+      label: "Lead Form Subtitle",
+      key: "lead_form_subtitle",
+      aliases: ["leadFormSubtitle"],
+    },
+    {
+      name: "leadFormDescription",
+      label: "Lead Form Description",
+      key: "lead_form_description",
+      aliases: ["leadFormDescription"],
+      multiline: true,
+      rows: 3,
+    },
+    {
+      name: "leadFormCtaText",
+      label: "CTA Button Text",
+      key: "lead_form_cta_text",
+      aliases: ["leadFormCtaText"],
+    },
+    {
+      name: "leadFormImageUrl",
+      label: "Lead Form Image",
+      key: "lead_form_image_url",
+      aliases: ["leadFormImageUrl"],
+      inputType: "url",
+      placeholder: "Upload from the Lead Form Section card or paste image URL",
+    },
   ],
   pricing: [
     { name: "currency", label: "Currency", key: "currency", placeholder: "INR" },

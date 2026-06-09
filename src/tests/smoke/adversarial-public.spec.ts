@@ -113,10 +113,33 @@ test.describe("black-box unauthenticated abuse resistance", () => {
     }
   })
 
-  test("occupancy lifecycle mutations reject anonymous transfer and checkout attempts", async ({
+  test("occupancy lifecycle mutations reject anonymous room management, transfer and checkout attempts", async ({
     request,
   }) => {
     const attempts = await Promise.all([
+      request.get(`/api/rooms?organizationId=${ORGANIZATION_ID}`),
+      request.post("/api/rooms", {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          hostelId: HOSTEL_ID,
+          roomNumber: "A-101",
+          capacity: 2,
+        },
+      }),
+      request.patch(`/api/rooms/${ROOM_ID}`, {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          status: "maintenance",
+        },
+      }),
+      request.post(`/api/rooms/${ROOM_ID}/allocate`, {
+        data: {
+          organizationId: ORGANIZATION_ID,
+          hostelId: HOSTEL_ID,
+          residentId: RESIDENT_ID,
+          allocatedFrom: "2026-06-15",
+        },
+      }),
       request.post(`/api/rooms/${ROOM_ID}/transfer`, {
         data: {
           organizationId: ORGANIZATION_ID,

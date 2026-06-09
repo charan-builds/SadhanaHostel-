@@ -92,9 +92,18 @@ export function getAdminRouteRequiredPermission(requestedPath: string): Permissi
   if (
     pathname.startsWith("/admin/settings") ||
     pathname.startsWith("/admin/operations/automation") ||
+    pathname.startsWith("/admin/operations/identity-repair") ||
+    pathname.startsWith("/admin/operations/reset-demo-data") ||
     pathname.startsWith("/admin/launch-readiness")
   ) {
     return "settings.manage"
+  }
+
+  if (
+    pathname.startsWith("/admin/dashboard") ||
+    pathname.startsWith("/admin/notifications")
+  ) {
+    return "admin.dashboard.view"
   }
 
   if (
@@ -109,6 +118,7 @@ export function getAdminRouteRequiredPermission(requestedPath: string): Permissi
   }
   if (pathname.startsWith("/admin/reports")) return "reports.export"
   if (pathname.startsWith("/admin/owner-dashboard")) return "analytics.view"
+  if (pathname.startsWith("/admin/operations")) return "admin.dashboard.view"
 
   if (
     pathname.startsWith("/admin/leads") ||
@@ -122,6 +132,12 @@ export function getAdminRouteRequiredPermission(requestedPath: string): Permissi
   if (pathname.startsWith("/admin/rooms")) return "rooms.manage"
   if (pathname.startsWith("/admin/leaves")) return "leaves.manage"
   if (pathname.startsWith("/admin/notices")) return "notices.manage"
+  if (
+    pathname.startsWith("/admin/alerts") ||
+    pathname.startsWith("/admin/password-resets")
+  ) {
+    return "residents.manage"
+  }
 
   return null
 }

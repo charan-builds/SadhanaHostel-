@@ -12,6 +12,7 @@ import {
 export type WebsiteSettingRow = Tables<"website_settings">
 export type FacilityRow = Tables<"facilities">
 export type GalleryRow = Tables<"gallery">
+export type EmployeeAccommodationRoomRow = Tables<"employee_accommodation_rooms">
 export type GalleryWithDocumentRow = GalleryRow & {
   document?: Pick<Tables<"documents">, "id" | "bucket_name" | "storage_path"> | null
 }
@@ -37,6 +38,11 @@ export type ListFacilitiesFilters = WebsiteScopedFilters & {
 
 export type ListGalleryFilters = WebsiteScopedFilters & {
   category?: string
+  categories?: string[]
+}
+
+export type ListEmployeeAccommodationRoomsFilters = WebsiteScopedFilters & {
+  includeHidden?: boolean
 }
 
 export class WebsiteRepository {
@@ -225,6 +231,8 @@ export class WebsiteRepository {
 
     if (filters.category) {
       query = query.eq("category", filters.category)
+    } else if (filters.categories && filters.categories.length > 0) {
+      query = query.in("category", filters.categories)
     }
 
     const { data, error, count } = await query.range(from, to)
@@ -334,6 +342,108 @@ export class WebsiteRepository {
 
     if (error) {
       throwRepositoryError(error, "Unable to update gallery item.")
+    }
+
+    return data
+  }
+
+  async listEmployeeAccommodationRooms(
+    filters: ListEmployeeAccommodationRoomsFilters
+  ): Promise<PaginatedResult<EmployeeAccommodationRoomRow>> {
+    const { page, pageSize, from, to } = normalizePagination(filters)
+
+    let query = this.db
+      .from("employee_accommodation_rooms")
+      .select("*", { count: "exact" })
+      .eq("organization_id", filters.organizationId)
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
+
+    if (filters.hostelId) {
+      query = query.or(`hostel_id.is.null,hostel_id.eq.${filters.hostelId}`)
+    }
+
+    if (filters.status) {
+      query = query.eq("status", filters.status)
+    }
+
+    if (!filters.includeHidden) {
+      query = query.eq("is_visible", true)
+    }
+
+    const { data, error, count } = await query.range(from, to)
+
+    if (error) {
+      if (
+        error.code === "PGRST205" &&
+        filters.status === "published" &&
+        !filters.includeHidden
+      ) {
+        return {
+          data: [],
+          meta: createPaginationMeta(0, page, pageSize),
+        }
+      }
+
+      throwRepositoryError(error, "Unable to list employee accommodation rooms.")
+    }
+
+    return {
+      data: data ?? [],
+      meta: createPaginationMeta(count, page, pageSize),
+    }
+  }
+
+  async createEmployeeAccommodationRoom(
+    values: TablesInsert<"employee_accommodation_rooms">
+  ) {
+    const { data, error } = await this.db
+      .from("employee_accommodation_rooms")
+      .insert(values)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to create employee accommodation room.")
+    }
+
+    return data
+  }
+
+  async getEmployeeAccommodationRoomById(roomId: string, organizationId: string) {
+    const { data, error } = await this.db
+      .from("employee_accommodation_rooms")
+      .select("*")
+      .eq("id", roomId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load employee accommodation room.")
+    }
+
+    return data
+  }
+
+  async updateEmployeeAccommodationRoom(
+    roomId: string,
+    organizationId: string,
+    values: TablesUpdate<"employee_accommodation_rooms">
+  ) {
+    const { data, error } = await this.db
+      .from("employee_accommodation_rooms")
+      .update(values)
+      .eq("id", roomId)
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .select("*")
+      .single()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to update employee accommodation room.")
     }
 
     return data

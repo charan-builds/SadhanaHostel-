@@ -60,8 +60,8 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "Pay Fees",
         short_name: "Pay",
-        description: "Open resident fee payment",
-        url: "/resident/payments",
+        description: "Open the fast resident fee payment flow",
+        url: "/resident/pay-fees",
         icons: [{ src: "/pwa-icon/96", sizes: "96x96", type: "image/png" }],
       },
       {

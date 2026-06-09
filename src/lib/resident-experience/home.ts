@@ -4,6 +4,7 @@ import type { ResidentPaymentLedger } from "@/types/payment-operations"
 import type { CurrentResidentProfile } from "@/types/residents"
 
 export type ResidentHomeRoute =
+  | "/resident/pay-fees"
   | "/resident/payments"
   | "/resident/notices"
   | "/resident/support"
@@ -164,7 +165,7 @@ function buildSmartActions(input: {
       id: "payment-overdue",
       title: "Fee payment is overdue",
       description: "Clear the overdue balance and upload proof so finance can verify it.",
-      href: "/resident/payments",
+      href: "/resident/pay-fees",
       cta: "Pay fee",
       tone: "danger",
       priority: 10,
@@ -174,7 +175,7 @@ function buildSmartActions(input: {
       id: "payment-due-tomorrow",
       title: "Fee due tomorrow",
       description: "Pay now to avoid an overdue balance on your account.",
-      href: "/resident/payments",
+      href: "/resident/pay-fees",
       cta: "Pay fee",
       tone: "warning",
       priority: 15,
@@ -183,8 +184,8 @@ function buildSmartActions(input: {
     actions.push({
       id: "payment-due",
       title: daysUntilDue === 0 ? "Fee due today" : "Fee payment pending",
-      description: "Open payments, complete UPI transfer, and upload proof for review.",
-      href: "/resident/payments",
+      description: "Open Pay Fees, complete UPI transfer, and upload proof for review.",
+      href: "/resident/pay-fees",
       cta: "Pay fee",
       tone: daysUntilDue === 0 ? "warning" : "info",
       priority: daysUntilDue === 0 ? 20 : 35,

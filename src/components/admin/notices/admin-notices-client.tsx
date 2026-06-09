@@ -42,6 +42,7 @@ import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import { useCreateNotice, useNotices, useUpdateNotice } from "@/hooks"
 import type { Tables } from "@/types/database"
+import { noticeTypes } from "@/validations/notice.validation"
 
 const PAGE_SIZE = 10
 const cmsStatuses = ["draft", "published", "archived"] as const
@@ -94,7 +95,9 @@ const noticeFormSchema = z.object({
   title: z.string().trim().min(2).max(160),
   body: z.string().trim().min(5).max(5000),
   status: z.enum(cmsStatuses),
+  noticeType: z.enum(noticeTypes),
   audienceType: z.enum(audienceTypes),
+  requiresAcknowledgement: z.boolean(),
   isPinned: z.boolean(),
   expiresAt: z.string().optional(),
 })
@@ -106,6 +109,7 @@ export function AdminNoticesClient() {
   const hostelId = session?.hostelIds[0]
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState<(typeof cmsStatuses)[number] | "all">("all")
+  const [audienceFilter, setAudienceFilter] = useState<AudienceType | "any">("any")
   const [editingNotice, setEditingNotice] = useState<Tables<"notices"> | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [noticeOutcome, setNoticeOutcome] = useState<NoticeOutcome | null>(null)
@@ -116,9 +120,18 @@ export function AdminNoticesClient() {
     page,
     pageSize: PAGE_SIZE,
     status: status === "all" ? undefined : status,
+    audienceType: audienceFilter === "any" ? undefined : audienceFilter,
   })
   const notices = noticesQuery.data?.data ?? []
   const meta = noticesQuery.data?.meta
+  const totalRecipients = notices.reduce((total, notice) => total + notice.total_recipients, 0)
+  const totalReads = notices.reduce((total, notice) => total + notice.read_count, 0)
+  const pendingAcknowledgements = notices.reduce(
+    (total, notice) => total + notice.pending_count,
+    0
+  )
+  const readRate =
+    totalRecipients > 0 ? Math.round((totalReads / totalRecipients) * 100) : 0
 
   if (!organizationId) {
     return (
@@ -131,7 +144,7 @@ export function AdminNoticesClient() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <NoticeMetric label="Notices on page" value={notices.length} />
         <NoticeMetric
           label="Published"
@@ -141,6 +154,8 @@ export function AdminNoticesClient() {
           label="Pinned"
           value={notices.filter((notice) => notice.is_pinned).length}
         />
+        <NoticeMetric label="Read rate" value={`${readRate}%`} />
+        <NoticeMetric label="Ack pending" value={pendingAcknowledgements} />
       </div>
 
       {noticeOutcome ? (
@@ -171,25 +186,46 @@ export function AdminNoticesClient() {
           </Button>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <Select
-            value={status}
-            onValueChange={(value) => {
-              setStatus(value as typeof status)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger className="w-full md:w-48" aria-label="Filter notice status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {cmsStatuses.map((item) => (
-                <SelectItem key={item} value={item}>
-                  {humanizeEnum(item)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="grid gap-3 md:grid-cols-[12rem_14rem]">
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value as typeof status)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="Filter notice status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {cmsStatuses.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {humanizeEnum(item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={audienceFilter}
+              onValueChange={(value) => {
+                setAudienceFilter(value as typeof audienceFilter)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="Filter notice audience">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">All audiences</SelectItem>
+                {audienceOptions.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {noticesQuery.isLoading ? (
             <NoticeSkeleton />
@@ -228,6 +264,12 @@ export function AdminNoticesClient() {
                           <Badge variant="secondary">Pinned</Badge>
                         ) : null}
                         <Badge variant="outline">{formatAudienceLabel(notice.audience_type)}</Badge>
+                        <Badge variant="outline">{humanizeEnum(notice.notice_type)}</Badge>
+                        {notice.requires_acknowledgement ? (
+                          <Badge variant={notice.pending_count > 0 ? "destructive" : "secondary"}>
+                            {notice.pending_count} ack pending
+                          </Badge>
+                        ) : null}
                       </div>
                       <h2 className="mt-3 font-semibold">{notice.title}</h2>
                       <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -238,6 +280,7 @@ export function AdminNoticesClient() {
                           ? `Published ${formatDateTime(notice.published_at)}`
                           : "Not published"}
                       </p>
+                      <NoticeEngagementSummary notice={notice} />
                     </div>
                     <Button
                       variant="outline"
@@ -338,8 +381,10 @@ function NoticeEditorDialog({
         title: values.title,
         body: values.body,
         status: values.status,
+        noticeType: values.noticeType,
         audienceType: values.audienceType,
         audienceFilter: {},
+        requiresAcknowledgement: values.requiresAcknowledgement,
         isPinned: values.isPinned,
         isActive: true,
         expiresAt: values.expiresAt || undefined,
@@ -349,8 +394,10 @@ function NoticeEditorDialog({
         title: values.title,
         body: values.body,
         status: values.status,
+        noticeType: values.noticeType,
         audienceType: values.audienceType,
         audienceFilter: {},
+        requiresAcknowledgement: values.requiresAcknowledgement,
         isPinned: values.isPinned,
         expiresAt: values.expiresAt || undefined,
       })
@@ -446,6 +493,27 @@ function NoticeEditorDialog({
                 />
               </div>
               <div className="grid gap-2">
+                <Label>Notice type</Label>
+                <Controller
+                  control={form.control}
+                  name="noticeType"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {noticeTypes.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {humanizeEnum(item)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="grid gap-2">
                 <Label>Audience</Label>
                 <Controller
                   control={form.control}
@@ -501,6 +569,30 @@ function NoticeEditorDialog({
                   )}
                 />
               </div>
+              <div className="grid gap-2">
+                <Label>Requires acknowledgement</Label>
+                <Controller
+                  control={form.control}
+                  name="requiresAcknowledgement"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ? "yes" : "no"}
+                      onValueChange={(value) => field.onChange(value === "yes")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="yes">Yes</SelectItem>
+                        <SelectItem value="no">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Use this for policy, fee, safety, and hostel-rule notices that residents must confirm.
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter className="mt-6">
@@ -545,6 +637,34 @@ function AudiencePreview({
   )
 }
 
+function NoticeEngagementSummary({ notice }: { notice: Tables<"notices"> & {
+  total_recipients: number
+  read_count: number
+  read_percentage: number
+  acknowledgement_count: number
+  pending_count: number
+  acknowledgement_percentage: number
+} }) {
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground sm:grid-cols-2">
+      <div>
+        <p className="font-medium text-foreground">Read tracking</p>
+        <p className="mt-1">
+          {notice.read_count}/{notice.total_recipients} recipients · {Math.round(notice.read_percentage)}%
+        </p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Acknowledgements</p>
+        <p className="mt-1">
+          {notice.requires_acknowledgement
+            ? `${notice.acknowledgement_count} confirmed · ${notice.pending_count} pending · ${Math.round(notice.acknowledgement_percentage)}%`
+            : "Not required"}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function formatAudienceLabel(value: string) {
   return audienceOptions.find((item) => item.value === value)?.label ?? humanizeEnum(value)
 }
@@ -554,7 +674,9 @@ function getNoticeDefaults(notice: Tables<"notices"> | null): NoticeFormValues {
     title: notice?.title ?? "",
     body: notice?.body ?? "",
     status: notice?.status ?? "draft",
+    noticeType: (notice?.notice_type as NoticeFormValues["noticeType"]) ?? "general",
     audienceType: (notice?.audience_type as NoticeFormValues["audienceType"]) ?? "all",
+    requiresAcknowledgement: notice?.requires_acknowledgement ?? false,
     isPinned: notice?.is_pinned ?? false,
     expiresAt: notice?.expires_at ? notice.expires_at.slice(0, 16) : "",
   }

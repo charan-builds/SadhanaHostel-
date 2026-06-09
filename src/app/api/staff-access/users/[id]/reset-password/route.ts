@@ -1,5 +1,6 @@
 import {
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
   withApiRoute,
 } from "@/lib/api"
@@ -14,7 +15,10 @@ type StaffUserRouteContext = {
 export async function POST(request: Request, context: StaffUserRouteContext) {
   return withApiRoute(
     request,
-    { route: "staff_access.users.reset_password" },
+    {
+      route: "staff_access.users.reset_password",
+      rateLimit: RATE_LIMIT_POLICIES.credentialIssuance,
+    },
     async () => {
       const { id } = await context.params
       const service = await StaffAccessService.create()

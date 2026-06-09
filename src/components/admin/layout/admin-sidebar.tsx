@@ -38,6 +38,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { BrandMark } from "@/components/shared/brand-mark"
 import { Button } from "@/components/ui/button"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { hostelModules } from "@/config/hostel-modules"
 import { hostelConfig } from "@/constants/hostel"
 import { useOperationalAlerts, useSupportRequests } from "@/hooks"
@@ -59,6 +60,8 @@ export type AdminNavigationItem = {
 export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
+  { title: "Operations Center", href: "/admin/operations", icon: ClipboardCheck },
+  { title: "Intelligence", href: "/admin/operations/intelligence", icon: Sparkles },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
   { title: "Residents", href: "/admin/residents", icon: Users },
   {
@@ -87,6 +90,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     : []),
   { title: "Automation", href: "/admin/operations/automation", icon: Bot },
   { title: "Staff & Access", href: "/admin/settings/staff-access", icon: KeyRound },
+  { title: "Rules & Policies", href: "/admin/settings/rules", icon: ShieldCheck },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]
 
@@ -109,8 +113,9 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
   const displayName = profile?.full_name ?? session?.user?.email ?? "Admin"
   const displayEmail = profile?.email ?? session?.user?.email ?? "Signed in"
   const roleLabel = session?.primaryRole ? humanizeEnum(session.primaryRole) : "Admin"
+  const canManageSupport = anyRoleHasPermission(session?.roles ?? [], "residents.manage")
   const passwordResetRequests = useSupportRequests({
-    organizationId: organizationId ?? "",
+    organizationId: canManageSupport ? organizationId ?? "" : "",
     hostelId,
     status: "open",
     category: "account",
@@ -119,7 +124,7 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
     pageSize: 1,
   })
   const operationalAlerts = useOperationalAlerts({
-    organizationId: organizationId ?? undefined,
+    organizationId: canManageSupport ? organizationId ?? undefined : undefined,
     hostelId,
   })
   const passwordResetCount = passwordResetRequests.data?.meta.total ?? 0

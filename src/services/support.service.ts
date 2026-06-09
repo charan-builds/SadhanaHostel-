@@ -1,6 +1,6 @@
 import "server-only"
 
-import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { hostelModules } from "@/config/hostel-modules"
 import { areCronJobsEnabled, areOperationalRepairsEnabled } from "@/config/launch"
 import { badRequest, forbidden } from "@/lib/api/api-error"
@@ -105,6 +105,8 @@ export class SupportService {
       priority: values.priority,
       workflow: values.workflow,
       search: values.search,
+      fromDate: values.fromDate,
+      toDate: values.toDate,
       page: values.page,
       pageSize: values.pageSize,
     })
@@ -249,6 +251,14 @@ export class SupportService {
       throw badRequest("This support request is not a resident password reset request.")
     }
 
+    if (previous.status === "waiting_on_resident") {
+      throw badRequest("A temporary password was already generated for this request.")
+    }
+
+    if (previous.status === "resolved" || previous.status === "closed") {
+      throw badRequest("Completed password reset requests cannot be approved again.")
+    }
+
     const reset = await new ResidentsService(this.db).resetResidentTemporaryPassword({
       organizationId: previous.organization_id,
       residentId: previous.resident_id,
@@ -372,7 +382,7 @@ export class SupportService {
 
   async updateRequest(input: unknown) {
     const values = supportRequestUpdateSchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
+    const context = await this.authService.requirePermission("residents.manage")
 
     const previous = assertFound(
       await this.supportRepository.getById(values.requestId, values.organizationId),
@@ -407,7 +417,7 @@ export class SupportService {
 
   async getOperationalAlerts(input: unknown): Promise<OperationalAlert[]> {
     const values = operationalAlertsQuerySchema.parse(input)
-    const context = await this.authService.requireRole(ADMIN_PORTAL_ROLES)
+    const context = await this.authService.requirePermission("residents.manage")
     const organizationId = values.organizationId ?? context.organizationId
     const hostelId = values.hostelId ?? context.hostelIds[0] ?? null
 
@@ -433,6 +443,8 @@ export class SupportService {
     const [
       passwordResetCount,
       residentReportCount,
+      visitorRequestCount,
+      gatePassRequestCount,
       urgentSupportCount,
       pendingSupportCount,
       onboardingPending,
@@ -454,6 +466,18 @@ export class SupportService {
         hostelId,
         status: ["open", "in_progress"],
         workflow: "resident_report",
+      }),
+      this.adminSupportRepository.count({
+        organizationId,
+        hostelId,
+        status: ["open", "in_progress"],
+        workflow: "visitor_request",
+      }),
+      this.adminSupportRepository.count({
+        organizationId,
+        hostelId,
+        status: ["open", "in_progress"],
+        workflow: "gate_pass_request",
       }),
       this.adminSupportRepository.count({
         organizationId,
@@ -520,6 +544,30 @@ export class SupportService {
         count: residentReportCount,
         href: "/admin/alerts?queue=resident-reports",
         ctaLabel: "Review reports",
+      })
+    }
+
+    if (visitorRequestCount > 0) {
+      alerts.push({
+        id: "support.visitor_requests",
+        severity: "medium",
+        title: "Visitor approvals waiting",
+        description: "Residents have registered visitors that need staff approval before entry.",
+        count: visitorRequestCount,
+        href: "/admin/alerts?queue=visitors",
+        ctaLabel: "Review visitors",
+      })
+    }
+
+    if (gatePassRequestCount > 0) {
+      alerts.push({
+        id: "support.gate_pass_requests",
+        severity: "medium",
+        title: "Gate pass approvals waiting",
+        description: "Residents have temporary check-out requests that need approval.",
+        count: gatePassRequestCount,
+        href: "/admin/alerts?queue=gate-pass",
+        ctaLabel: "Review gate passes",
       })
     }
 
@@ -599,11 +647,11 @@ export class SupportService {
       alerts.push({
         id: "capacity.low",
         severity: vacancy.available_beds <= 0 ? "critical" : "high",
-        title: vacancy.available_beds <= 0 ? "No student vacancy" : "Capacity risk",
-        description: `Only ${vacancy.available_beds} student vacancies are currently available after occupancy.`,
+        title: vacancy.available_beds <= 0 ? "No available beds" : "Capacity risk",
+        description: `Only ${vacancy.available_beds} bed${vacancy.available_beds === 1 ? "" : "s"} are currently available after occupancy.`,
         count: vacancy.available_beds,
-        href: "/admin/vacancy",
-        ctaLabel: "Check vacancy",
+        href: "/admin/residents",
+        ctaLabel: "Review residents",
       })
     }
 
@@ -712,9 +760,7 @@ export class SupportService {
       throw badRequest("Organization setup is required before support requests can be created.")
     }
 
-    const isAdmin = context.roles.some((role) =>
-      (ADMIN_PORTAL_ROLES as readonly string[]).includes(role)
-    )
+    const isAdmin = anyRoleHasPermission(context.roles, "residents.manage")
 
     if (isAdmin) {
       const hostelId = this.authService.resolveHostelScope(
@@ -1005,6 +1051,17 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
           "Staff can re-check vacancy and assign another room if needed.",
         ],
       }
+    case "gate_pass":
+      return {
+        ...shared,
+        title: "Gate pass tracking",
+        summary: "Staff will review the temporary check-out request and log return after verification.",
+        steps: [
+          "Include check-out time, expected return time, purpose, and parent/guardian confirmation.",
+          "Wait for staff approval before leaving hostel premises.",
+          "Ask staff to close the request after return check-in is verified.",
+        ],
+      }
     case "lost_found":
       return {
         ...shared,
@@ -1036,6 +1093,17 @@ export function buildRecoveryGuidance(category: SupportCategory): RecoveryGuidan
           "Describe the location and immediate risk clearly.",
           "Contact hostel staff directly if urgent action is needed.",
           "Staff may publish a notice once the wording is safe for all residents.",
+        ],
+      }
+    case "visitor":
+      return {
+        ...shared,
+        title: "Visitor approval tracking",
+        summary: "Staff will review visitor details before approving entry.",
+        steps: [
+          "Include visitor name, phone number, relationship, purpose, and visit time.",
+          "Wait for staff approval before asking the visitor to enter.",
+          "Staff should verify the visitor at entry and record arrival/departure in the office log.",
         ],
       }
     case "account":

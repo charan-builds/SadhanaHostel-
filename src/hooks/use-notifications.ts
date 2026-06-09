@@ -8,6 +8,7 @@ import type {
   MarkAllNotificationsReadInput,
   MarkNotificationReadInput,
   NotificationListInput,
+  ArchiveNotificationInput,
 } from "@/validations/notification.validation"
 
 export function useNotifications(params: NotificationListInput | undefined) {
@@ -59,6 +60,28 @@ export function useMarkAllNotificationsRead() {
         queryKey: queryKeys.notifications.all({
           organizationId: input.organizationId,
           hostelId: input.hostelId,
+        }),
+      })
+    },
+  })
+}
+
+export function useArchiveNotification() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      notificationId,
+      input,
+    }: {
+      notificationId: string
+      input: ArchiveNotificationInput
+    }) => notificationsSdk.archive(notificationId, input),
+    onSuccess: (notification) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all({
+          organizationId: notification.organization_id,
+          hostelId: notification.hostel_id,
         }),
       })
     },

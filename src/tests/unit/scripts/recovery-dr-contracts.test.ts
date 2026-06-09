@@ -25,6 +25,7 @@ const manualValidation = readFileSync(
 )
 const restoreDb = readFileSync("scripts/recovery/restore-db.sh", "utf8")
 const restoreStorage = readFileSync("scripts/recovery/restore-storage.sh", "utf8")
+const drill = readFileSync("scripts/recovery/disaster-recovery-drill.ts", "utf8")
 const packageJson = readFileSync("package.json", "utf8")
 
 describe("DR recovery script contracts", () => {
@@ -90,5 +91,10 @@ describe("DR recovery script contracts", () => {
     expect(manualValidation).toMatch(/paid_invoice_payment_total_mismatch/)
     expect(manualValidation).toMatch(/verifySignedUrlAccess/)
     expect(manualValidation).toMatch(/goNoGo/)
+  })
+
+  it("runs storage validation as part of the combined DR drill", () => {
+    expect(drill).toMatch(/name:\s*"storage-validation"/)
+    expect(drill).toMatch(/recovery:storage-validation/)
   })
 })

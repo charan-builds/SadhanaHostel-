@@ -34,6 +34,14 @@ export function useCreateLeave() {
   })
 }
 
+export function useLeaveSettings(organizationId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.leaves.settings({ organizationId }),
+    queryFn: () => leavesSdk.settings({ organizationId: String(organizationId) }),
+    enabled: Boolean(organizationId),
+  })
+}
+
 export function useReviewLeave(action: "approve" | "reject") {
   const queryClient = useQueryClient()
 

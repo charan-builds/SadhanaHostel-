@@ -80,6 +80,7 @@ export function WorkflowStatus({
         className={cn("rounded-xl border p-4 shadow-soft", styles.container, className)}
         role={role}
         aria-live={tone === "danger" ? "assertive" : "polite"}
+        aria-atomic="true"
       >
         <div className="flex gap-3">
           <span

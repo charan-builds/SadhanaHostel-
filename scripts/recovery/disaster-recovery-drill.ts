@@ -26,6 +26,12 @@ const steps: DrillStep[] = [
     args: ["run", "recovery:restore-validation"],
     requiredEnv: ["RESTORE_DATABASE_URL"],
   },
+  {
+    name: "storage-validation",
+    command: "npm",
+    args: ["run", "recovery:storage-validation"],
+    requiredEnv: [],
+  },
 ]
 
 async function main() {

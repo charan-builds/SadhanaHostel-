@@ -1,22 +1,11 @@
+import { removedRoomManagementRoute } from "@/lib/rooms/removed-room-management"
+
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  return removedRoomManagementResponse()
+export async function GET(request: Request) {
+  return removedRoomManagementRoute(request, "rooms.removed.list")
 }
 
-export async function POST() {
-  return removedRoomManagementResponse()
-}
-
-function removedRoomManagementResponse() {
-  return Response.json(
-    {
-      success: false,
-      error: {
-        code: "ROOM_MANAGEMENT_REMOVED",
-        message: "Room management has been permanently removed from this launch.",
-      },
-    },
-    { status: 410 }
-  )
+export async function POST(request: Request) {
+  return removedRoomManagementRoute(request, "rooms.removed.create")
 }

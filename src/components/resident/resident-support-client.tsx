@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useSearchParams } from "next/navigation"
-import { AlertTriangle, CheckCircle2, Clock3, Loader2, MessageCircle, RotateCcw, Send, ShieldCheck, Wrench, type LucideIcon } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clock3, DoorOpen, Loader2, MessageCircle, RotateCcw, Send, ShieldCheck, UserRoundCheck, Wrench, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTableShell } from "@/components/shared/data-table-shell"
@@ -26,6 +26,11 @@ import { useCurrentResident, useCreateSupportRequest, useSupportRequests } from 
 import { createRequestId } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
+import {
+  buildComplaintSlaInsight,
+  getComplaintPriorityLabel,
+  type ComplaintSlaInsight,
+} from "@/lib/support/complaint-insights"
 import type { SupportRequestCreateInput } from "@/validations/support.validation"
 
 const categories = [
@@ -34,9 +39,11 @@ const categories = [
   "invite",
   "upload",
   "room",
+  "gate_pass",
   "lost_found",
   "maintenance",
   "safety",
+  "visitor",
   "account",
   "session",
   "general",
@@ -126,7 +133,7 @@ export function ResidentSupportClient() {
         priority,
         subject,
         description,
-        workflow: isResidentReportCategory(category) ? "resident_report" : category,
+        workflow: workflowForCategory(category),
         idempotencyKey,
       })
 
@@ -385,25 +392,34 @@ export function ResidentSupportClient() {
           </div>
         ) : (
           <div className="divide-y">
-            {requests.data?.data.map((request) => (
-              <article key={request.id} className="grid gap-2 p-4 md:grid-cols-[1fr_auto]">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold">{request.subject}</h3>
-                    <StatusBadge status={request.status} />
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {humanizeEnum(request.category)} · {humanizeEnum(request.priority)} · {formatDateTime(request.created_at)}
-                  </p>
-                  {request.resolution_notes ? (
-                    <p className="mt-2 rounded-lg bg-muted/40 p-2 text-sm">
-                      {request.resolution_notes}
+            {requests.data?.data.map((request) => {
+              const slaInsight = buildComplaintSlaInsight(request)
+
+              return (
+                <article key={request.id} className="grid gap-2 p-4 md:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold">{request.subject}</h3>
+                      <StatusBadge status={request.status} />
+                      <ComplaintSlaPill insight={slaInsight} />
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {humanizeEnum(request.category)} · {humanizeEnum(request.priority)} · {getComplaintPriorityLabel(request.priority)} · {formatDateTime(request.created_at)}
                     </p>
-                  ) : null}
-                  <SupportRequestTimeline status={request.status} />
-                </div>
-              </article>
-            ))}
+                    {request.resolution_notes ? (
+                      <p className="mt-2 rounded-lg bg-muted/40 p-2 text-sm">
+                        {request.resolution_notes}
+                      </p>
+                    ) : null}
+                    <SupportRequestTimeline
+                      status={request.status}
+                      priority={request.priority}
+                      slaInsight={slaInsight}
+                    />
+                  </div>
+                </article>
+              )
+            })}
           </div>
         )}
       </DataTableShell>
@@ -445,6 +461,20 @@ function SupportCategoryShortcuts({
       icon: AlertTriangle,
     },
     {
+      category: "gate_pass",
+      priority: "medium",
+      title: "Gate pass",
+      description: "Request temporary check-out and expected return approval.",
+      icon: DoorOpen,
+    },
+    {
+      category: "visitor",
+      priority: "medium",
+      title: "Visitor pass",
+      description: "Register a parent, guardian, or approved guest visit.",
+      icon: UserRoundCheck,
+    },
+    {
       category: "lost_found",
       priority: "medium",
       title: "Lost / found",
@@ -479,7 +509,15 @@ function SupportCategoryShortcuts({
   )
 }
 
-function SupportRequestTimeline({ status }: { status: string }) {
+function SupportRequestTimeline({
+  status,
+  priority,
+  slaInsight,
+}: {
+  status: string
+  priority: Priority
+  slaInsight: ComplaintSlaInsight
+}) {
   const steps = [
     { key: "open", label: "Submitted", icon: Send },
     { key: "in_progress", label: "Staff reviewing", icon: Clock3 },
@@ -497,7 +535,9 @@ function SupportRequestTimeline({ status }: { status: string }) {
     <div className="mt-3 grid gap-2 rounded-lg border bg-background/70 p-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-semibold uppercase text-muted-foreground">Request timeline</p>
-        <p className="text-xs text-muted-foreground">{explanation.window}</p>
+        <p className="text-xs text-muted-foreground">
+          {slaInsight.label} · {explanation.window}
+        </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-4">
         {steps.map((step, index) => {
@@ -515,9 +555,44 @@ function SupportRequestTimeline({ status }: { status: string }) {
           )
         })}
       </div>
+      <div className={slaSummaryClass(slaInsight.tone)}>
+        <Clock3 className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <div>
+          <p className="font-medium">
+            {getComplaintPriorityLabel(priority)} response target
+          </p>
+          <p className="mt-1">{slaInsight.description}</p>
+        </div>
+      </div>
       <p className="text-xs leading-5 text-muted-foreground">{explanation.message}</p>
     </div>
   )
+}
+
+function ComplaintSlaPill({ insight }: { insight: ComplaintSlaInsight }) {
+  return <span className={slaPillClass(insight.tone)}>{insight.label}</span>
+}
+
+function slaPillClass(tone: ComplaintSlaInsight["tone"]) {
+  return {
+    success: "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800",
+    warning: "rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900",
+    critical: "rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive",
+    muted: "rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground",
+  }[tone]
+}
+
+function slaSummaryClass(tone: ComplaintSlaInsight["tone"]) {
+  const base = "flex gap-2 rounded-lg border p-2 text-xs leading-5"
+
+  return `${base} ${
+    {
+      success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      warning: "border-amber-200 bg-amber-50 text-amber-950",
+      critical: "border-destructive/25 bg-destructive/10 text-destructive",
+      muted: "border-border bg-muted/40 text-muted-foreground",
+    }[tone]
+  }`
 }
 
 function getSupportStatusExplanation(status: string) {
@@ -559,9 +634,11 @@ function defaultSubject(category: Category) {
     invite: "Invite access needed",
     upload: "Upload retry needed",
     room: "Hostel stay issue",
+    gate_pass: "Gate pass approval request",
     lost_found: "Lost or found item report",
     maintenance: "Maintenance issue report",
     safety: "Safety issue report",
+    visitor: "Visitor approval request",
     account: "Account access issue",
     session: "Session recovery needed",
     general: "Support request",
@@ -577,9 +654,11 @@ function descriptionPlaceholder(category: Category) {
     invite: "Example: My invite link expired before I completed activation.",
     upload: "Example: The screenshot upload failed on mobile even after retrying.",
     room: "Example: I need help with a hostel stay detail shown in the portal.",
+    gate_pass: "Example: I need to go out on Sunday from 10 am to 2 pm. Purpose: college work. Parent informed: yes.",
     lost_found: "Example: I found a black wallet near the dining area at 8 pm.",
     maintenance: "Example: The fan in room 204 is not working since this morning.",
     safety: "Example: The staircase light near the second floor is not working at night.",
+    visitor: "Example: My father will visit on Sunday at 10 am. Name: Ramesh, phone: 9xxxxxxxxx, purpose: admission documents.",
     account: "Example: I can log in, but my resident profile is not linked correctly.",
     session: "Example: My login keeps redirecting back to the login page.",
     general: "Example: I need help with a hostel portal issue.",
@@ -590,4 +669,20 @@ function descriptionPlaceholder(category: Category) {
 
 function isResidentReportCategory(category: Category) {
   return (residentReportCategories as readonly string[]).includes(category)
+}
+
+function workflowForCategory(category: Category) {
+  if (isResidentReportCategory(category)) {
+    return "resident_report"
+  }
+
+  if (category === "visitor") {
+    return "visitor_request"
+  }
+
+  if (category === "gate_pass") {
+    return "gate_pass_request"
+  }
+
+  return category
 }

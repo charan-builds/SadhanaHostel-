@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock3,
   Copy,
   KeyRound,
   Loader2,
@@ -39,6 +40,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
 import {
+  buildComplaintSlaInsight,
+  getComplaintPriorityLabel,
+  type ComplaintSlaInsight,
+} from "@/lib/support/complaint-insights"
+import {
   useOperationalAlerts,
   useApproveResidentPasswordResetRequest,
   usePublishSupportRequestNotice,
@@ -60,6 +66,8 @@ export function AdminOperationalAlertsClient({
   const passwordResetQueue =
     passwordResetOnly || searchParams.get("queue") === "password-resets"
   const residentReportQueue = searchParams.get("queue") === "resident-reports"
+  const visitorQueue = searchParams.get("queue") === "visitors"
+  const gatePassQueue = searchParams.get("queue") === "gate-pass"
   const [passwordResetResult, setPasswordResetResult] =
     useState<SupportPasswordResetApprovalResult | null>(null)
   const alerts = useOperationalAlerts({
@@ -74,6 +82,10 @@ export function AdminOperationalAlertsClient({
       ? "resident_password_reset"
       : residentReportQueue
         ? "resident_report"
+        : visitorQueue
+          ? "visitor_request"
+          : gatePassQueue
+            ? "gate_pass_request"
         : undefined,
     page: 1,
     pageSize: 50,
@@ -124,6 +136,69 @@ export function AdminOperationalAlertsClient({
     }
   }
 
+  async function approveVisitorRequest(requestId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await updateRequest.mutateAsync({
+        organizationId,
+        requestId,
+        status: "resolved",
+        resolutionNotes:
+          "Visitor approved. Staff should verify the visitor at entry and record arrival/departure notes in the office log.",
+      })
+      await requests.refetch()
+      await alerts.refetch()
+      toast.success("Visitor request approved.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to approve visitor request.")
+    }
+  }
+
+  async function approveGatePassRequest(requestId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await updateRequest.mutateAsync({
+        organizationId,
+        requestId,
+        status: "resolved",
+        resolutionNotes:
+          "Gate pass approved. Staff should record check-out time at exit and close this request after the resident returns.",
+      })
+      await requests.refetch()
+      await alerts.refetch()
+      toast.success("Gate pass approved.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to approve gate pass.")
+    }
+  }
+
+  async function closeGatePassRequest(requestId: string) {
+    if (!organizationId) {
+      return
+    }
+
+    try {
+      await updateRequest.mutateAsync({
+        organizationId,
+        requestId,
+        status: "closed",
+        resolutionNotes:
+          "Resident returned. Gate pass closed after staff check-in verification.",
+      })
+      await requests.refetch()
+      await alerts.refetch()
+      toast.success("Gate pass return logged.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to log gate pass return.")
+    }
+  }
+
   async function publishResidentReport(request: Tables<"support_requests">) {
     if (!organizationId) {
       return
@@ -161,6 +236,10 @@ export function AdminOperationalAlertsClient({
             ? "Password Reset Requests"
             : residentReportQueue
               ? "Resident Reports"
+              : visitorQueue
+                ? "Visitor Approvals"
+                : gatePassQueue
+                  ? "Gate Pass Approvals"
               : "Operational Alerts"
         }
         description={
@@ -168,7 +247,11 @@ export function AdminOperationalAlertsClient({
             ? "Verify resident identity, generate a temporary password, and share it securely."
             : residentReportQueue
               ? "Evaluate lost/found, maintenance, and safety reports before publishing notices."
-            : "Recovery queue for blocked residents, payment reviews, profile issues, capacity risk, and missing configuration."
+              : visitorQueue
+                ? "Review resident visitor registrations, approve safe visits, and keep an office entry log."
+                : gatePassQueue
+                  ? "Review temporary check-out requests, approve passes, and log resident return."
+              : "Recovery queue for blocked residents, payment reviews, profile issues, capacity risk, and missing configuration."
         }
       />
 
@@ -185,8 +268,8 @@ export function AdminOperationalAlertsClient({
           <div className="rounded-xl border bg-background p-5 text-sm text-muted-foreground">
             Loading alerts...
           </div>
-        ) : visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue).length ? (
-          visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue).map((alert) => (
+        ) : visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue, visitorQueue, gatePassQueue).length ? (
+          visibleAlerts(alerts.data, passwordResetQueue, residentReportQueue, visitorQueue, gatePassQueue).map((alert) => (
             <AlertCard key={alert.id} alert={alert} />
           ))
         ) : (
@@ -196,10 +279,16 @@ export function AdminOperationalAlertsClient({
               ? "No resident password reset requests are currently waiting."
               : residentReportQueue
                 ? "No resident reports are currently waiting for review."
+                : visitorQueue
+                  ? "No visitor approvals are currently waiting."
+                  : gatePassQueue
+                    ? "No gate pass approvals are currently waiting."
               : "No operational blockers are currently detected."}
           </div>
         )}
       </section>
+
+      {gatePassQueue ? <GatePassWorkflowGuide /> : null}
 
       <DataTableShell
         title={
@@ -207,6 +296,10 @@ export function AdminOperationalAlertsClient({
             ? "Resident password reset queue"
             : residentReportQueue
               ? "Resident report review queue"
+              : visitorQueue
+                ? "Visitor approval queue"
+                : gatePassQueue
+                  ? "Gate pass approval queue"
               : "Support recovery queue"
         }
         description={
@@ -214,7 +307,11 @@ export function AdminOperationalAlertsClient({
             ? "Only resident password reset requests are shown here."
             : residentReportQueue
               ? "Review resident-submitted lost/found and issue reports, then publish safe items as notices."
-            : "Track and resolve resident support requests without opening Supabase."
+              : visitorQueue
+                ? "Approve visitor registrations and use resolution notes as the entry log handoff."
+                : gatePassQueue
+                  ? "Approve temporary check-out requests and close them after resident return."
+              : "Track and resolve resident support requests without opening Supabase."
         }
         empty={
           requests.data?.data.length === 0 ? (
@@ -224,6 +321,10 @@ export function AdminOperationalAlertsClient({
                   ? "No password reset requests"
                   : residentReportQueue
                     ? "No resident reports"
+                    : visitorQueue
+                      ? "No visitor requests"
+                      : gatePassQueue
+                        ? "No gate pass requests"
                     : "No recovery requests"
               }
               message={
@@ -231,6 +332,10 @@ export function AdminOperationalAlertsClient({
                   ? "When an existing resident asks admin to reset their password, the request will appear here."
                   : residentReportQueue
                     ? "Lost/found, maintenance, and safety reports will appear here after residents submit them."
+                    : visitorQueue
+                      ? "Visitor registrations will appear here after residents submit visitor pass requests."
+                      : gatePassQueue
+                        ? "Gate pass requests will appear here after residents submit temporary check-out requests."
                   : "When residents get blocked by profile, uploads, payments, or account access, their requests will appear here."
               }
             />
@@ -241,36 +346,96 @@ export function AdminOperationalAlertsClient({
           <div className="p-5 text-sm text-muted-foreground">Loading support queue...</div>
         ) : (
           <div className="divide-y">
-            {requests.data?.data.map((request) => (
-              <article key={request.id} className="grid gap-4 p-4 xl:grid-cols-[1fr_18rem]">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-semibold">{request.subject}</h2>
-                    <StatusBadge status={request.status} />
-                    <Badge variant={request.priority === "urgent" ? "destructive" : "secondary"}>
-                      {humanizeEnum(request.priority)}
-                    </Badge>
-                    {isResidentPasswordResetRequest(request) &&
-                    !hasActiveResidentPortalAccount(request) ? (
-                      <Badge variant="outline">Invite required</Badge>
-                    ) : null}
-                    {isResidentReportRequest(request) ? (
-                      <Badge variant="outline">
-                        {hasPublishedNotice(request) ? "Notice published" : "Resident report"}
+            {requests.data?.data.map((request) => {
+              const slaInsight = buildComplaintSlaInsight(request)
+
+              return (
+                <article key={request.id} className="grid gap-4 p-4 xl:grid-cols-[1fr_18rem]">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-semibold">{request.subject}</h2>
+                      <StatusBadge status={request.status} />
+                      <Badge variant={request.priority === "urgent" ? "destructive" : "secondary"}>
+                        {humanizeEnum(request.priority)}
                       </Badge>
+                      <ComplaintSlaBadge insight={slaInsight} />
+                      {slaInsight.requiresEscalation ? (
+                        <Badge variant="destructive">Escalate</Badge>
+                      ) : null}
+                      {isResidentPasswordResetRequest(request) &&
+                      !hasActiveResidentPortalAccount(request) ? (
+                        <Badge variant="outline">Invite required</Badge>
+                      ) : null}
+                      {isResidentReportRequest(request) ? (
+                        <Badge variant="outline">
+                          {hasPublishedNotice(request) ? "Notice published" : "Resident report"}
+                        </Badge>
+                      ) : null}
+                      {isVisitorRequest(request) ? (
+                        <Badge variant="outline">Visitor request</Badge>
+                      ) : null}
+                      {isGatePassRequest(request) ? (
+                        <Badge variant="outline">Gate pass</Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {humanizeEnum(request.category)} · {getComplaintPriorityLabel(request.priority)} · {formatDateTime(request.created_at)}
+                    </p>
+                    <p className="mt-3 text-sm leading-6">{request.description}</p>
+                    <ComplaintSlaPanel insight={slaInsight} />
+                    {request.resolution_notes ? (
+                      <div className="mt-3 rounded-lg bg-muted/40 p-3 text-sm">
+                        {request.resolution_notes}
+                      </div>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {humanizeEnum(request.category)} · {formatDateTime(request.created_at)}
-                  </p>
-                  <p className="mt-3 text-sm leading-6">{request.description}</p>
-                  {request.resolution_notes ? (
-                    <div className="mt-3 rounded-lg bg-muted/40 p-3 text-sm">
-                      {request.resolution_notes}
-                    </div>
+                  <div className="grid content-start gap-3">
+                  {request.status === "open" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={slaInsight.requiresEscalation ? "default" : "outline"}
+                      disabled={updateRequest.isPending}
+                      onClick={() => void setStatus(request.id, "in_progress")}
+                    >
+                      <Clock3 className="size-3.5" aria-hidden="true" />
+                      Start review
+                    </Button>
                   ) : null}
-                </div>
-                <div className="grid content-start gap-3">
+                  {isVisitorRequest(request) && request.status !== "resolved" && request.status !== "closed" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={updateRequest.isPending}
+                      onClick={() => void approveVisitorRequest(request.id)}
+                    >
+                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                      Approve visitor
+                    </Button>
+                  ) : null}
+                  {isGatePassRequest(request) && request.status !== "resolved" && request.status !== "closed" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={updateRequest.isPending}
+                      onClick={() => void approveGatePassRequest(request.id)}
+                    >
+                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                      Approve gate pass
+                    </Button>
+                  ) : null}
+                  {isGatePassRequest(request) && request.status === "resolved" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={updateRequest.isPending}
+                      onClick={() => void closeGatePassRequest(request.id)}
+                    >
+                      <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                      Mark returned
+                    </Button>
+                  ) : null}
                   {isResidentPasswordResetRequest(request) &&
                   hasActiveResidentPortalAccount(request) ? (
                     <Button
@@ -349,9 +514,10 @@ export function AdminOperationalAlertsClient({
                     className="min-h-24 resize-none text-xs"
                     aria-label="Resolution guidance"
                   />
-                </div>
-              </article>
-            ))}
+                  </div>
+                </article>
+              )
+            })}
           </div>
         )}
       </DataTableShell>
@@ -362,6 +528,44 @@ export function AdminOperationalAlertsClient({
       />
     </div>
   )
+}
+
+function ComplaintSlaBadge({ insight }: { insight: ComplaintSlaInsight }) {
+  return (
+    <Badge variant={insight.tone === "critical" ? "destructive" : "outline"}>
+      {insight.label}
+    </Badge>
+  )
+}
+
+function ComplaintSlaPanel({ insight }: { insight: ComplaintSlaInsight }) {
+  return (
+    <div className={complaintSlaPanelClass(insight.tone)}>
+      <Clock3 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-normal">
+          {insight.requiresEscalation ? "Escalation required" : "SLA tracking"}
+        </p>
+        <p className="mt-1 text-sm leading-6">{insight.description}</p>
+        {insight.dueAt ? (
+          <p className="mt-1 text-xs opacity-80">Target response: {formatDateTime(insight.dueAt)}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function complaintSlaPanelClass(tone: ComplaintSlaInsight["tone"]) {
+  const base = "mt-3 flex gap-3 rounded-lg border p-3"
+
+  return `${base} ${
+    {
+      success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      warning: "border-amber-200 bg-amber-50 text-amber-950",
+      critical: "border-destructive/25 bg-destructive/10 text-destructive",
+      muted: "border-border bg-muted/40 text-muted-foreground",
+    }[tone]
+  }`
 }
 
 function PasswordResetResultDialog({
@@ -467,6 +671,54 @@ function PasswordResetResultDialog({
   )
 }
 
+function GatePassWorkflowGuide() {
+  const steps = [
+    {
+      title: "Review request",
+      description: "Check purpose, expected check-out time, return time, and resident contact.",
+    },
+    {
+      title: "Approve pass",
+      description: "Use Approve gate pass after the hostel office accepts the temporary check-out.",
+    },
+    {
+      title: "Record check-out time",
+      description: "Staff should note actual exit time in the office log before the resident leaves.",
+    },
+    {
+      title: "Mark returned after check-in",
+      description: "Close the request only after staff verify the resident has returned.",
+    },
+  ]
+
+  return (
+    <section className="rounded-xl border bg-card p-4 shadow-soft">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Gate pass workflow</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Use this queue as the daily temporary check-out and return handoff.
+          </p>
+        </div>
+        <Badge variant="secondary">Request to return</Badge>
+      </div>
+      <ol className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step, index) => (
+          <li key={step.title} className="rounded-lg border bg-background/70 p-3">
+            <div className="flex items-center gap-2">
+              <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                {index + 1}
+              </span>
+              <h3 className="text-sm font-semibold">{step.title}</h3>
+            </div>
+            <p className="mt-2 text-sm leading-5 text-muted-foreground">{step.description}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
 function AlertCard({ alert }: { alert: OperationalAlert }) {
   const severityClass = {
     critical: "border-destructive/40 bg-destructive/5 text-destructive",
@@ -503,6 +755,20 @@ function isResidentReportRequest(request: { category: string; metadata: unknown 
   )
 }
 
+function isVisitorRequest(request: { category: string; metadata: unknown }) {
+  return (
+    request.category === "visitor" ||
+    recordFromUnknown(request.metadata).workflow === "visitor_request"
+  )
+}
+
+function isGatePassRequest(request: { category: string; metadata: unknown }) {
+  return (
+    request.category === "gate_pass" ||
+    recordFromUnknown(request.metadata).workflow === "gate_pass_request"
+  )
+}
+
 function hasPublishedNotice(request: { metadata: unknown }) {
   const publishedNoticeId = recordFromUnknown(request.metadata).publishedNoticeId
 
@@ -516,7 +782,9 @@ function hasActiveResidentPortalAccount(request: { metadata: unknown }) {
 function visibleAlerts(
   alerts: OperationalAlert[] | undefined,
   passwordResetQueue: boolean,
-  residentReportQueue: boolean
+  residentReportQueue: boolean,
+  visitorQueue: boolean,
+  gatePassQueue: boolean
 ) {
   const source = alerts ?? []
 
@@ -526,6 +794,14 @@ function visibleAlerts(
 
   if (residentReportQueue) {
     return source.filter((alert) => alert.id === "support.resident_reports")
+  }
+
+  if (visitorQueue) {
+    return source.filter((alert) => alert.id === "support.visitor_requests")
+  }
+
+  if (gatePassQueue) {
+    return source.filter((alert) => alert.id === "support.gate_pass_requests")
   }
 
   return source

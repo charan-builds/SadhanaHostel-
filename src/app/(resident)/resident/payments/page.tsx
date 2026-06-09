@@ -1,5 +1,5 @@
-import { ResidentPaymentsClient } from "@/components/resident/resident-payments-client"
+import { ResidentPaymentCenterClient } from "@/components/resident/resident-payment-center-client"
 
 export default function ResidentPaymentsPage() {
-  return <ResidentPaymentsClient />
+  return <ResidentPaymentCenterClient />
 }

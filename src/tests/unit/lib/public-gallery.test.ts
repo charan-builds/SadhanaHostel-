@@ -71,6 +71,9 @@ describe("public gallery image selection", () => {
     expect(formatGalleryCategory("logo")).toBe("Logo")
     expect(formatGalleryCategory("student-room")).toBe("Student rooms")
     expect(formatGalleryCategory("employee-room")).toBe("Employee rooms")
+    expect(formatGalleryCategory("employee-room:00000000-0000-4000-8000-000000000001")).toBe(
+      "Employee rooms"
+    )
     expect(formatGalleryCategory("open-space-terrace")).toBe("Open space / Terrace")
     expect(formatGalleryCategory("exterior-surroundings")).toBe("Exterior / Surroundings")
   })

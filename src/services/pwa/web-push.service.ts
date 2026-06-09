@@ -68,22 +68,31 @@ export class WebPushService {
 
       if (result.status === "sent") {
         sent += 1
-        await this.pushSubscriptionsRepository.update(subscription.id, {
-          last_sent_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-          failure_count: 0,
+        await this.pushSubscriptionsRepository.update({
+          subscriptionId: subscription.id,
+          organizationId: notification.organization_id,
+          values: {
+            last_sent_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            failure_count: 0,
+          },
         })
         continue
       }
 
       failed += 1
 
-      await this.pushSubscriptionsRepository.update(subscription.id, {
-        failure_count: subscription.failure_count + 1,
+      await this.pushSubscriptionsRepository.update({
+        subscriptionId: subscription.id,
+        organizationId: notification.organization_id,
+        values: {
+          failure_count: subscription.failure_count + 1,
+        },
       })
 
       if (result.shouldRevoke) {
         await this.pushSubscriptionsRepository.revokeEndpoint({
+          organizationId: notification.organization_id,
           endpoint: subscription.endpoint,
         })
       }

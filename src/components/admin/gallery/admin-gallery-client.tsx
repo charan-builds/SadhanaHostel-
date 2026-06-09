@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { BrandMark } from "@/components/shared/brand-mark"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { EmployeeAccommodationGalleryManager } from "@/components/admin/gallery/employee-accommodation-gallery-manager"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
 import { Button } from "@/components/ui/button"
@@ -159,6 +160,7 @@ function matchesGallerySlot(item: SlotGalleryItem, slot: GallerySlot) {
 
     return (
       category === slotAlias ||
+      category.startsWith(`${slotAlias}-`) ||
       title === slotAlias ||
       title.startsWith(`${slotAlias}-`)
     )
@@ -370,6 +372,13 @@ export function AdminGalleryClient() {
           Gallery uploads are connected to the public website photo source, so images uploaded here
           are the same images the public pages read.
         </div>
+      ) : null}
+
+      {galleryOrganizationId ? (
+        <EmployeeAccommodationGalleryManager
+          organizationId={galleryOrganizationId}
+          hostelId={galleryHostelId}
+        />
       ) : null}
 
       <Card>

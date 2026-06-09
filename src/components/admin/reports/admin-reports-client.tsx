@@ -4,6 +4,10 @@ import { useState } from "react"
 import { BarChart3, CalendarDays, CreditCard, Download, FileText, IndianRupee, Loader2, Users, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import {
+  MonthwiseDateRangeControls,
+  type MonthwiseDateBasis,
+} from "@/components/admin/analytics/monthwise-date-range-controls"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
 import { WorkflowStatus } from "@/components/system/workflow-status"
@@ -18,18 +22,15 @@ import {
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
 import { formatCurrency } from "@/lib/format"
-import { useDashboardAnalytics } from "@/hooks"
+import {
+  getMonthwiseQuickFilterRange,
+  type MonthwiseDateRange,
+  type MonthwiseQuickFilter,
+} from "@/lib/monthwise-analytics"
+import { useOwnerAnalytics } from "@/hooks"
+import type { OwnerAnalytics } from "@/sdk"
 import { reportsSdk } from "@/sdk/reports.sdk"
 import type { ReportType } from "@/validations/report.validation"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 const reportTypes: Array<{
   type: ReportType
@@ -78,19 +79,26 @@ const reportTypes: Array<{
 export function AdminReportsClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
-  const analyticsQuery = useDashboardAnalytics({
-    organizationId: organizationId ?? "",
-    hostelId,
-  })
   const [downloading, setDownloading] = useState<ReportType | null>(null)
-  const [fromDate, setFromDate] = useState(() => monthStartInput())
-  const [toDate, setToDate] = useState(() => todayInput())
-  const [dateBasis, setDateBasis] = useState<"revenue" | "activity">("revenue")
+  const [quickFilter, setQuickFilter] =
+    useState<MonthwiseQuickFilter>("this-month")
+  const [range, setRange] = useState<MonthwiseDateRange>(() =>
+    getMonthwiseQuickFilterRange("this-month")
+  )
+  const [dateBasis, setDateBasis] = useState<MonthwiseDateBasis>("revenue")
   const [reportOutcome, setReportOutcome] = useState<{
     tone: "success" | "danger" | "warning"
     title: string
     description: string
   } | null>(null)
+  const fromDate = range.fromDate
+  const toDate = range.toDate
+  const analyticsQuery = useOwnerAnalytics({
+    organizationId: organizationId ?? "",
+    hostelId,
+    fromDate,
+    toDate,
+  })
 
   async function downloadReport(type: ReportType) {
     if (!organizationId) {
@@ -172,18 +180,18 @@ export function AdminReportsClient() {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-4">
-          <ReportMetric label="Residents" value={metrics?.totalResidents ?? 0} />
+          <ReportMetric label="Residents" value={metrics?.summary.totalResidents ?? 0} />
           <ReportMetric
             label="Active residents"
-            value={metrics?.residentLifecycle.activeResidents ?? 0}
+            value={metrics?.summary.activeResidents ?? 0}
           />
           <ReportMetric
-            label="Monthly revenue"
-            value={formatCurrency(metrics?.finance.monthlyRevenue ?? 0)}
+            label="Selected revenue"
+            value={formatCurrency(metrics?.summary.revenue ?? 0)}
           />
           <ReportMetric
             label="Pending dues"
-            value={formatCurrency(metrics?.finance.pendingDues ?? 0)}
+            value={formatCurrency(metrics?.summary.pendingDues ?? 0)}
           />
         </div>
       )}
@@ -196,77 +204,17 @@ export function AdminReportsClient() {
         />
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Report Scope</CardTitle>
-          <CardDescription>
-            Apply one date range and one date basis before exporting any report.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-          <div className="grid gap-2">
-            <Label htmlFor="report-from-date">From</Label>
-            <Input
-              id="report-from-date"
-              type="date"
-              value={fromDate}
-              aria-invalid={invalidDateRange}
-              onChange={(event) => setFromDate(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="report-to-date">To</Label>
-            <Input
-              id="report-to-date"
-              type="date"
-              value={toDate}
-              aria-invalid={invalidDateRange}
-              onChange={(event) => setToDate(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label>Date basis</Label>
-            <Select value={dateBasis} onValueChange={(value) => setDateBasis(value as typeof dateBasis)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="revenue">Revenue date</SelectItem>
-                <SelectItem value="activity">Activity date</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFromDate(todayInput())
-                setToDate(todayInput())
-              }}
-            >
-              Today
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFromDate(monthStartInput())
-                setToDate(todayInput())
-              }}
-            >
-              This month
-            </Button>
-          </div>
-          {invalidDateRange ? (
-            <p className="text-sm text-destructive lg:col-span-4">
-              From date must be on or before To date.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <MonthwiseDateRangeControls
+        title="Report Scope"
+        description="Apply a month or range and one date basis before exporting reports."
+        range={range}
+        quickFilter={quickFilter}
+        onRangeChange={setRange}
+        onQuickFilterChange={setQuickFilter}
+        dateBasis={dateBasis}
+        onDateBasisChange={setDateBasis}
+        invalid={invalidDateRange}
+      />
 
       <Card>
         <CardHeader>
@@ -300,7 +248,7 @@ function ReportExportCard({
   onDownload,
 }: {
   report: (typeof reportTypes)[number]
-  metrics: ReturnType<typeof useDashboardAnalytics>["data"]
+  metrics: OwnerAnalytics | undefined
   downloading: ReportType | null
   disabled: boolean
   onDownload: () => void
@@ -319,7 +267,7 @@ function ReportExportCard({
           <Icon className="size-5" aria-hidden="true" />
         </span>
       </div>
-              <p className="mt-1 text-sm text-muted-foreground">{report.description}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{report.description}</p>
       <div className="mt-4 grid gap-2">
         {preview.map((item) => (
           <div key={item.label} className="flex items-center justify-between gap-3 rounded-lg border bg-background/70 px-3 py-2 text-sm">
@@ -328,19 +276,19 @@ function ReportExportCard({
           </div>
         ))}
       </div>
-              <Button
-                className="mt-4 gap-2"
-                variant="outline"
-                disabled={disabled || Boolean(downloading)}
+      <Button
+        className="mt-4 gap-2"
+        variant="outline"
+        disabled={disabled || Boolean(downloading)}
         onClick={onDownload}
-              >
-                {downloading === report.type ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Download className="size-4" aria-hidden="true" />
-                )}
-                Download CSV
-              </Button>
+      >
+        {downloading === report.type ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Download className="size-4" aria-hidden="true" />
+        )}
+        Download CSV
+      </Button>
     </article>
   )
 }
@@ -361,21 +309,31 @@ function ReportMetric({ label, value }: { label: string; value: string | number 
 
 function getReportPreview(
   type: ReportType,
-  metrics: ReturnType<typeof useDashboardAnalytics>["data"]
+  metrics: OwnerAnalytics | undefined
 ) {
-  const totalResidents = metrics?.totalResidents ?? 0
-  const activeResidents = metrics?.residentLifecycle.activeResidents ?? 0
-  const monthlyRevenue = metrics?.finance.monthlyRevenue ?? 0
-  const pendingDues = metrics?.finance.pendingDues ?? 0
-  const pendingPayments = metrics?.finance.pendingPayments ?? 0
-  const activeLeaves = metrics?.operations.activeLeaves ?? 0
-  const pendingInvites = metrics?.operations.pendingInvites ?? 0
+  const totalResidents = metrics?.summary.totalResidents ?? 0
+  const activeResidents = metrics?.summary.activeResidents ?? 0
+  const selectedRevenue = metrics?.summary.revenue ?? 0
+  const pendingDues = metrics?.summary.pendingDues ?? 0
+  const latestTrend = metrics?.trends.at(-1)
+  const paymentSubmissions = metrics?.trends.reduce(
+    (total, trend) => total + trend.paymentSubmissions,
+    0
+  ) ?? 0
+  const noticeEngagement = metrics?.trends.reduce(
+    (total, trend) => total + trend.noticeEngagement,
+    0
+  ) ?? 0
+  const leaveRequests = metrics?.trends.reduce(
+    (total, trend) => total + trend.leaveRequests,
+    0
+  ) ?? 0
 
   switch (type) {
     case "payments":
       return [
-        { label: "Monthly revenue", value: formatCurrency(monthlyRevenue) },
-        { label: "Pending proofs", value: pendingPayments },
+        { label: "Selected revenue", value: formatCurrency(selectedRevenue) },
+        { label: "Payment submissions", value: paymentSubmissions },
       ]
     case "monthly_fees":
       return [
@@ -385,28 +343,17 @@ function getReportPreview(
     case "invoices":
       return [
         { label: "Invoice basis", value: "Verified payments" },
-        { label: "Queue risk", value: pendingPayments },
+        { label: "Collections", value: latestTrend?.collectionCount ?? 0 },
       ]
     case "residents":
       return [
         { label: "Total residents", value: totalResidents },
-        { label: "Pending invites", value: pendingInvites },
+        { label: "Resident activity", value: latestTrend?.residentActivity ?? 0 },
       ]
     case "leaves":
       return [
-        { label: "Active leaves", value: activeLeaves },
-        { label: "Gate status", value: "Leave queue" },
+        { label: "Leave requests", value: leaveRequests },
+        { label: "Notice engagement", value: noticeEngagement },
       ]
   }
-}
-
-function todayInput() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function monthStartInput() {
-  const date = new Date()
-  date.setUTCDate(1)
-
-  return date.toISOString().slice(0, 10)
 }

@@ -20,7 +20,7 @@ export function RetryState({
         </span>
         <h2 className="mt-4 text-base font-semibold text-foreground">{title}</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">{message}</p>
-        <Button className="mt-5" size="sm" onClick={onRetry}>
+        <Button type="button" className="mt-5" size="sm" onClick={onRetry}>
           <RefreshCcw className="size-4" aria-hidden="true" />
           Retry
         </Button>

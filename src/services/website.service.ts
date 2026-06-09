@@ -14,13 +14,16 @@ import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
 import { WebsiteRepository } from "@/repositories/website.repository"
-import type { Json } from "@/types/database"
+import type { Json, Tables } from "@/types/database"
 import {
   createFacilitySchema,
+  createEmployeeAccommodationRoomSchema,
   createGalleryItemSchema,
+  employeeAccommodationRoomsListSchema,
   facilitiesListSchema,
   galleryListSchema,
   updateFacilitySchema,
+  updateEmployeeAccommodationRoomSchema,
   updateWebsiteSettingSchema,
   deleteGalleryItemSchema,
   uploadGalleryImageSchema,
@@ -47,8 +50,14 @@ export type WebsiteGalleryItemView =
   Awaited<ReturnType<WebsiteRepository["listGallery"]>>["data"][number] & {
     imageUrl: string | null
   }
+export type EmployeeAccommodationRoomView =
+  Awaited<ReturnType<WebsiteRepository["listEmployeeAccommodationRooms"]>>["data"][number] & {
+    imageCategory: string
+    images: WebsiteGalleryItemView[]
+  }
 type GalleryRepositoryItem =
   Awaited<ReturnType<WebsiteRepository["listGallery"]>>["data"][number]
+type GalleryDocument = Pick<Tables<"documents">, "id" | "bucket_name" | "storage_path">
 
 export class WebsiteService {
   private readonly authService: AuthService
@@ -243,6 +252,140 @@ export class WebsiteService {
     return facility
   }
 
+  async listEmployeeAccommodationRooms(input: unknown) {
+    const values = employeeAccommodationRoomsListSchema.parse(input)
+    const tenant = await this.resolvePublicWebsiteTenant(
+      values.organizationId,
+      values.hostelId
+    )
+    const rooms = await this.websiteRepository.listEmployeeAccommodationRooms({
+      ...values,
+      organizationId: tenant.organizationId,
+      hostelId: tenant.hostelId,
+      status: values.status ?? (values.includeHidden ? undefined : "published"),
+      includeHidden: values.includeHidden ?? false,
+    })
+    const roomCategories = rooms.data.map((room) => employeeRoomGalleryCategory(room.id))
+    const galleryRows = await this.listGalleryItemsByCategories({
+      organizationId: tenant.organizationId,
+      hostelId: tenant.hostelId,
+      categories: roomCategories,
+      status: values.includeHidden ? undefined : "published",
+    })
+    const publicDocuments = await this.loadMissingPublicGalleryDocuments(galleryRows)
+    const galleryItems = galleryRows.map((item) =>
+      this.mapGalleryItemView(item, publicDocuments)
+    )
+    const imagesByCategory = new Map<string, WebsiteGalleryItemView[]>()
+
+    for (const item of galleryItems) {
+      const images = imagesByCategory.get(item.category) ?? []
+
+      images.push(item)
+      imagesByCategory.set(item.category, images)
+    }
+
+    return {
+      ...rooms,
+      data: rooms.data.map((room) => {
+        const imageCategory = employeeRoomGalleryCategory(room.id)
+
+        return {
+          ...room,
+          imageCategory,
+          images: imagesByCategory.get(imageCategory) ?? [],
+        }
+      }),
+    }
+  }
+
+  async createEmployeeAccommodationRoom(input: unknown) {
+    const values = createEmployeeAccommodationRoomSchema.parse(input)
+    const context = await this.authService.requirePermission("cms.manage")
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId
+    )
+    const publishedAt =
+      values.status === "published" && values.isVisible ? new Date().toISOString() : null
+    const room = await this.websiteRepository.createEmployeeAccommodationRoom({
+      organization_id: values.organizationId,
+      hostel_id: hostelId,
+      title: values.title,
+      description: values.description,
+      capacity: values.capacity,
+      amenities: values.amenities,
+      sort_order: values.sortOrder,
+      is_visible: values.isVisible,
+      status: values.status,
+      published_at: publishedAt,
+      created_by: context.authUser.id,
+      updated_by: context.authUser.id,
+    })
+
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+
+    return {
+      ...room,
+      imageCategory: employeeRoomGalleryCategory(room.id),
+      images: [],
+    }
+  }
+
+  async updateEmployeeAccommodationRoom(input: unknown) {
+    const values = updateEmployeeAccommodationRoomSchema.parse(input)
+    const context = await this.authService.requirePermission("cms.manage")
+    const existingRoom = await this.websiteRepository.getEmployeeAccommodationRoomById(
+      values.roomId,
+      values.organizationId
+    )
+
+    if (!existingRoom) {
+      throw notFound("Employee accommodation room not found.")
+    }
+
+    this.authService.requireHostelAccess(
+      context,
+      existingRoom.organization_id,
+      existingRoom.hostel_id
+    )
+
+    const hostelId = this.authService.resolveHostelScope(
+      context,
+      values.organizationId,
+      values.hostelId ?? existingRoom.hostel_id ?? undefined
+    )
+    const publishedAt =
+      values.status === "published" && values.isVisible && existingRoom.status !== "published"
+        ? new Date().toISOString()
+        : undefined
+    const room = await this.websiteRepository.updateEmployeeAccommodationRoom(
+      values.roomId,
+      values.organizationId,
+      {
+        hostel_id: hostelId,
+        title: values.title,
+        description: values.description,
+        capacity: values.capacity,
+        amenities: values.amenities,
+        sort_order: values.sortOrder,
+        is_visible: values.isVisible,
+        status: values.status,
+        published_at: publishedAt,
+        updated_by: context.authUser.id,
+      }
+    )
+
+    await invalidateCacheByTag(`tenant:${values.organizationId}:cms`)
+
+    return {
+      ...room,
+      imageCategory: employeeRoomGalleryCategory(room.id),
+      images: [],
+    }
+  }
+
   async listGallery(input: unknown) {
     const values = galleryListSchema.parse(input)
     const tenant = await this.resolvePublicWebsiteTenant(
@@ -260,23 +403,7 @@ export class WebsiteService {
 
     return {
       ...gallery,
-      data: gallery.data.map((item) => {
-        const document = item.document ?? publicDocuments.get(item.document_id) ?? null
-
-        return {
-          ...item,
-          document,
-          imageUrl: document
-            ? versionedPublicUrl(
-                this.uploadsRepository.getPublicUrl(
-                  document.bucket_name,
-                  document.storage_path
-                ),
-                item.updated_at ?? item.created_at
-              )
-            : null,
-        }
-      }),
+      data: gallery.data.map((item) => this.mapGalleryItemView(item, publicDocuments)),
     }
   }
 
@@ -487,6 +614,65 @@ export class WebsiteService {
     }
   }
 
+  private async listGalleryItemsByCategories({
+    organizationId,
+    hostelId,
+    categories,
+    status,
+  }: {
+    organizationId: string
+    hostelId?: string
+    categories: string[]
+    status?: "draft" | "published" | "archived"
+  }) {
+    if (categories.length === 0) {
+      return []
+    }
+
+    const pageSize = 100
+    const items: GalleryRepositoryItem[] = []
+    let page = 1
+    let total = 0
+
+    do {
+      const gallery = await this.websiteRepository.listGallery({
+        organizationId,
+        hostelId,
+        categories,
+        page,
+        pageSize,
+        status,
+      })
+
+      items.push(...gallery.data)
+      total = gallery.meta.total
+      page += 1
+    } while (items.length < total)
+
+    return items
+  }
+
+  private mapGalleryItemView(
+    item: GalleryRepositoryItem,
+    publicDocuments = new Map<string, GalleryDocument>()
+  ): WebsiteGalleryItemView {
+    const document = item.document ?? publicDocuments.get(item.document_id) ?? null
+
+    return {
+      ...item,
+      document,
+      imageUrl: document
+        ? versionedPublicUrl(
+            this.uploadsRepository.getPublicUrl(
+              document.bucket_name,
+              document.storage_path
+            ),
+            item.updated_at ?? item.created_at
+          )
+        : null,
+    }
+  }
+
   private async resolvePublicWebsiteTenant(organizationId?: string, hostelId?: string) {
     const resolvedOrganizationId =
       organizationId || process.env.NEXT_PUBLIC_DEFAULT_ORGANIZATION_ID
@@ -536,4 +722,8 @@ export class WebsiteService {
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("")
   }
+}
+
+export function employeeRoomGalleryCategory(roomId: string) {
+  return `employee-room:${roomId}`
 }

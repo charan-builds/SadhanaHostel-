@@ -1,4 +1,5 @@
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
+import { normalizeDateRange } from "@/lib/date-range"
 
 import {
   createPaginationMeta,
@@ -17,6 +18,8 @@ export type ListLeavesFilters = PaginationParams & {
   hostelId?: string
   residentId?: string
   status?: LeaveStatus
+  fromDate?: string
+  toDate?: string
 }
 
 export class LeavesRepository {
@@ -24,6 +27,7 @@ export class LeavesRepository {
 
   async list(filters: ListLeavesFilters): Promise<PaginatedResult<LeaveRequestRow>> {
     const { page, pageSize, from, to } = normalizePagination(filters)
+    const range = normalizeDateRange(filters)
 
     let query = this.db
       .from("leave_requests")
@@ -42,6 +46,14 @@ export class LeavesRepository {
 
     if (filters.status) {
       query = query.eq("status", filters.status)
+    }
+
+    if (range.fromDate) {
+      query = query.gte("created_at", range.fromDate)
+    }
+
+    if (range.toDate) {
+      query = query.lte("created_at", range.toDate)
     }
 
     const { data, error, count } = await query.range(from, to)

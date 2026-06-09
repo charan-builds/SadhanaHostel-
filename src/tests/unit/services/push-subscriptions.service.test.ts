@@ -106,4 +106,43 @@ describe("PushSubscriptionsService", () => {
     expect(authService.getCurrentContext).not.toHaveBeenCalled()
     expect(pushSubscriptionsRepository.upsert).not.toHaveBeenCalled()
   })
+
+  it("revokes only the authenticated user's current organization subscription", async () => {
+    const service = new PushSubscriptionsService({} as never, {} as never)
+    const context = residentAuthContext()
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(context),
+      requireOrganizationAccess: vi.fn(),
+      resolveHostelScope: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn(),
+    }
+    const pushSubscriptionsRepository = {
+      revokeForUser: vi.fn().mockResolvedValue(1),
+    }
+
+    Object.assign(service as object, {
+      authService,
+      residentsRepository,
+      pushSubscriptionsRepository,
+    })
+
+    await expect(
+      service.revoke({
+        endpoint: "https://push.example.test/send/abc",
+      })
+    ).resolves.toEqual({ revoked: 1 })
+
+    expect(authService.requireOrganizationAccess).toHaveBeenCalledWith(
+      context,
+      TEST_ORGANIZATION_ID
+    )
+    expect(pushSubscriptionsRepository.revokeForUser).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      userId: context.authUser.id,
+      endpoint: "https://push.example.test/send/abc",
+      actorUserId: context.authUser.id,
+    })
+  })
 })

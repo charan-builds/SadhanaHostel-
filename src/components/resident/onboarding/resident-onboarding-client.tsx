@@ -31,8 +31,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { trackResidentRegistration } from "@/lib/analytics/google-analytics"
 import { FrontendApiError } from "@/lib/api-client"
-import { HOSTEL_RULES, HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
+  useResidentHostelRules,
   useResidentOnboarding,
   useSubmitResidentOnboarding,
   useUpdateResidentOnboardingProfile,
@@ -59,6 +59,11 @@ const missingLabels: Record<string, string> = {
 export function ResidentOnboardingClient() {
   const { organizationId } = useAuth()
   const onboarding = useResidentOnboarding(organizationId)
+  const rulesStatus = useResidentHostelRules({
+    organizationId: organizationId ?? "",
+    page: 1,
+    pageSize: 100,
+  })
   const updateProfile = useUpdateResidentOnboardingProfile()
   const submitOnboarding = useSubmitResidentOnboarding()
   const [rulesAcceptedOverride, setRulesAcceptedOverride] = useState(false)
@@ -137,12 +142,16 @@ export function ResidentOnboardingClient() {
   }
 
   const onboardingComplete = requirements.canAccessResidentOperations
-  const rulesAccepted =
-    rulesAcceptedOverride || hasAcceptedCurrentHostelRules(resident)
+  const rulesAccepted = Boolean(
+    rulesAcceptedOverride ||
+    rulesStatus.data?.acceptance?.isAccepted ||
+    hasAcceptedCurrentHostelRules(resident)
+  )
   const effectiveMissing = requirements.missing.filter(
     (item) => item !== "rules_acceptance" || !rulesAccepted
   )
   const canFinishOnboarding = effectiveMissing.length === 0
+  const hostelRules = rulesStatus.data?.rules ?? []
 
   async function saveProfile(values: FormValues) {
     if (!organizationId) {
@@ -303,14 +312,27 @@ export function ResidentOnboardingClient() {
             </CardHeader>
             <CardContent className="grid gap-4">
               <ol className="grid gap-3 text-sm leading-6 text-muted-foreground">
-                {HOSTEL_RULES.map((rule, index) => (
-                  <li key={rule} className="grid grid-cols-[1.75rem_1fr] gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      {index + 1}
-                    </span>
-                    <span className="pt-0.5">{rule}</span>
+                {rulesStatus.isLoading ? (
+                  [0, 1, 2].map((item) => (
+                    <li key={item} className="h-12 animate-pulse rounded-lg bg-muted" />
+                  ))
+                ) : hostelRules.length === 0 ? (
+                  <li className="rounded-lg border bg-muted/30 p-3">
+                    Hostel rules will appear here once management publishes them.
                   </li>
-                ))}
+                ) : (
+                  hostelRules.map((rule, index) => (
+                    <li key={rule.id} className="grid grid-cols-[1.75rem_1fr] gap-2">
+                      <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {index + 1}
+                      </span>
+                      <span className="pt-0.5">
+                        <span className="block font-medium text-foreground">{rule.title}</span>
+                        <span className="block">{rule.description}</span>
+                      </span>
+                    </li>
+                  ))
+                )}
               </ol>
               <label className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
                 <input
@@ -321,13 +343,12 @@ export function ResidentOnboardingClient() {
                   onChange={(event) => setRulesAcceptedOverride(event.target.checked)}
                 />
                 <span>
-                  I have read and accept the hostel rules and regulations, including the
-                  no-refund rule after joining.
+                  I have read and agree to the current hostel rules and policies.
                 </span>
               </label>
               <p className="text-xs text-muted-foreground">
-                Rules version {HOSTEL_RULES_VERSION}. Acceptance is saved with your onboarding
-                record.
+                Rules version {rulesStatus.data?.rulesVersion ?? "loading"}. Acceptance is
+                saved with your onboarding record.
               </p>
             </CardContent>
           </Card>
@@ -425,7 +446,8 @@ function hasAcceptedCurrentHostelRules(resident: NonNullable<ReturnType<typeof u
 
   return (
     acceptance.accepted === true &&
-    acceptance.version === HOSTEL_RULES_VERSION &&
+    typeof acceptance.version === "string" &&
+    acceptance.version.length >= 8 &&
     typeof acceptance.acceptedAt === "string"
   )
 }

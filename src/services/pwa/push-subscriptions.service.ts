@@ -1,5 +1,6 @@
 import "server-only"
 
+import { forbidden } from "@/lib/api/api-error"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { PushSubscriptionsRepository } from "@/repositories/push-subscriptions.repository"
@@ -75,9 +76,17 @@ export class PushSubscriptionsService {
   async revoke(input: unknown) {
     const values = revokePushSubscriptionSchema.parse(input)
     const context = await this.authService.getCurrentContext()
+    const organizationId = context.organizationId ?? context.profile.organization_id
+
+    if (!organizationId) {
+      throw forbidden("Your account is not assigned to an organization.")
+    }
+
+    this.authService.requireOrganizationAccess(context, organizationId)
 
     return {
       revoked: await this.pushSubscriptionsRepository.revokeForUser({
+        organizationId,
         userId: context.authUser.id,
         endpoint: values.endpoint,
         actorUserId: context.authUser.id,

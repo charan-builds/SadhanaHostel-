@@ -11,6 +11,7 @@ import {
   KeyRound,
   LifeBuoy,
   Loader2,
+  MessageCircle,
   Plus,
   Power,
   Save,
@@ -38,6 +39,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
+import {
+  DEFAULT_LEAVE_REVIEW_NOTICE,
+  readLeaveManagementSettings,
+} from "@/lib/leaves/settings"
 import {
   useCreateHostel,
   useHostels,
@@ -83,6 +88,12 @@ const platformControlsSchema = z.object({
   staffAccessEnabled: z.boolean(),
 })
 
+const leaveManagementSchema = z.object({
+  leaveWhatsappSupportNumber: z.string().trim().max(24).optional(),
+  leaveReviewNotice: z.string().trim().min(10).max(240),
+  leaveUrgentEscalationEnabled: z.boolean(),
+})
+
 const hostelFormSchema = z.object({
   name: z.string().trim().min(2).max(160),
   code: z.string().trim().min(2).max(24).regex(/^[A-Za-z0-9-]+$/),
@@ -99,6 +110,8 @@ const hostelFormSchema = z.object({
 type OrganizationFormValues = z.infer<typeof organizationFormSchema>
 type PlatformControlsInput = z.input<typeof platformControlsSchema>
 type PlatformControlsValues = z.output<typeof platformControlsSchema>
+type LeaveManagementInput = z.input<typeof leaveManagementSchema>
+type LeaveManagementValues = z.output<typeof leaveManagementSchema>
 type HostelFormInput = z.input<typeof hostelFormSchema>
 type HostelFormValues = z.output<typeof hostelFormSchema>
 
@@ -145,6 +158,12 @@ const operationLinks: Array<{
     icon: KeyRound,
   },
   {
+    title: "Rules & Policies",
+    description: "Manage hostel rules shown on the website, resident portal, and onboarding.",
+    href: "/admin/settings/rules",
+    icon: ShieldCheck,
+  },
+  {
     title: "Operational alerts",
     description: "Resolve recovery requests, anomalies, failed jobs, and launch blockers.",
     href: "/admin/alerts",
@@ -188,6 +207,10 @@ export function AdminSettingsClient() {
   const platformControlsForm = useForm<PlatformControlsInput, unknown, PlatformControlsValues>({
     resolver: zodResolver(platformControlsSchema),
     defaultValues: defaultPlatformControls(),
+  })
+  const leaveManagementForm = useForm<LeaveManagementInput, unknown, LeaveManagementValues>({
+    resolver: zodResolver(leaveManagementSchema),
+    defaultValues: defaultLeaveManagementSettings(),
   })
   const hostelForm = useForm<HostelFormInput, unknown, HostelFormValues>({
     resolver: zodResolver(hostelFormSchema),
@@ -247,7 +270,8 @@ export function AdminSettingsClient() {
     })
 
     platformControlsForm.reset(readPlatformControls(settings))
-  }, [organizationForm, organizationQuery.data, platformControlsForm])
+    leaveManagementForm.reset(readLeaveManagementControls(settings))
+  }, [leaveManagementForm, organizationForm, organizationQuery.data, platformControlsForm])
 
   const editingHostel = hostelsQuery.data?.find((hostel) => hostel.id === editingHostelId)
 
@@ -349,6 +373,36 @@ export function AdminSettingsClient() {
       },
     })
     toast.success("Operational controls saved.")
+  }
+
+  async function saveLeaveManagement(values: LeaveManagementValues) {
+    if (!organizationId || !organizationQuery.data) {
+      return
+    }
+
+    const currentSettings = recordFromJson(organizationQuery.data.settings)
+
+    await updateOrganization.mutateAsync({
+      organizationId,
+      legalName: undefined,
+      billingEmail: undefined,
+      contactPhone: undefined,
+      addressLine1: undefined,
+      addressLine2: undefined,
+      city: undefined,
+      state: undefined,
+      postalCode: undefined,
+      country: undefined,
+      settings: {
+        ...currentSettings,
+        leaveManagement: {
+          whatsappSupportNumber: values.leaveWhatsappSupportNumber || undefined,
+          reviewNotice: values.leaveReviewNotice || DEFAULT_LEAVE_REVIEW_NOTICE,
+          urgentWhatsappEscalationEnabled: values.leaveUrgentEscalationEnabled,
+        },
+      },
+    })
+    toast.success("Leave management settings saved.")
   }
 
   async function addHostel(values: HostelFormValues) {
@@ -609,6 +663,61 @@ export function AdminSettingsClient() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="size-5 text-primary" aria-hidden="true" />
+            Leave Management Settings
+          </CardTitle>
+          <CardDescription>
+            Configure resident leave review messaging and urgent WhatsApp escalation without code changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {organizationQuery.isError ? (
+            <APIErrorState
+              title="Leave settings could not be loaded"
+              error={organizationQuery.error}
+              onRetry={() => void organizationQuery.refetch()}
+            />
+          ) : (
+            <form
+              className="grid gap-5"
+              onSubmit={leaveManagementForm.handleSubmit(saveLeaveManagement)}
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field
+                  form={leaveManagementForm}
+                  name="leaveWhatsappSupportNumber"
+                  label="WhatsApp Support Number"
+                />
+                <CheckboxField
+                  form={leaveManagementForm}
+                  name="leaveUrgentEscalationEnabled"
+                  label="Enable Urgent Leave WhatsApp Escalation"
+                  description="Residents see a WhatsApp escalation button before submission and while leave remains pending."
+                />
+              </div>
+              <TextAreaField
+                form={leaveManagementForm}
+                name="leaveReviewNotice"
+                label="Leave Review Notice"
+              />
+              <div>
+                <Button disabled={updateOrganization.isPending} className="gap-2">
+                  {updateOrganization.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  Save leave settings
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Self-Service Operations Map</CardTitle>
           <CardDescription>
             Common hostel operations and where owners should perform them from the admin panel.
@@ -816,6 +925,24 @@ function defaultPlatformControls(): PlatformControlsValues {
     cmsEnabled: true,
     automationEnabled: true,
     staffAccessEnabled: true,
+  }
+}
+
+function defaultLeaveManagementSettings(): LeaveManagementValues {
+  return {
+    leaveWhatsappSupportNumber: "",
+    leaveReviewNotice: DEFAULT_LEAVE_REVIEW_NOTICE,
+    leaveUrgentEscalationEnabled: true,
+  }
+}
+
+function readLeaveManagementControls(settings: Record<string, unknown>): LeaveManagementValues {
+  const leaveManagement = readLeaveManagementSettings(settings)
+
+  return {
+    leaveWhatsappSupportNumber: leaveManagement.whatsappSupportNumber,
+    leaveReviewNotice: leaveManagement.reviewNotice,
+    leaveUrgentEscalationEnabled: leaveManagement.urgentWhatsappEscalationEnabled,
   }
 }
 

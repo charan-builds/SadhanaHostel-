@@ -27,6 +27,8 @@ export function APIErrorState({
     <div
       className="saas-surface rounded-xl border-destructive/25 bg-destructive/5 p-5"
       role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
     >
       <div className="flex gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive ring-1 ring-destructive/15">
@@ -45,7 +47,7 @@ export function APIErrorState({
       {onRetry || action ? (
         <div className="mt-4 flex flex-wrap gap-2">
           {onRetry ? (
-            <Button size="sm" variant="outline" onClick={onRetry}>
+            <Button type="button" size="sm" variant="outline" onClick={onRetry}>
               <RefreshCcw className="size-4" aria-hidden="true" />
               Retry
             </Button>

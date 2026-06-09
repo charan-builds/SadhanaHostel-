@@ -2,6 +2,7 @@ import {
   createdResponse,
   getQueryParams,
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
   withApiRoute,
 } from "@/lib/api"
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     request,
     {
       route: "resident_invites.create",
+      rateLimit: RATE_LIMIT_POLICIES.credentialIssuance,
     },
     async () => {
       const service = await ResidentInviteService.create()

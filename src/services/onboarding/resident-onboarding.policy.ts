@@ -1,5 +1,4 @@
 import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
-import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 
 export type OnboardingRequirementKey =
   | "full_name"
@@ -88,7 +87,8 @@ export function hasAcceptedCurrentHostelRules(resident: ResidentWithOnboarding) 
 
   return (
     acceptance.accepted === true &&
-    acceptance.version === HOSTEL_RULES_VERSION &&
+    typeof acceptance.version === "string" &&
+    acceptance.version.length >= 8 &&
     typeof acceptance.acceptedAt === "string"
   )
 }

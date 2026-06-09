@@ -100,7 +100,13 @@ export function formatGalleryCategory(category: string) {
 }
 
 export function canonicalizeGalleryCategory(category: string) {
-  return galleryCategoryAliases[normalizeGalleryMatchKey(category)] ?? "exterior-surroundings"
+  const normalizedCategory = normalizeGalleryMatchKey(category)
+
+  if (normalizedCategory.startsWith("employee-room-")) {
+    return "employee-room"
+  }
+
+  return galleryCategoryAliases[normalizedCategory] ?? "exterior-surroundings"
 }
 
 function getRoomAudience(room: Pick<RoomTypeCard, "title" | "icon">) {

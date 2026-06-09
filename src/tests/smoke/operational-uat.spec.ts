@@ -42,7 +42,8 @@ test.describe("operational route protection", () => {
     "/admin/residents",
     "/admin/residents/verification",
     "/admin/reservations",
-    "/admin/vacancy",
+    "/admin/operations",
+    "/admin/operations/intelligence",
   ]
 
   for (const route of adminRoutes) {
@@ -174,7 +175,8 @@ test.describe("credential-gated operational surfaces", () => {
       { path: "/admin/gallery", heading: /gallery/i },
       { path: "/admin/website", heading: /website cms/i },
       { path: "/admin/residents/verification", heading: /verification queue/i },
-      { path: "/admin/vacancy", heading: /vacancy/i },
+      { path: "/admin/operations", heading: /operations center/i },
+      { path: "/admin/operations/intelligence", heading: /competitive intelligence/i },
     ]
 
     for (const route of routes) {

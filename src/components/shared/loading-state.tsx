@@ -86,7 +86,7 @@ export function LoadingState({ variant = "spinner", rows = 3, className }: Loadi
   if (variant === "cards") {
     return (
       <MotionReveal className={className}>
-      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
+      <div role="status" aria-live="polite" aria-atomic="true" aria-busy="true" aria-label={label}>
         <CardSkeletons rows={rows} />
       </div>
       </MotionReveal>
@@ -96,7 +96,7 @@ export function LoadingState({ variant = "spinner", rows = 3, className }: Loadi
   if (variant === "table") {
     return (
       <MotionReveal className={className}>
-      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
+      <div role="status" aria-live="polite" aria-atomic="true" aria-busy="true" aria-label={label}>
         <TableSkeleton rows={rows} />
       </div>
       </MotionReveal>
@@ -106,7 +106,7 @@ export function LoadingState({ variant = "spinner", rows = 3, className }: Loadi
   if (variant === "dashboard") {
     return (
       <MotionReveal className={className}>
-      <div role="status" aria-live="polite" aria-busy="true" aria-label={label}>
+      <div role="status" aria-live="polite" aria-atomic="true" aria-busy="true" aria-label={label}>
         <DashboardSkeleton />
       </div>
       </MotionReveal>
@@ -119,7 +119,9 @@ export function LoadingState({ variant = "spinner", rows = 3, className }: Loadi
       className="saas-surface flex min-h-40 items-center justify-center rounded-xl"
       role="status"
       aria-live="polite"
+      aria-atomic="true"
       aria-busy="true"
+      aria-label={label}
     >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />

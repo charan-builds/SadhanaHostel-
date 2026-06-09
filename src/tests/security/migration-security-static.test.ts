@@ -19,6 +19,17 @@ function allMigrations() {
     }))
 }
 
+function expectUpdatedAtHelperBeforeTriggers(sql: string) {
+  const helperIndex = sql.search(
+    /create\s+or\s+replace\s+function\s+public\.set_updated_at\(\)/i
+  )
+  const triggerIndex = sql.search(/execute\s+function\s+public\.set_updated_at\(\)/i)
+
+  expect(helperIndex).toBeGreaterThanOrEqual(0)
+  expect(triggerIndex).toBeGreaterThan(helperIndex)
+  expect(sql).not.toMatch(/execute\s+function\s+public\.touch_updated_at\(\)/i)
+}
+
 describe("static migration security checks", () => {
   it("does not run ownership-level RLS alterations on Supabase-managed storage tables", () => {
     const combined = allMigrations()
@@ -129,6 +140,62 @@ describe("static migration security checks", () => {
     expect(smartNotifications).toMatch(/notifications_recipient_center_idx/i)
     expect(smartNotifications).toMatch(/notifications_unread_center_idx/i)
     expect(smartNotifications).toMatch(/notifications_archived_idx/i)
+  })
+
+  it("keeps employee accommodation gallery metadata tenant-scoped and RLS protected", () => {
+    const employeeGallery = migration("20260608042000_employee_accommodation_gallery.sql")
+
+    expectUpdatedAtHelperBeforeTriggers(employeeGallery)
+    expect(employeeGallery).toMatch(
+      /create\s+table\s+if\s+not\s+exists\s+public\.employee_accommodation_rooms/i
+    )
+    expect(employeeGallery).toMatch(/organization_id\s+uuid\s+not\s+null/i)
+    expect(employeeGallery).toMatch(/hostel_id\s+uuid\s+references\s+public\.hostels\(id\)/i)
+    expect(employeeGallery).toMatch(/amenities\s+text\[\]/i)
+    expect(employeeGallery).toMatch(/is_visible\s+boolean\s+not\s+null\s+default\s+true/i)
+    expect(employeeGallery).toMatch(/execute\s+function\s+public\.set_updated_at\(\)/i)
+    expect(employeeGallery).not.toMatch(/execute\s+function\s+public\.touch_updated_at\(\)/i)
+    expect(employeeGallery).toMatch(
+      /alter\s+table\s+public\.employee_accommodation_rooms\s+enable\s+row\s+level\s+security/i
+    )
+    expect(employeeGallery).toMatch(
+      /alter\s+table\s+public\.employee_accommodation_rooms\s+force\s+row\s+level\s+security/i
+    )
+    expect(employeeGallery).toMatch(
+      /employee_accommodation_rooms_public_published_select/i
+    )
+    expect(employeeGallery).toMatch(
+      /public\.can_manage_organization\(organization_id,\s*hostel_id\)/i
+    )
+  })
+
+  it("keeps hostel rules tenant-scoped, version-accepted, and RLS protected", () => {
+    const hostelRules = migration("20260608070000_hostel_rules_management.sql")
+
+    expectUpdatedAtHelperBeforeTriggers(hostelRules)
+    expect(hostelRules).toMatch(/create\s+table\s+if\s+not\s+exists\s+public\.hostel_rules/i)
+    expect(hostelRules).toMatch(/organization_id\s+uuid\s+not\s+null/i)
+    expect(hostelRules).toMatch(/hostel_id\s+uuid\s+references\s+public\.hostels\(id\)/i)
+    expect(hostelRules).toMatch(/category\s+text\s+not\s+null/i)
+    expect(hostelRules).toMatch(/'Employee Accommodation'/i)
+    expect(hostelRules).toMatch(/display_order\s+integer\s+not\s+null\s+default\s+0/i)
+    expect(hostelRules).toMatch(
+      /create\s+table\s+if\s+not\s+exists\s+public\.hostel_rule_acceptances/i
+    )
+    expect(hostelRules).toMatch(/resident_id\s+uuid\s+not\s+null/i)
+    expect(hostelRules).toMatch(/rules_version\s+text\s+not\s+null/i)
+    expect(hostelRules).toMatch(/accepted_at\s+timestamptz\s+not\s+null\s+default\s+now\(\)/i)
+    expect(hostelRules).toMatch(/unique\s*\(\s*resident_id,\s*rules_version\s*\)/i)
+    expect(hostelRules).toMatch(
+      /alter\s+table\s+public\.hostel_rules\s+enable\s+row\s+level\s+security/i
+    )
+    expect(hostelRules).toMatch(
+      /alter\s+table\s+public\.hostel_rule_acceptances\s+enable\s+row\s+level\s+security/i
+    )
+    expect(hostelRules).toMatch(
+      /public\.has_permission_in_organization\(organization_id,\s*'settings\.manage',\s*hostel_id\)/i
+    )
+    expect(hostelRules).toMatch(/public\.owns_resident\(resident_id\)/i)
   })
 
   it("keeps finance dashboard aggregates database-owned and finance-guarded", () => {

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { AudienceHostelPageContent } from "@/components/public/audience-hostel-page-content"
 import { JsonLd } from "@/components/seo/json-ld"
 import { hostelConfig } from "@/constants/hostel"
+import { getPublicCmsContent } from "@/lib/cms/public-cms"
 import {
   createAccommodationOfferJsonLd,
   createFaqJsonLd,
@@ -47,7 +48,9 @@ export const metadata: Metadata = createPublicMetadata({
   image: "/images/hostel-exterior-wide.webp",
 })
 
-export default function EmployeeHostelPulivendulaPage() {
+export default async function EmployeeHostelPulivendulaPage() {
+  const cmsContent = await getPublicCmsContent()
+
   return (
     <>
       <JsonLd
@@ -95,6 +98,7 @@ export default function EmployeeHostelPulivendulaPage() {
           },
         ]}
         faqItems={employeeFaqItems}
+        employeeAccommodationRooms={cmsContent.employeeAccommodationRooms}
       />
     </>
   )

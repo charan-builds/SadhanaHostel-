@@ -2,12 +2,16 @@ import { z } from "zod"
 
 import { paginationSchema, uuidSchema } from "./common.validation"
 
-export const searchEntitySchema = z.enum([
+export const searchEntityTypes = [
   "residents",
   "payments",
   "rooms",
   "notices",
-])
+  "complaints",
+  "reports",
+] as const
+
+export const searchEntitySchema = z.enum(searchEntityTypes)
 
 export const globalSearchSchema = paginationSchema.extend({
   organizationId: uuidSchema,
@@ -22,7 +26,7 @@ export const globalSearchSchema = paginationSchema.extend({
             .split(",")
             .map((item) => item.trim())
             .filter(Boolean)
-        : ["residents", "payments", "rooms", "notices"]
+        : [...searchEntityTypes]
     )
     .pipe(z.array(searchEntitySchema).min(1)),
 })

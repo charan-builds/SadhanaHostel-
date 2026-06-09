@@ -66,6 +66,16 @@ export const RATE_LIMIT_POLICIES = {
     limit: 8,
     windowMs: 60_000,
   },
+  staffAccessWrite: {
+    name: "staff_access.write",
+    limit: 20,
+    windowMs: 60_000,
+  },
+  credentialIssuance: {
+    name: "credentials.issue",
+    limit: 8,
+    windowMs: 5 * 60_000,
+  },
   notificationStateWrite: {
     name: "notifications.state_write",
     limit: 120,

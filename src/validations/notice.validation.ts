@@ -16,6 +16,8 @@ export const noticeListSchema = paginationSchema.extend({
   audienceType: z.enum(["all", "hostel", "room", "residents", "roles"]).optional(),
   activeOnly: booleanLikeSchema.optional(),
   search: z.string().trim().max(120).optional(),
+  fromDate: isoDateSchema.optional(),
+  toDate: isoDateSchema.optional(),
 })
 
 export const noticeTypes = [

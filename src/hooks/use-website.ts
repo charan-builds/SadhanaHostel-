@@ -6,9 +6,12 @@ import { queryKeys } from "@/lib/react-query"
 import { websiteSdk } from "@/sdk"
 import type {
   CreateFacilityInput,
+  CreateEmployeeAccommodationRoomInput,
   CreateGalleryItemInput,
   DeleteGalleryItemInput,
+  EmployeeAccommodationRoomsListInput,
   FacilitiesListInput,
+  UpdateEmployeeAccommodationRoomInput,
   GalleryListInput,
   UpdateFacilityInput,
   UpdateWebsiteSettingInput,
@@ -75,6 +78,50 @@ export function useUpdateFacility() {
         queryKey: queryKeys.website.all({
           organizationId: facility.organization_id,
           hostelId: facility.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useEmployeeAccommodationRooms(
+  params: EmployeeAccommodationRoomsListInput
+) {
+  return useQuery({
+    queryKey: queryKeys.website.employeeRooms(params, params),
+    queryFn: () => websiteSdk.listEmployeeAccommodationRooms(params),
+    enabled: Boolean(params.organizationId),
+  })
+}
+
+export function useCreateEmployeeAccommodationRoom() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CreateEmployeeAccommodationRoomInput) =>
+      websiteSdk.createEmployeeAccommodationRoom(input),
+    onSuccess: (room) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.website.all({
+          organizationId: room.organization_id,
+          hostelId: room.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useUpdateEmployeeAccommodationRoom() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpdateEmployeeAccommodationRoomInput) =>
+      websiteSdk.updateEmployeeAccommodationRoom(input),
+    onSuccess: (room) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.website.all({
+          organizationId: room.organization_id,
+          hostelId: room.hostel_id,
         }),
       })
     },

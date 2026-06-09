@@ -11,6 +11,7 @@ import {
   Home,
   Image as ImageIcon,
   Info,
+  IndianRupee,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
@@ -56,10 +57,12 @@ export const adminNavigation: NavItem[] = [
 
 export const residentNavigation: NavItem[] = [
   { title: "Dashboard", href: "/resident/dashboard", icon: LayoutDashboard },
-  { title: "Profile", href: "/resident/profile", icon: User },
-  { title: "Password", href: "/resident/security" as Route, icon: KeyRound },
+  { title: "Pay Fees", href: "/resident/pay-fees" as Route, icon: IndianRupee },
   { title: "Payments", href: "/resident/payments", icon: CreditCard },
-  { title: "Leave", href: "/resident/leave", icon: CalendarDays },
   { title: "Notices", href: "/resident/notices", icon: ClipboardList },
+  { title: "Rules", href: "/resident/rules" as Route, icon: ShieldCheck },
   { title: "Support", href: "/resident/support" as Route, icon: LifeBuoy },
+  { title: "Profile", href: "/resident/profile", icon: User },
+  { title: "Leave", href: "/resident/leave", icon: CalendarDays },
+  { title: "Password", href: "/resident/security" as Route, icon: KeyRound },
 ]

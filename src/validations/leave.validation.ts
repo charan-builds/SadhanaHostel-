@@ -2,13 +2,25 @@ import { z } from "zod"
 
 import { Constants } from "@/types/database"
 
-import { dateOnlySchema, paginationSchema, uuidSchema } from "./common.validation"
+import {
+  dateOnlySchema,
+  isoDateSchema,
+  paginationSchema,
+  phoneSchema,
+  uuidSchema,
+} from "./common.validation"
 
 export const leaveListSchema = paginationSchema.extend({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
   residentId: uuidSchema.optional(),
   status: z.enum(Constants.public.Enums.leave_status_enum).optional(),
+  fromDate: isoDateSchema.optional(),
+  toDate: isoDateSchema.optional(),
+})
+
+export const leaveSettingsQuerySchema = z.object({
+  organizationId: uuidSchema,
 })
 
 export const createLeaveRequestSchema = z
@@ -16,6 +28,9 @@ export const createLeaveRequestSchema = z
     organizationId: uuidSchema,
     hostelId: uuidSchema,
     residentId: uuidSchema,
+    fullName: z.string().trim().min(2).max(160),
+    mobileNumber: phoneSchema,
+    whatsappNumber: phoneSchema,
     fromDate: dateOnlySchema,
     toDate: dateOnlySchema,
     reason: z.string().trim().min(5).max(1000),
@@ -39,5 +54,6 @@ export const reviewLeaveRequestSchema = z.object({
 })
 
 export type LeaveListInput = z.infer<typeof leaveListSchema>
+export type LeaveSettingsQueryInput = z.infer<typeof leaveSettingsQuerySchema>
 export type CreateLeaveRequestInput = z.infer<typeof createLeaveRequestSchema>
 export type ReviewLeaveRequestInput = z.infer<typeof reviewLeaveRequestSchema>

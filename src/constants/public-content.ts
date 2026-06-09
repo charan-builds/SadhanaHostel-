@@ -19,6 +19,7 @@ export const publicNavItems: PublicNavItem[] = [
   { title: "Admissions", href: "/admissions" },
   { title: "Facilities", href: "/facilities" },
   { title: "Gallery", href: "/gallery" },
+  { title: "Rules", href: "/terms" },
   { title: "Contact", href: "/contact" },
 ]
 

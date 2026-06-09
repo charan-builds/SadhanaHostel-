@@ -2,33 +2,38 @@ import "server-only"
 
 import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
+import {
+  createLeaveRequestMetadata,
+  readLeaveManagementSettings,
+} from "@/lib/leaves/settings"
 import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { LeavesRepository } from "@/repositories/leaves.repository"
+import { OrganizationsRepository } from "@/repositories/organizations.repository"
+import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import {
   createLeaveRequestSchema,
+  leaveSettingsQuerySchema,
   leaveListSchema,
   reviewLeaveRequestSchema,
 } from "@/validations/leave.validation"
 
 import { assertFound, AuthService } from "./auth.service"
-import {
-  getResidentOnboardingRequirements,
-  isResidentOperationallyVerified,
-} from "./onboarding/resident-onboarding.policy"
 import { RealtimeService } from "./realtime"
 
 export class LeavesService {
   private readonly authService: AuthService
   private readonly leavesRepository: LeavesRepository
+  private readonly organizationsRepository: OrganizationsRepository
   private readonly residentsRepository: ResidentsRepository
   private readonly realtimeService: RealtimeService
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.leavesRepository = new LeavesRepository(db)
+    this.organizationsRepository = new OrganizationsRepository(db)
     this.residentsRepository = new ResidentsRepository(db)
     this.realtimeService = new RealtimeService(db)
   }
@@ -73,6 +78,20 @@ export class LeavesService {
     })
   }
 
+  async getLeaveSettings(input: unknown) {
+    const values = leaveSettingsQuerySchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const organization = assertFound(
+      await this.organizationsRepository.getOrganizationById(values.organizationId),
+      "Organization not found."
+    )
+
+    return readLeaveManagementSettings(organization.settings)
+  }
+
   async createLeave(input: unknown) {
     const values = createLeaveRequestSchema.parse(input)
     const context = await this.authService.getCurrentContext()
@@ -98,7 +117,7 @@ export class LeavesService {
       )
     }
 
-    if (!isAdmin && !isResidentOperationallyVerified(existingResident)) {
+    if (!isAdmin && !canResidentSubmitLeave(existingResident)) {
       throw forbidden(getLeaveVerificationMessage(existingResident))
     }
 
@@ -116,6 +135,11 @@ export class LeavesService {
       destination: values.destination,
       travel_mode: values.travelMode,
       notes: values.notes,
+      metadata: createLeaveRequestMetadata({
+        fullName: values.fullName,
+        mobileNumber: values.mobileNumber,
+        whatsappNumber: values.whatsappNumber,
+      }),
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
@@ -183,18 +207,28 @@ export class LeavesService {
   }
 }
 
-function getLeaveVerificationMessage(
-  resident: Parameters<typeof getResidentOnboardingRequirements>[0]
-) {
-  const requirements = getResidentOnboardingRequirements(resident)
+function canResidentSubmitLeave(resident: ResidentWithOnboarding) {
+  return (
+    resident.status === "active" &&
+    resident.is_active !== false &&
+    resident.onboarding_status !== "suspended" &&
+    Boolean(resident.user_id) &&
+    !resident.checkout_on
+  )
+}
 
-  if (requirements.missing.length > 0) {
-    return "Complete all required resident profile details before applying leave."
+function getLeaveVerificationMessage(resident: ResidentWithOnboarding) {
+  if (resident.checkout_on) {
+    return "Checked-out residents cannot submit new leave requests."
   }
 
-  if (resident.onboarding_status === "verification_pending") {
-    return "Your resident profile is complete but not active yet. Ask the hostel office to activate access."
+  if (resident.onboarding_status === "suspended" || resident.status === "suspended") {
+    return "Your resident account is suspended. Contact hostel management before applying leave."
   }
 
-  return "Complete resident profile activation before applying leave."
+  if (!resident.user_id) {
+    return "Your portal account must be linked before applying leave."
+  }
+
+  return "Your resident account must be active before applying leave."
 }

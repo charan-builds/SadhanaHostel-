@@ -7,14 +7,26 @@ import {
   fallbackFacilities,
   fallbackGalleryItems,
   fallbackRoomTypes,
+  termsAndRules,
 } from "@/constants/public-content"
+import { HostelRulesService } from "@/services/hostel-rules.service"
 import { WebsiteService } from "@/services/website.service"
 import type { Tables } from "@/types/database"
-import type { FacilityItem, GalleryItem, RoomTypeCard } from "@/types/frontend"
+import type {
+  EmployeeAccommodationRoom,
+  FacilityItem,
+  GalleryItem,
+  LeadFormContent,
+  PublicHostelRule,
+  RoomTypeCard,
+} from "@/types/frontend"
 
 type CmsObject = Record<string, unknown>
 type WebsiteSettingCmsRow = Pick<Tables<"website_settings">, "content" | "section_key">
 type GalleryCmsRow = Tables<"gallery"> & { imageUrl?: string | null }
+type EmployeeAccommodationCmsRow = Awaited<
+  ReturnType<WebsiteService["listEmployeeAccommodationRooms"]>
+>["data"][number]
 
 export type PublicCmsContent = {
   heroTitle: string | null
@@ -24,7 +36,9 @@ export type PublicCmsContent = {
   roomTypes: RoomTypeCard[]
   facilities: FacilityItem[]
   galleryItems: GalleryItem[]
-  hostelRules: string[]
+  employeeAccommodationRooms: EmployeeAccommodationRoom[]
+  hostelRules: PublicHostelRule[]
+  leadForm: LeadFormContent
   source: "cms" | "fallback"
 }
 
@@ -55,41 +69,73 @@ async function loadPublicCmsContent(
 ): Promise<PublicCmsContent> {
   try {
     const service = WebsiteService.createPublic()
-    const [settingsResult, facilitiesResult, galleryResult] = await Promise.allSettled([
-      service.listSettings({
-        organizationId: organizationId || undefined,
-        hostelId: hostelId || undefined,
-        page: 1,
-        pageSize: 20,
-        status: "published",
-      }),
-      service.listFacilities({
-        organizationId: organizationId || undefined,
-        hostelId: hostelId || undefined,
-        page: 1,
-        pageSize: 50,
-        status: "published",
-      }),
-      service.listGallery({
-        organizationId: organizationId || undefined,
-        hostelId: hostelId || undefined,
-        page: 1,
-        pageSize: publicCmsGalleryPageSize,
-        status: "published",
-      }),
-    ])
+    const rulesService = HostelRulesService.createPublic()
+    const [settingsResult, facilitiesResult, galleryResult, employeeRoomsResult, rulesResult] =
+      await Promise.allSettled([
+        service.listSettings({
+          organizationId: organizationId || undefined,
+          hostelId: hostelId || undefined,
+          page: 1,
+          pageSize: 20,
+          status: "published",
+        }),
+        service.listFacilities({
+          organizationId: organizationId || undefined,
+          hostelId: hostelId || undefined,
+          page: 1,
+          pageSize: 50,
+          status: "published",
+        }),
+        service.listGallery({
+          organizationId: organizationId || undefined,
+          hostelId: hostelId || undefined,
+          page: 1,
+          pageSize: publicCmsGalleryPageSize,
+          status: "published",
+        }),
+        service.listEmployeeAccommodationRooms({
+          organizationId: organizationId || undefined,
+          hostelId: hostelId || undefined,
+          page: 1,
+          pageSize: 50,
+          status: "published",
+        }),
+        rulesService.listRules({
+          organizationId: organizationId || undefined,
+          hostelId: hostelId || undefined,
+          page: 1,
+          pageSize: 100,
+          activeOnly: true,
+        }),
+      ])
     const settingsRows =
       settingsResult.status === "fulfilled" ? settingsResult.value.data : []
     const facilityRows =
       facilitiesResult.status === "fulfilled" ? facilitiesResult.value.data : []
     const galleryRows =
       galleryResult.status === "fulfilled" ? galleryResult.value.data : []
+    const employeeRoomRows =
+      employeeRoomsResult.status === "fulfilled" ? employeeRoomsResult.value.data : []
+    const ruleRows =
+      rulesResult.status === "fulfilled" ? rulesResult.value.rules : []
 
-    if (settingsRows.length === 0 && facilityRows.length === 0 && galleryRows.length === 0) {
+    if (
+      settingsRows.length === 0 &&
+      facilityRows.length === 0 &&
+      galleryRows.length === 0 &&
+      employeeRoomRows.length === 0 &&
+      ruleRows.length === 0
+    ) {
       return fallbackCmsContent()
     }
 
-    return buildCmsContent(settingsRows, facilityRows, galleryRows)
+    return buildCmsContent(
+      settingsRows,
+      facilityRows,
+      galleryRows,
+      employeeRoomRows,
+      ruleRows
+    )
   } catch {
     return fallbackCmsContent()
   }
@@ -98,7 +144,9 @@ async function loadPublicCmsContent(
 function buildCmsContent(
   settingsRows: WebsiteSettingCmsRow[],
   facilityRows: Tables<"facilities">[],
-  galleryRows: GalleryCmsRow[]
+  galleryRows: GalleryCmsRow[],
+  employeeRoomRows: EmployeeAccommodationCmsRow[],
+  ruleRows: Tables<"hostel_rules">[]
 ): PublicCmsContent {
   const settings = Object.fromEntries(
     settingsRows.map((setting) => [setting.section_key, setting])
@@ -108,10 +156,12 @@ function buildCmsContent(
   const contact = asObject(settings.contact?.content)
   const pricing = asObject(settings.pricing?.content)
   const terms = asObject(settings.terms?.content)
-  const hostelRules = getHostelRules(terms)
+  const hostelRules = mapHostelRules(ruleRows, getHostelRules(terms))
+  const leadForm = mapLeadFormContent(contact)
   const roomTypes = withRequiredRoomAudiences(mapPricingToRoomTypes(pricing))
   const facilities = facilityRows.map(mapFacility)
   const galleryItems = galleryRows.map(mapGalleryItem)
+  const employeeAccommodationRooms = employeeRoomRows.map(mapEmployeeAccommodationRoom)
 
   return {
     heroTitle: stringOrNull(homepage.hero_title),
@@ -121,7 +171,9 @@ function buildCmsContent(
     roomTypes: roomTypes.length > 0 ? roomTypes : fallbackRoomTypes,
     facilities: facilities.length > 0 ? facilities : fallbackFacilities,
     galleryItems: galleryItems.length > 0 ? galleryItems : fallbackGalleryItems,
+    employeeAccommodationRooms,
     hostelRules,
+    leadForm,
     source: "cms",
   }
 }
@@ -135,8 +187,46 @@ function fallbackCmsContent(): PublicCmsContent {
     roomTypes: fallbackRoomTypes,
     facilities: fallbackFacilities,
     galleryItems: fallbackGalleryItems,
-    hostelRules: [],
+    employeeAccommodationRooms: [],
+    hostelRules: fallbackHostelRules(),
+    leadForm: fallbackLeadFormContent(),
     source: "fallback",
+  }
+}
+
+function mapLeadFormContent(contact: CmsObject): LeadFormContent {
+  const fallback = fallbackLeadFormContent()
+
+  return {
+    title:
+      stringOrNull(contact.lead_form_title) ??
+      stringOrNull(contact.leadFormTitle) ??
+      fallback.title,
+    subtitle:
+      stringOrNull(contact.lead_form_subtitle) ??
+      stringOrNull(contact.leadFormSubtitle) ??
+      fallback.subtitle,
+    description:
+      stringOrNull(contact.lead_form_description) ??
+      stringOrNull(contact.leadFormDescription) ??
+      fallback.description,
+    ctaText:
+      stringOrNull(contact.lead_form_cta_text) ??
+      stringOrNull(contact.leadFormCtaText) ??
+      fallback.ctaText,
+    imageUrl:
+      stringOrNull(contact.lead_form_image_url) ??
+      stringOrNull(contact.leadFormImageUrl) ??
+      undefined,
+  }
+}
+
+function fallbackLeadFormContent(): LeadFormContent {
+  return {
+    title: "Send an inquiry",
+    subtitle: "Submit your details so the hostel team can call back and explain the joining process.",
+    description: "Only three fields. The hostel office will call you back quickly.",
+    ctaText: "Request callback",
   }
 }
 
@@ -155,6 +245,59 @@ function mapGalleryItem(item: Tables<"gallery"> & { imageUrl?: string | null }):
     alt: item.alt_text ?? item.title,
     imageUrl: item.imageUrl ?? undefined,
   }
+}
+
+function mapEmployeeAccommodationRoom(
+  room: EmployeeAccommodationCmsRow
+): EmployeeAccommodationRoom {
+  return {
+    id: room.id,
+    title: room.title,
+    description: room.description ?? "",
+    capacity: room.capacity,
+    amenities: room.amenities,
+    images: room.images.map(mapGalleryItem),
+  }
+}
+
+function mapHostelRules(
+  rules: Tables<"hostel_rules">[],
+  legacyRules: string[]
+): PublicHostelRule[] {
+  if (rules.length > 0) {
+    return rules.map((rule) => ({
+      id: rule.id,
+      category: rule.category,
+      title: rule.title,
+      description: rule.description,
+      displayOrder: rule.display_order,
+      updatedAt: rule.updated_at,
+    }))
+  }
+
+  if (legacyRules.length > 0) {
+    return legacyRules.map((rule, index) => ({
+      id: `legacy-${index + 1}`,
+      category: "General",
+      title: rule,
+      description: rule,
+      displayOrder: (index + 1) * 10,
+      updatedAt: "",
+    }))
+  }
+
+  return fallbackHostelRules()
+}
+
+function fallbackHostelRules(): PublicHostelRule[] {
+  return termsAndRules.map((rule, index) => ({
+    id: `fallback-${index + 1}`,
+    category: "General",
+    title: rule,
+    description: rule,
+    displayOrder: (index + 1) * 10,
+    updatedAt: "",
+  }))
 }
 
 function mapPricingToRoomTypes(pricing: CmsObject): RoomTypeCard[] {

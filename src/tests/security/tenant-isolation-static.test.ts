@@ -147,6 +147,33 @@ describe("tenant isolation and security hardening contracts", () => {
     expect(invoiceStorage).toMatch(/Math\.min\([\s\S]*3600[\s\S]*safeExpiresInSeconds/)
   })
 
+  it("keeps service-role push subscription mutations tenant-scoped", () => {
+    const repository = projectFile("src/repositories/push-subscriptions.repository.ts")
+    const pushService = projectFile("src/services/pwa/push-subscriptions.service.ts")
+    const webPushService = projectFile("src/services/pwa/web-push.service.ts")
+    const authService = projectFile("src/services/auth.service.ts")
+
+    expect(repository).toMatch(
+      /async\s+update\([\s\S]*organizationId:\s*string[\s\S]*\.eq\("id",\s*input\.subscriptionId\)[\s\S]*\.eq\("organization_id",\s*input\.organizationId\)/
+    )
+    expect(repository).toMatch(
+      /async\s+revokeForUser\([\s\S]*organizationId:\s*string[\s\S]*\.eq\("organization_id",\s*input\.organizationId\)[\s\S]*\.eq\("user_id",\s*input\.userId\)/
+    )
+    expect(repository).toMatch(
+      /async\s+revokeEndpoint\([\s\S]*organizationId:\s*string[\s\S]*\.eq\("organization_id",\s*input\.organizationId\)[\s\S]*\.eq\("endpoint",\s*input\.endpoint\)/
+    )
+    expect(pushService).toMatch(/revokeForUser\(\{[\s\S]*organizationId,[\s\S]*userId/)
+    expect(webPushService).toMatch(
+      /update\(\{[\s\S]*subscriptionId:\s*subscription\.id,[\s\S]*organizationId:\s*notification\.organization_id/
+    )
+    expect(webPushService).toMatch(
+      /revokeEndpoint\(\{[\s\S]*organizationId:\s*notification\.organization_id,[\s\S]*endpoint:\s*subscription\.endpoint/
+    )
+    expect(authService).toMatch(
+      /revokeCurrentUserPushSubscriptions[\s\S]*getCurrentContext\(\)[\s\S]*revokeForUser\(\{[\s\S]*organizationId/
+    )
+  })
+
   it("keeps service-role clients server-only and out of client components", () => {
     const adminClient = projectFile("src/lib/supabase/admin.ts")
     const publicSupabaseBarrel = projectFile("src/lib/supabase/index.ts")

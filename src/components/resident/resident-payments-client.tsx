@@ -23,7 +23,6 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { Route } from "next"
-import QRCode from "qrcode"
 import { useEffect, useMemo, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { toast } from "sonner"
@@ -171,6 +170,8 @@ export function ResidentPaymentsClient() {
     formState: { errors, isSubmitting },
   } = useForm<PaymentInput, unknown, PaymentValues>({
     resolver: zodResolver(paymentSchema),
+    mode: "onBlur",
+    shouldFocusError: true,
     values: {
       amount: suggestedAmount,
       transactionId: "",
@@ -595,8 +596,14 @@ export function ResidentPaymentsClient() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
               <div className="grid gap-2">
                 <Label htmlFor="amount">1. Enter payment amount</Label>
-                <Input id="amount" type="number" {...register("amount")} />
-                <p className="text-xs text-muted-foreground">
+                <Input
+                  id="amount"
+                  type="number"
+                  aria-invalid={Boolean(errors.amount)}
+                  aria-describedby={errors.amount ? "amount-hint amount-error" : "amount-hint"}
+                  {...register("amount")}
+                />
+                <p id="amount-hint" className="text-xs text-muted-foreground">
                   The QR and UPI buttons below use this exact amount:
                   {" "}
                   {preparedPaymentAmount > 0
@@ -648,7 +655,7 @@ export function ResidentPaymentsClient() {
                     Set 0
                   </Button>
                 </div>
-                {errors.amount ? <p className="text-xs text-destructive">{errors.amount.message}</p> : null}
+                <PaymentFieldError id="amount-error" message={errors.amount?.message} />
               </div>
 
               <ReceiptPreview
@@ -687,11 +694,24 @@ export function ResidentPaymentsClient() {
 
             <div className="grid gap-2">
               <Label htmlFor="transactionId">UPI reference / transaction ID</Label>
-              <Input id="transactionId" placeholder="Optional" {...register("transactionId")} />
-              <p className="text-xs text-muted-foreground">
+              <Input
+                id="transactionId"
+                placeholder="Optional"
+                aria-invalid={Boolean(errors.transactionId)}
+                aria-describedby={
+                  errors.transactionId
+                    ? "transactionId-hint transactionId-error"
+                    : "transactionId-hint"
+                }
+                {...register("transactionId")}
+              />
+              <p id="transactionId-hint" className="text-xs text-muted-foreground">
                 Optional. Screenshot upload is compulsory for verification.
               </p>
-              {errors.transactionId ? <p className="text-xs text-destructive">{errors.transactionId.message}</p> : null}
+              <PaymentFieldError
+                id="transactionId-error"
+                message={errors.transactionId?.message}
+              />
             </div>
 
             <div className="grid gap-2 rounded-xl border border-dashed bg-white/55 p-4">
@@ -701,8 +721,12 @@ export function ResidentPaymentsClient() {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 required
+                aria-describedby="proof-hint"
                 onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
               />
+              <p id="proof-hint" className="text-xs text-muted-foreground">
+                Upload the screenshot you received from your UPI app after payment.
+              </p>
               {proofFile ? <p className="text-xs text-muted-foreground">{proofFile.name}</p> : null}
             </div>
 
@@ -774,6 +798,18 @@ export function ResidentPaymentsClient() {
         onOpenInvoice={openInvoice}
       />
     </motion.div>
+  )
+}
+
+function PaymentFieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) {
+    return null
+  }
+
+  return (
+    <p id={id} role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
   )
 }
 
@@ -1055,15 +1091,18 @@ function QrPaymentSection({
       return
     }
 
-    QRCode.toDataURL(upiPaymentLink, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      scale: 8,
-      color: {
-        dark: "#020617",
-        light: "#ffffff",
-      },
-    })
+    import("qrcode")
+      .then((module) =>
+        module.default.toDataURL(upiPaymentLink, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          scale: 8,
+          color: {
+            dark: "#020617",
+            light: "#ffffff",
+          },
+        })
+      )
       .then((url) => {
         if (active) {
           setExactAmountQrUrl(url)

@@ -4,13 +4,14 @@ import { conflict, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
+import { HostelRulesRepository, type HostelRuleRow } from "@/repositories/hostel-rules.repository"
 import {
   ResidentsRepository,
   type ResidentWithOnboarding,
 } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import type { Json } from "@/types/database"
+import { computeRulesVersion } from "@/services/hostel-rules.service"
 import {
   onboardingProfileSchema,
   onboardingQueueSchema,
@@ -29,10 +30,12 @@ import {
 export class ResidentOnboardingService {
   private readonly authService: AuthService
   private readonly residentsRepository: ResidentsRepository
+  private readonly hostelRulesRepository: HostelRulesRepository
 
   constructor(private readonly db: AppSupabaseClient) {
     this.authService = new AuthService(db)
     this.residentsRepository = new ResidentsRepository(db)
+    this.hostelRulesRepository = new HostelRulesRepository(db)
   }
 
   static async create() {
@@ -59,10 +62,12 @@ export class ResidentOnboardingService {
       )) as ResidentWithOnboarding | null,
       "Resident profile is not linked to this account yet."
     )
+    const residentWithRulesAcceptance =
+      await this.withPersistedHostelRulesAcceptance(resident, organizationId)
 
     return {
-      resident,
-      requirements: getResidentOnboardingRequirements(resident),
+      resident: residentWithRulesAcceptance,
+      requirements: getResidentOnboardingRequirements(residentWithRulesAcceptance),
     }
   }
 
@@ -146,8 +151,9 @@ export class ResidentOnboardingService {
       )) as ResidentWithOnboarding | null,
       "Resident profile is not linked to this account yet."
     )
-    const residentWithRulesAcceptance = withHostelRulesAcceptance(
+    const residentWithRulesAcceptance = await this.acceptCurrentHostelRules(
       resident,
+      values.organizationId,
       context.authUser.id
     )
     const requirements = getResidentOnboardingRequirements(residentWithRulesAcceptance)
@@ -175,7 +181,7 @@ export class ResidentOnboardingService {
         completionMode: "resident_self_completion",
         adminReviewRequired: false,
         hostelRulesAccepted: true,
-        hostelRulesVersion: HOSTEL_RULES_VERSION,
+        hostelRulesVersion: getHostelRulesAcceptanceVersion(residentWithRulesAcceptance),
       },
     })
 
@@ -282,6 +288,84 @@ export class ResidentOnboardingService {
       requirements: getResidentOnboardingRequirements(updated),
     }
   }
+
+  private async withPersistedHostelRulesAcceptance(
+    resident: ResidentWithOnboarding,
+    organizationId: string
+  ): Promise<ResidentWithOnboarding> {
+    if (hasAcceptedCurrentHostelRules(resident)) {
+      return resident
+    }
+
+    const rules = await this.listAllActiveRules(organizationId, resident.hostel_id)
+    const rulesVersion = computeRulesVersion(rules)
+    const acceptance = await this.hostelRulesRepository.getAcceptance({
+      organizationId,
+      residentId: resident.id,
+      rulesVersion,
+    })
+
+    if (!acceptance) {
+      return resident
+    }
+
+    return withHostelRulesAcceptance(
+      resident,
+      acceptance.created_by ?? resident.user_id ?? null,
+      acceptance.rules_version,
+      acceptance.accepted_at
+    )
+  }
+
+  private async acceptCurrentHostelRules(
+    resident: ResidentWithOnboarding,
+    organizationId: string,
+    actorUserId: string
+  ): Promise<ResidentWithOnboarding> {
+    const rules = await this.listAllActiveRules(organizationId, resident.hostel_id)
+    const rulesVersion = computeRulesVersion(rules)
+    const acceptedAt = new Date().toISOString()
+
+    await this.hostelRulesRepository.upsertAcceptance({
+      organization_id: organizationId,
+      hostel_id: resident.hostel_id,
+      resident_id: resident.id,
+      rules_version: rulesVersion,
+      accepted_at: acceptedAt,
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    })
+
+    return withHostelRulesAcceptance(
+      resident,
+      actorUserId,
+      rulesVersion,
+      acceptedAt
+    )
+  }
+
+  private async listAllActiveRules(organizationId: string, hostelId?: string | null) {
+    const pageSize = 100
+    const rules: HostelRuleRow[] = []
+    let page = 1
+    let total = 0
+
+    do {
+      const result = await this.hostelRulesRepository.list({
+        organizationId,
+        hostelId: hostelId ?? undefined,
+        activeOnly: true,
+        page,
+        pageSize,
+      })
+
+      rules.push(...result.data)
+      total = result.meta.total
+      page += 1
+    } while (rules.length < total)
+
+    return rules
+  }
 }
 
 function jsonObjectOrEmpty(value: unknown): Record<string, unknown> {
@@ -294,7 +378,9 @@ function jsonObjectOrEmpty(value: unknown): Record<string, unknown> {
 
 function withHostelRulesAcceptance(
   resident: ResidentWithOnboarding,
-  actorUserId: string
+  actorUserId: string | null,
+  rulesVersion: string,
+  acceptedAt: string
 ): ResidentWithOnboarding {
   if (hasAcceptedCurrentHostelRules(resident)) {
     return resident
@@ -311,11 +397,19 @@ function withHostelRulesAcceptance(
         ...onboarding,
         hostelRulesAcceptance: {
           accepted: true,
-          version: HOSTEL_RULES_VERSION,
-          acceptedAt: new Date().toISOString(),
+          version: rulesVersion,
+          acceptedAt,
           acceptedByUserId: actorUserId,
         },
       },
     } as Json,
   }
+}
+
+function getHostelRulesAcceptanceVersion(resident: ResidentWithOnboarding) {
+  const metadata = jsonObjectOrEmpty(resident.metadata)
+  const onboarding = jsonObjectOrEmpty(metadata.onboarding)
+  const acceptance = jsonObjectOrEmpty(onboarding.hostelRulesAcceptance)
+
+  return typeof acceptance.version === "string" ? acceptance.version : null
 }

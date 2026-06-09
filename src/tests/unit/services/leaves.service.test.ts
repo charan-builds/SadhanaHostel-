@@ -5,8 +5,9 @@ import {
   RESIDENT_ID,
   TEST_HOSTEL_ID,
   TEST_ORGANIZATION_ID,
+  residentFixture,
 } from "@/tests/fixtures"
-import { adminAuthContext } from "@/tests/helpers"
+import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { Tables } from "@/types/database"
 
 const LEAVE_REQUEST_ID = "00000000-0000-4000-8000-000000000061"
@@ -47,6 +48,7 @@ function leaveRequestFixture(
 function createServiceHarness() {
   const service = new LeavesService({} as never)
   const authService = {
+    getCurrentContext: vi.fn().mockResolvedValue(adminAuthContext()),
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
     requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
@@ -54,19 +56,29 @@ function createServiceHarness() {
   }
   const leavesRepository = {
     getById: vi.fn(),
+    create: vi.fn(),
     update: vi.fn(),
   }
-  const residentsRepository = {}
+  const residentsRepository = {
+    getById: vi.fn(),
+  }
+  const organizationsRepository = {
+    getOrganizationById: vi.fn(),
+  }
 
   Object.assign(service, {
     authService,
     leavesRepository,
     residentsRepository,
+    organizationsRepository,
   })
 
   return {
     service,
+    authService,
     leavesRepository,
+    residentsRepository,
+    organizationsRepository,
   }
 }
 
@@ -104,5 +116,83 @@ describe("LeavesService", () => {
         status: "approved",
       })
     ).resolves.toEqual(approved)
+  })
+
+  it("creates simplified resident leave requests with submitted contact metadata", async () => {
+    const harness = createServiceHarness()
+    const resident = residentFixture({
+      date_of_birth: null,
+      parent_phone: null,
+      emergency_contact_phone: null,
+      permanent_address: null,
+    })
+    const created = leaveRequestFixture({
+      metadata: {
+        workflow: "simplified_leave_request",
+        submittedStudentName: "Resident User",
+        submittedMobileNumber: "+919000000002",
+        submittedWhatsappNumber: "+919000000003",
+      },
+    })
+
+    harness.authService.getCurrentContext.mockResolvedValue(residentAuthContext())
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+    harness.leavesRepository.create.mockResolvedValue(created)
+
+    await expect(
+      harness.service.createLeave({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        residentId: RESIDENT_ID,
+        fullName: "Resident User",
+        mobileNumber: "90000 00002",
+        whatsappNumber: "90000 00003",
+        fromDate: "2026-06-01",
+        toDate: "2026-06-02",
+        reason: "Family function",
+        notes: "Need to leave today.",
+      })
+    ).resolves.toEqual(created)
+
+    expect(harness.leavesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notes: "Need to leave today.",
+        metadata: {
+          workflow: "simplified_leave_request",
+          submittedStudentName: "Resident User",
+          submittedMobileNumber: "+919000000002",
+          submittedWhatsappNumber: "+919000000003",
+        },
+      })
+    )
+  })
+
+  it("loads leave settings from organization settings with operational support fallback", async () => {
+    const harness = createServiceHarness()
+
+    harness.organizationsRepository.getOrganizationById.mockResolvedValue({
+      id: TEST_ORGANIZATION_ID,
+      settings: {
+        operationalControls: {
+          support: {
+            whatsapp: "90000 00009",
+          },
+        },
+        leaveManagement: {
+          reviewNotice: "Submit leave early for review.",
+          urgentWhatsappEscalationEnabled: false,
+        },
+      },
+    })
+
+    await expect(
+      harness.service.getLeaveSettings({
+        organizationId: TEST_ORGANIZATION_ID,
+      })
+    ).resolves.toEqual({
+      whatsappSupportNumber: "90000 00009",
+      reviewNotice: "Submit leave early for review.",
+      urgentWhatsappEscalationEnabled: false,
+    })
   })
 })

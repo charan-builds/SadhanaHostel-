@@ -98,14 +98,31 @@ export type OwnerAnalytics = {
   trends: Array<{
     month: string
     revenue: number
+    collectionAmount: number
+    collectionCount: number
     billed: number
     dues: number
+    outstandingDues: number
+    occupancyResidents: number
+    capacity: number
+    occupancyRate: number
+    admissions: number
+    admissionInquiries: number
     newResidents: number
     churnedResidents: number
     reservations: number
     confirmedReservations: number
     reservationAdvance: number
     paymentConversion: number
+    complaints: number
+    openComplaints: number
+    noticesPublished: number
+    noticeReads: number
+    noticeAcknowledgements: number
+    noticeEngagement: number
+    residentActivity: number
+    paymentSubmissions: number
+    leaveRequests: number
   }>
   forecasts: {
     revenue: {

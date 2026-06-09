@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { hostelModules } from "@/config/hostel-modules"
 import { queryKeys } from "@/lib/react-query"
 import { admissionsSdk } from "@/sdk"
 import type {
@@ -25,6 +26,7 @@ export function usePublicVacancy(params: VacancyQueryInput = {}) {
   return useQuery({
     queryKey: queryKeys.admissions.vacancy(params),
     queryFn: () => admissionsSdk.getPublicVacancy(params),
+    enabled: hostelModules.vacancy,
     staleTime: 30_000,
   })
 }
@@ -33,7 +35,7 @@ export function useAdmissionsVacancy(params: VacancyQueryInput) {
   return useQuery({
     queryKey: queryKeys.admissions.vacancy(params),
     queryFn: () => admissionsSdk.getPublicVacancy(params),
-    enabled: Boolean(params.organizationId),
+    enabled: Boolean(params.organizationId && hostelModules.vacancy),
     staleTime: 15_000,
   })
 }

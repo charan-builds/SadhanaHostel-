@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
+import { computeRulesVersion } from "@/services/hostel-rules.service"
 import { ResidentOnboardingService } from "@/services/onboarding/resident-onboarding.service"
 import {
   RESIDENT_USER_ID,
@@ -49,16 +49,47 @@ describe("ResidentOnboardingService", () => {
     const residentsRepository = {
       getByUserId: vi.fn().mockResolvedValue(resident),
     }
+    const rules = [
+      {
+        id: "rule-1",
+        category: "General",
+        title: "No alcohol",
+        description: "Alcohol is not allowed.",
+        display_order: 10,
+        is_active: true,
+        updated_at: "2026-06-08T00:00:00.000Z",
+      },
+    ]
+    const rulesVersion = computeRulesVersion(
+      rules as Parameters<typeof computeRulesVersion>[0]
+    )
+    const hostelRulesRepository = {
+      list: vi.fn().mockResolvedValue({
+        data: rules,
+        meta: {
+          page: 1,
+          pageSize: 100,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+      upsertAcceptance: vi.fn().mockResolvedValue({
+        id: "acceptance-1",
+        rules_version: rulesVersion,
+      }),
+    }
     const completeOnboarding = vi.fn().mockResolvedValue(completedResident)
     const service = new ResidentOnboardingService({} as never)
     const serviceHarness = service as unknown as {
       authService: typeof authService
       residentsRepository: Pick<ResidentsRepository, "getByUserId">
+      hostelRulesRepository: typeof hostelRulesRepository
       completeOnboardingWithoutAdminReview: typeof completeOnboarding
     }
 
     serviceHarness.authService = authService
     serviceHarness.residentsRepository = residentsRepository as never
+    serviceHarness.hostelRulesRepository = hostelRulesRepository
     serviceHarness.completeOnboardingWithoutAdminReview = completeOnboarding
 
     await expect(
@@ -78,10 +109,18 @@ describe("ResidentOnboardingService", () => {
     expect(onboarding.collegeName).toBe("Existing college")
     expect(acceptance).toMatchObject({
       accepted: true,
-      version: HOSTEL_RULES_VERSION,
+      version: rulesVersion,
       acceptedByUserId: RESIDENT_USER_ID,
     })
     expect(acceptance.acceptedAt).toEqual(expect.any(String))
+    expect(hostelRulesRepository.upsertAcceptance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organization_id: TEST_ORGANIZATION_ID,
+        hostel_id: resident.hostel_id,
+        resident_id: resident.id,
+        rules_version: rulesVersion,
+      })
+    )
     expect(completeOnboarding).toHaveBeenCalledWith(
       expect.any(Object),
       TEST_ORGANIZATION_ID,

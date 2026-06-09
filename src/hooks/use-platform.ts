@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { useAuth } from "@/lib/auth"
 import { queryKeys } from "@/lib/react-query"
 import { platformSdk } from "@/sdk"
 import type {
@@ -12,8 +13,10 @@ import type {
 } from "@/validations/platform.validation"
 
 export function useSetupStatus() {
+  const scope = usePlatformScope()
+
   return useQuery({
-    queryKey: queryKeys.platform.setupStatus,
+    queryKey: queryKeys.platform.setupStatus(scope),
     queryFn: () => platformSdk.setupStatus(),
     retry: false,
   })
@@ -24,22 +27,30 @@ export function useBootstrapAdminTenant() {
 
   return useMutation({
     mutationFn: (input: BootstrapAdminTenantInput) => platformSdk.bootstrap(input),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const scope = { organizationId: result.organization.id }
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.auth.session }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.organization }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus(scope) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.organization(scope) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels(scope) }),
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "tenant" && query.queryKey[3] === "platform",
+        }),
       ])
     },
   })
 }
 
 export function useOrganizationSettings(enabled = true) {
+  const scope = usePlatformScope()
+
   return useQuery({
-    queryKey: queryKeys.platform.organization,
+    queryKey: queryKeys.platform.organization(scope),
     queryFn: () => platformSdk.organization(),
-    enabled,
+    enabled: Boolean(enabled && scope.organizationId),
   })
 }
 
@@ -49,20 +60,24 @@ export function useUpdateOrganizationSettings() {
   return useMutation({
     mutationFn: (input: UpdateOrganizationInput) =>
       platformSdk.updateOrganization(input),
-    onSuccess: async () => {
+    onSuccess: async (organization) => {
+      const scope = { organizationId: organization.id }
+
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.organization }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.organization(scope) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus(scope) }),
       ])
     },
   })
 }
 
 export function useHostels(enabled = true) {
+  const scope = usePlatformScope()
+
   return useQuery({
-    queryKey: queryKeys.platform.hostels,
+    queryKey: queryKeys.platform.hostels(scope),
     queryFn: () => platformSdk.hostels(),
-    enabled,
+    enabled: Boolean(enabled && scope.organizationId),
   })
 }
 
@@ -71,10 +86,12 @@ export function useCreateHostel() {
 
   return useMutation({
     mutationFn: (input: HostelCreateInput) => platformSdk.createHostel(input),
-    onSuccess: async () => {
+    onSuccess: async (hostel) => {
+      const scope = { organizationId: hostel.organization_id }
+
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels(scope) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus(scope) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.auth.session }),
       ])
     },
@@ -86,12 +103,20 @@ export function useUpdateHostel() {
 
   return useMutation({
     mutationFn: (input: HostelUpdateInput) => platformSdk.updateHostel(input),
-    onSuccess: async () => {
+    onSuccess: async (hostel) => {
+      const scope = { organizationId: hostel.organization_id }
+
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.hostels(scope) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.platform.setupStatus(scope) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.auth.session }),
       ])
     },
   })
+}
+
+function usePlatformScope() {
+  const { organizationId } = useAuth()
+
+  return { organizationId }
 }

@@ -480,15 +480,18 @@ function LeaveResidentSummary({
   leave: Tables<"leave_requests">
   resident?: Tables<"residents">
 }) {
+  const contact = getLeaveSubmittedContact(leave, resident)
+
   return (
     <div className="min-w-0">
       <div className="font-medium">
-        {resident?.full_name ?? `Resident ${leave.resident_id.slice(0, 8)}`}
+        {contact.fullName ?? resident?.full_name ?? `Resident ${leave.resident_id.slice(0, 8)}`}
       </div>
       <div className="mt-1 text-xs text-muted-foreground">
         {resident
-          ? `${resident.admission_number} · ${resident.phone ?? "No phone"}`
-          : `${leave.resident_id.slice(0, 8)} · ${leave.travel_mode || "Travel mode not set"}`}
+          ? `${resident.admission_number} · ${contact.mobileNumber ?? resident.phone ?? "No phone"}`
+          : `${leave.resident_id.slice(0, 8)} · ${contact.mobileNumber ?? "No phone"}`}
+        {contact.whatsappNumber ? ` · WhatsApp ${contact.whatsappNumber}` : ""}
       </div>
     </div>
   )
@@ -501,6 +504,31 @@ function LeaveInfo({ label, value }: { label: string; value: string }) {
       <span className="max-w-[62%] text-right font-medium text-foreground">{value}</span>
     </div>
   )
+}
+
+function getLeaveSubmittedContact(
+  leave: Tables<"leave_requests">,
+  resident?: Tables<"residents">
+) {
+  const metadata = recordFromUnknown(leave.metadata)
+
+  return {
+    fullName: stringFromRecord(metadata, "submittedStudentName") ?? resident?.full_name,
+    mobileNumber: stringFromRecord(metadata, "submittedMobileNumber") ?? resident?.phone,
+    whatsappNumber: stringFromRecord(metadata, "submittedWhatsappNumber"),
+  }
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function stringFromRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
 function LeaveStatusTimeline({ leave }: { leave: Tables<"leave_requests"> }) {

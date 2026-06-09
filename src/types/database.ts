@@ -266,6 +266,105 @@ export type Database = {
           },
         ]
       }
+      employee_accommodation_rooms: {
+        Row: {
+          amenities: string[]
+          capacity: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          description: string | null
+          hostel_id: string | null
+          id: string
+          is_active: boolean
+          is_visible: boolean
+          organization_id: string
+          published_at: string | null
+          sort_order: number
+          status: Database["public"]["Enums"]["cms_status_enum"]
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amenities?: string[]
+          capacity?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          hostel_id?: string | null
+          id?: string
+          is_active?: boolean
+          is_visible?: boolean
+          organization_id: string
+          published_at?: string | null
+          sort_order?: number
+          status?: Database["public"]["Enums"]["cms_status_enum"]
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amenities?: string[]
+          capacity?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string | null
+          hostel_id?: string | null
+          id?: string
+          is_active?: boolean
+          is_visible?: boolean
+          organization_id?: string
+          published_at?: string | null
+          sort_order?: number
+          status?: Database["public"]["Enums"]["cms_status_enum"]
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_accommodation_rooms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_accommodation_rooms_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_accommodation_rooms_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_accommodation_rooms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_accommodation_rooms_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       facilities: {
         Row: {
           created_at: string
@@ -474,6 +573,168 @@ export type Database = {
           },
           {
             foreignKeyName: "gallery_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hostel_rule_acceptances: {
+        Row: {
+          accepted_at: string
+          created_at: string
+          created_by: string | null
+          hostel_id: string | null
+          id: string
+          organization_id: string
+          resident_id: string
+          rules_version: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          accepted_at?: string
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          organization_id: string
+          resident_id: string
+          rules_version: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          accepted_at?: string
+          created_at?: string
+          created_by?: string | null
+          hostel_id?: string | null
+          id?: string
+          organization_id?: string
+          resident_id?: string
+          rules_version?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hostel_rule_acceptances_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rule_acceptances_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rule_acceptances_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rule_acceptances_resident_id_fkey"
+            columns: ["resident_id"]
+            isOneToOne: false
+            referencedRelation: "residents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rule_acceptances_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hostel_rules: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          description: string
+          display_order: number
+          hostel_id: string | null
+          id: string
+          is_active: boolean
+          organization_id: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description: string
+          display_order?: number
+          hostel_id?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          description?: string
+          display_order?: number
+          hostel_id?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hostel_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rules_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rules_hostel_id_fkey"
+            columns: ["hostel_id"]
+            isOneToOne: false
+            referencedRelation: "hostels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hostel_rules_updated_by_fkey"
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "users"

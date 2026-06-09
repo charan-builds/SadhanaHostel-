@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/react-query"
 import { noticesSdk } from "@/sdk"
 import type {
+  AcknowledgeNoticeInput,
   CreateNoticeInput,
+  MarkNoticeReadInput,
   NoticeListInput,
   UpdateNoticeInput,
 } from "@/validations/notice.validation"
@@ -39,6 +41,46 @@ export function useUpdateNotice() {
 
   return useMutation({
     mutationFn: (input: UpdateNoticeInput) => noticesSdk.update(input),
+    onSuccess: (notice) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notices.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useMarkNoticeRead() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: MarkNoticeReadInput & { noticeId: string }) => {
+      const { noticeId, ...body } = input
+
+      return noticesSdk.markRead(noticeId, body)
+    },
+    onSuccess: (notice) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notices.all({
+          organizationId: notice.organization_id,
+          hostelId: notice.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
+export function useAcknowledgeNotice() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: AcknowledgeNoticeInput & { noticeId: string }) => {
+      const { noticeId, ...body } = input
+
+      return noticesSdk.acknowledge(noticeId, body)
+    },
     onSuccess: (notice) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.notices.all({

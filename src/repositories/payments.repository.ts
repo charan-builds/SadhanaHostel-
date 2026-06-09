@@ -324,6 +324,7 @@ export class PaymentsRepository {
       .eq("id", paymentId)
       .eq("organization_id", organizationId)
       .eq("status", "verified")
+      .in("invoice_finalization_status", ["pending", "failed", "not_required"])
       .is("deleted_at", null)
       .select("*")
       .single()

@@ -13,9 +13,11 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { EmployeeAccommodationRoomsSection } from "@/components/public/employee-accommodation-rooms-section"
 import { LocalBusinessSummary } from "@/components/public/local-business-summary"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
 import { hostelImages } from "@/constants/hostel-images"
+import type { EmployeeAccommodationRoom } from "@/types/frontend"
 
 type AudienceKind = "student" | "employee"
 
@@ -34,6 +36,7 @@ type AudienceHostelPageContentProps = {
     question: string
     answer: string
   }>
+  employeeAccommodationRooms?: EmployeeAccommodationRoom[]
 }
 
 const facilityItems = [
@@ -68,6 +71,7 @@ export function AudienceHostelPageContent({
   priceContext,
   highlights,
   faqItems,
+  employeeAccommodationRooms = [],
 }: AudienceHostelPageContentProps) {
   const audienceIcon = kind === "student" ? GraduationCap : BriefcaseBusiness
   const AudienceIcon = audienceIcon
@@ -148,6 +152,10 @@ export function AudienceHostelPageContent({
           </div>
         </div>
       </section>
+
+      {kind === "employee" ? (
+        <EmployeeAccommodationRoomsSection rooms={employeeAccommodationRooms} />
+      ) : null}
 
       <section className="bg-slate-50 px-4 py-14 sm:px-6 sm:py-16">
         <div className="mx-auto max-w-7xl">

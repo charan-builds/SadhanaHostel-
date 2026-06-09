@@ -11,8 +11,11 @@ import {
   trackContactAction,
   trackWhatsAppClick,
 } from "@/lib/analytics/google-analytics"
+import type { LeadFormContent } from "@/types/frontend"
 
-export function InquirySection() {
+export function InquirySection({ leadForm }: { leadForm?: LeadFormContent }) {
+  const imageUrl = leadForm?.imageUrl || hostelImages.exterior
+
   return (
     <section className="bg-background py-14 sm:py-20" id="inquiry">
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
@@ -25,7 +28,7 @@ export function InquirySection() {
         >
           <div className="relative aspect-[4/3]">
             <Image
-              src={hostelImages.exterior}
+              src={imageUrl}
               alt="Sadhana Boys Hostel view"
               fill
               className="object-cover"
@@ -36,7 +39,7 @@ export function InquirySection() {
             <div className="absolute bottom-0 p-6">
               <p className="text-sm font-medium text-cyan-100">Visit or contact</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-                Speak with the hostel office before you visit.
+                {leadForm?.title || "Speak with the hostel office before you visit."}
               </h2>
             </div>
           </div>
@@ -53,7 +56,7 @@ export function InquirySection() {
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.55, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
         >
-          <ContactInquiryForm />
+          <ContactInquiryForm content={leadForm} />
         </motion.div>
       </div>
     </section>

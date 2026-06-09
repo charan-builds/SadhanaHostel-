@@ -7,7 +7,13 @@ import {
   throwRepositoryError,
 } from "@/repositories/types"
 
-export type SearchEntityType = "residents" | "payments" | "rooms" | "notices"
+export type SearchEntityType =
+  | "residents"
+  | "payments"
+  | "rooms"
+  | "notices"
+  | "complaints"
+  | "reports"
 
 export type SearchResult = {
   entity_type: SearchEntityType

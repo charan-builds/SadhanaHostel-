@@ -54,11 +54,16 @@ export class PushSubscriptionsRepository {
     return data ?? []
   }
 
-  async update(subscriptionId: string, values: TablesUpdate<"push_subscriptions">) {
+  async update(input: {
+    subscriptionId: string
+    organizationId: string
+    values: TablesUpdate<"push_subscriptions">
+  }) {
     const { data, error } = await this.db
       .from("push_subscriptions")
-      .update(values)
-      .eq("id", subscriptionId)
+      .update(input.values)
+      .eq("id", input.subscriptionId)
+      .eq("organization_id", input.organizationId)
       .select("*")
       .single()
 
@@ -70,6 +75,7 @@ export class PushSubscriptionsRepository {
   }
 
   async revokeForUser(input: {
+    organizationId: string
     userId: string
     endpoint?: string
     actorUserId?: string | null
@@ -82,6 +88,7 @@ export class PushSubscriptionsRepository {
         revoked_by: input.actorUserId ?? input.userId,
         updated_by: input.actorUserId ?? input.userId,
       })
+      .eq("organization_id", input.organizationId)
       .eq("user_id", input.userId)
       .is("revoked_at", null)
 
@@ -99,6 +106,7 @@ export class PushSubscriptionsRepository {
   }
 
   async revokeEndpoint(input: {
+    organizationId: string
     endpoint: string
     actorUserId?: string | null
   }) {
@@ -110,6 +118,7 @@ export class PushSubscriptionsRepository {
         revoked_by: input.actorUserId ?? null,
         updated_by: input.actorUserId ?? null,
       })
+      .eq("organization_id", input.organizationId)
       .eq("endpoint", input.endpoint)
       .is("revoked_at", null)
       .select("id")

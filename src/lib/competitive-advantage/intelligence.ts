@@ -42,6 +42,13 @@ export type CompetitiveRiskSignal = {
   href: string
 }
 
+export type CompetitiveAssistantNextAction = {
+  label: string
+  detail: string
+  href: string
+  priority: CompetitivePriority
+}
+
 export type CompetitiveAdvantageModel = {
   activityFeed: CompetitiveFeedItem[]
   automatedFollowups: CompetitiveFollowup[]
@@ -63,6 +70,7 @@ export type CompetitiveAdvantageModel = {
   complaintEscalations: CompetitiveRiskSignal[]
   ownerDailyDigest: string[]
   vacancyIntelligence: {
+    source: "capacity" | "resident_records"
     totalBeds: number
     occupiedBeds: number
     availableBeds: number
@@ -79,6 +87,13 @@ export type CompetitiveAdvantageModel = {
     summary: string
   }
   retentionSignals: CompetitiveRiskSignal[]
+  operationsAssistant: {
+    revenueSummary: string
+    complaintSummary: string
+    occupancySummary: string
+    dailyDigest: string
+    nextAction: CompetitiveAssistantNextAction
+  }
   operationsSummary: string
 }
 
@@ -144,7 +159,11 @@ export function buildCompetitiveAdvantageModel({
     onboardingQueue,
     today,
   })
-  const vacancyIntelligence = buildVacancyIntelligence(vacancy)
+  const vacancyIntelligence = buildVacancyIntelligence({
+    vacancy,
+    ownerAnalytics,
+    dashboardAnalytics,
+  })
   const revenueForecast = buildRevenueForecast(ownerAnalytics, financeDashboard)
   const retentionSignals = buildRetentionSignals({
     ownerAnalytics,
@@ -160,6 +179,14 @@ export function buildCompetitiveAdvantageModel({
     retentionSignals,
     automatedFollowups,
   })
+  const operationsAssistant = buildOperationsAssistant({
+    paymentRisk,
+    complaintEscalations,
+    vacancyIntelligence,
+    revenueForecast,
+    ownerDailyDigest,
+    automatedFollowups,
+  })
 
   return {
     activityFeed,
@@ -171,6 +198,7 @@ export function buildCompetitiveAdvantageModel({
     vacancyIntelligence,
     revenueForecast,
     retentionSignals,
+    operationsAssistant,
     operationsSummary: buildOperationsSummary({
       paymentRisk,
       complaintEscalations,
@@ -437,10 +465,10 @@ function buildComplaintEscalations(
   return requests
     .filter((request) => ["open", "in_progress", "waiting_on_resident"].includes(request.status))
     .filter((request) => request.priority === "urgent" || request.priority === "high")
-    .map((request) => ({
+    .map((request): CompetitiveRiskSignal => ({
       id: request.id,
       title: request.subject,
-      detail: `${request.category} · ${request.status}`,
+      detail: `${request.category} - ${request.status}`,
       priority: request.priority === "urgent" ? "critical" : "high",
       href: "/admin/alerts",
     }))
@@ -448,23 +476,39 @@ function buildComplaintEscalations(
     .slice(0, 8)
 }
 
-function buildVacancyIntelligence(vacancy?: VacancyPayload | null) {
-  const summary = vacancy?.summary
-  const totalBeds = summary?.total_beds ?? 0
-  const occupiedBeds = summary?.occupied_beds ?? 0
-  const availableBeds = summary?.available_beds ?? 0
+function buildVacancyIntelligence(input: {
+  vacancy?: VacancyPayload | null
+  ownerAnalytics?: OwnerAnalytics | null
+  dashboardAnalytics?: DashboardAnalytics | null
+}) {
+  const summary = input.vacancy?.summary
+  const source: CompetitiveAdvantageModel["vacancyIntelligence"]["source"] = summary
+    ? "capacity"
+    : "resident_records"
+  const totalBeds =
+    summary?.total_beds ??
+    input.ownerAnalytics?.summary.totalResidents ??
+    input.dashboardAnalytics?.totalResidents ??
+    0
+  const occupiedBeds =
+    summary?.occupied_beds ??
+    input.ownerAnalytics?.summary.activeResidents ??
+    input.dashboardAnalytics?.residentLifecycle.activeResidents ??
+    0
+  const availableBeds = summary?.available_beds ?? Math.max(totalBeds - occupiedBeds, 0)
   const reservedBeds = summary?.reserved_beds ?? 0
   const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0
   const priority: CompetitivePriority =
     totalBeds === 0
       ? "low"
-      : availableBeds <= 2
+      : source === "capacity" && availableBeds <= 2
         ? "high"
         : occupancyRate < 60
           ? "medium"
           : "low"
 
   return {
+    source,
     totalBeds,
     occupiedBeds,
     availableBeds,
@@ -473,12 +517,14 @@ function buildVacancyIntelligence(vacancy?: VacancyPayload | null) {
     priority,
     summary:
       totalBeds === 0
-        ? "Vacancy data is not available yet."
-        : availableBeds <= 2
-          ? "Vacancy is tight. Prioritize confirmed reservations and room readiness."
+        ? "Occupancy signals are not available yet."
+        : source === "capacity" && availableBeds <= 2
+          ? "Capacity is tight. Prioritize confirmed admissions and room readiness."
           : occupancyRate < 60
             ? "Occupancy can improve. Admissions follow-up should be active today."
-            : "Vacancy and occupancy are in a healthy operating range.",
+            : source === "capacity"
+              ? "Capacity and occupancy are in a healthy operating range."
+              : "Resident occupancy is in a healthy operating range.",
   }
 }
 
@@ -592,6 +638,62 @@ function buildOwnerDailyDigest(input: {
   return digest
 }
 
+function buildOperationsAssistant(input: {
+  paymentRisk: CompetitiveAdvantageModel["paymentRisk"]
+  complaintEscalations: CompetitiveRiskSignal[]
+  vacancyIntelligence: CompetitiveAdvantageModel["vacancyIntelligence"]
+  revenueForecast: CompetitiveAdvantageModel["revenueForecast"]
+  ownerDailyDigest: string[]
+  automatedFollowups: CompetitiveFollowup[]
+}) {
+  const topFollowup = input.automatedFollowups[0]
+  const topComplaint = input.complaintEscalations[0]
+  const topPaymentRisk = input.paymentRisk.signals[0]
+  const nextAction: CompetitiveAssistantNextAction = topFollowup
+    ? {
+        label: topFollowup.title,
+        detail: topFollowup.detail,
+        href: topFollowup.href,
+        priority: topFollowup.priority,
+      }
+    : topComplaint
+      ? {
+          label: "Escalate complaint",
+          detail: topComplaint.detail,
+          href: topComplaint.href,
+          priority: topComplaint.priority,
+        }
+      : topPaymentRisk
+        ? {
+            label: topPaymentRisk.title,
+            detail: topPaymentRisk.detail,
+            href: topPaymentRisk.href,
+            priority: topPaymentRisk.priority,
+          }
+        : {
+            label: "Review daily dashboard",
+            detail: "No urgent operating action is active. Review the owner dashboard and keep monitoring.",
+            href: "/admin/owner-dashboard",
+            priority: "low",
+          }
+
+  return {
+    revenueSummary:
+      input.paymentRisk.pendingAmount > 0
+        ? `${input.paymentRisk.pendingPayments} payment proof${input.paymentRisk.pendingPayments === 1 ? "" : "s"} and pending dues of ${input.paymentRisk.pendingAmount} need collection attention.`
+        : input.revenueForecast.expectedBilling > 0
+          ? `Forecasted collection is ${input.revenueForecast.expectedCollectionRate}% on expected billing.`
+          : "Revenue signals are calm; forecast will sharpen as billing history grows.",
+    complaintSummary:
+      input.complaintEscalations.length > 0
+        ? `${input.complaintEscalations.length} high-priority complaint${input.complaintEscalations.length === 1 ? "" : "s"} need owner attention.`
+        : "No high-priority complaint escalation is active.",
+    occupancySummary: input.vacancyIntelligence.summary,
+    dailyDigest: input.ownerDailyDigest.slice(0, 3).join(" "),
+    nextAction,
+  }
+}
+
 function buildOperationsSummary(input: {
   paymentRisk: CompetitiveAdvantageModel["paymentRisk"]
   complaintEscalations: CompetitiveRiskSignal[]
@@ -603,11 +705,11 @@ function buildOperationsSummary(input: {
     input.paymentRisk.signals[0]?.title,
     input.complaintEscalations[0]?.title,
     input.noticeInsights.pendingAcknowledgements > 0 ? "notice follow-up" : null,
-    input.vacancyIntelligence.priority !== "low" ? "vacancy management" : null,
+    input.vacancyIntelligence.priority !== "low" ? "occupancy management" : null,
   ].filter(Boolean)
 
   if (risks.length === 0) {
-    return "Operations are healthy today. Keep monitoring payment verification, resident complaints, notice engagement, and vacancy movement."
+    return "Operations are healthy today. Keep monitoring payment verification, resident complaints, notice engagement, and occupancy movement."
   }
 
   return `Focus today on ${risks.join(", ")}. ${input.automatedFollowups.length} automated follow-up path${input.automatedFollowups.length === 1 ? "" : "s"} can reduce manual work.`

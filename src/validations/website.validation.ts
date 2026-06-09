@@ -57,6 +57,35 @@ export const galleryListSchema = paginationSchema.extend({
   category: z.string().trim().max(80).optional(),
 })
 
+const employeeRoomAmenitiesSchema = z
+  .array(z.string().trim().min(1).max(80))
+  .max(12)
+  .default([])
+
+export const employeeAccommodationRoomsListSchema = paginationSchema.extend({
+  organizationId: uuidSchema.optional(),
+  hostelId: uuidSchema.optional(),
+  status: z.enum(Constants.public.Enums.cms_status_enum).optional(),
+  includeHidden: booleanLikeSchema.optional(),
+})
+
+export const createEmployeeAccommodationRoomSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  title: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(1000).optional(),
+  capacity: z.coerce.number().int().min(1).max(50).default(1),
+  amenities: employeeRoomAmenitiesSchema,
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  isVisible: z.boolean().default(true),
+  status: z.enum(Constants.public.Enums.cms_status_enum).default("published"),
+})
+
+export const updateEmployeeAccommodationRoomSchema =
+  createEmployeeAccommodationRoomSchema.extend({
+    roomId: uuidSchema,
+  })
+
 export const createGalleryItemSchema = z.object({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
@@ -91,6 +120,15 @@ export type FacilitiesListInput = z.infer<typeof facilitiesListSchema>
 export type CreateFacilityInput = z.infer<typeof createFacilitySchema>
 export type UpdateFacilityInput = z.infer<typeof updateFacilitySchema>
 export type GalleryListInput = z.infer<typeof galleryListSchema>
+export type EmployeeAccommodationRoomsListInput = z.infer<
+  typeof employeeAccommodationRoomsListSchema
+>
+export type CreateEmployeeAccommodationRoomInput = z.infer<
+  typeof createEmployeeAccommodationRoomSchema
+>
+export type UpdateEmployeeAccommodationRoomInput = z.infer<
+  typeof updateEmployeeAccommodationRoomSchema
+>
 export type CreateGalleryItemInput = z.infer<typeof createGalleryItemSchema>
 export type UploadGalleryImageInput = z.infer<typeof uploadGalleryImageSchema>
 export type DeleteGalleryItemInput = z.infer<typeof deleteGalleryItemSchema>

@@ -1,12 +1,14 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { describe, expect, it, vi } from "vitest"
 
-import { ADMIN_PORTAL_ROLES } from "@/constants/auth"
 import { forbidden } from "@/lib/api"
 import { SupportService } from "@/services/support.service"
 import { TEST_HOSTEL_ID, TEST_ORGANIZATION_ID } from "@/tests/fixtures"
 import { adminAuthContext } from "@/tests/helpers"
 
-function createOperationalAlertsHarness(role: "owner" | "admin") {
+function createOperationalAlertsHarness(role: "owner" | "admin" | "finance") {
   const service = new SupportService({} as never, {} as never)
   const context = adminAuthContext({
     roles: [role],
@@ -15,7 +17,13 @@ function createOperationalAlertsHarness(role: "owner" | "admin") {
     hostelIds: [TEST_HOSTEL_ID],
   })
   const authService = {
-    requireRole: vi.fn().mockResolvedValue(context),
+    requirePermission: vi.fn().mockImplementation((permission: string) => {
+      if (role === "finance" && permission === "residents.manage") {
+        return Promise.reject(forbidden("Your role does not allow this action."))
+      }
+
+      return Promise.resolve(context)
+    }),
     requireHostelAccess: vi.fn(),
   }
   const requestScopedSupportRepository = {
@@ -77,7 +85,7 @@ describe("SupportService operational alerts permissions", () => {
       hostelId: TEST_HOSTEL_ID,
     })
 
-    expect(authService.requireRole).toHaveBeenCalledWith(ADMIN_PORTAL_ROLES)
+    expect(authService.requirePermission).toHaveBeenCalledWith("residents.manage")
     expect(authService.requireHostelAccess).toHaveBeenCalledWith(
       expect.objectContaining({ roles: ["owner"] }),
       TEST_ORGANIZATION_ID,
@@ -118,10 +126,31 @@ describe("SupportService operational alerts permissions", () => {
     )
   })
 
-  it("denies users who cannot enter the admin portal before loading alert data", async () => {
+  it("denies finance-only users before loading operational support alert data", async () => {
+    const {
+      service,
+      authService,
+      adminSupportRepository,
+      adminOperationsRepository,
+    } = createOperationalAlertsHarness("finance")
+
+    await expect(
+      service.getOperationalAlerts({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+      })
+    ).rejects.toThrow("Your role does not allow this action.")
+
+    expect(authService.requirePermission).toHaveBeenCalledWith("residents.manage")
+    expect(authService.requireHostelAccess).not.toHaveBeenCalled()
+    expect(adminSupportRepository.countPasswordResetRequests).not.toHaveBeenCalled()
+    expect(adminOperationsRepository.count).not.toHaveBeenCalled()
+  })
+
+  it("denies users without resident-management permission before loading alert data", async () => {
     const service = new SupportService({} as never, {} as never)
     const authService = {
-      requireRole: vi
+      requirePermission: vi
         .fn()
         .mockRejectedValue(forbidden("Your role does not allow this action.")),
       requireHostelAccess: vi.fn(),
@@ -148,9 +177,39 @@ describe("SupportService operational alerts permissions", () => {
       })
     ).rejects.toThrow("Your role does not allow this action.")
 
-    expect(authService.requireRole).toHaveBeenCalledWith(ADMIN_PORTAL_ROLES)
+    expect(authService.requirePermission).toHaveBeenCalledWith("residents.manage")
     expect(authService.requireHostelAccess).not.toHaveBeenCalled()
     expect(adminSupportRepository.countPasswordResetRequests).not.toHaveBeenCalled()
     expect(adminOperationsRepository.count).not.toHaveBeenCalled()
+  })
+
+  it("requires resident-management permission for admin-side support updates", () => {
+    const source = readFileSync(join(process.cwd(), "src/services/support.service.ts"), "utf8")
+    const updateStart = source.indexOf("async updateRequest")
+    const permissionGuard = source.indexOf('requirePermission("residents.manage")', updateStart)
+    const repositoryRead = source.indexOf("this.supportRepository.getById", updateStart)
+
+    expect(updateStart).toBeGreaterThan(-1)
+    expect(permissionGuard).toBeGreaterThan(updateStart)
+    expect(repositoryRead).toBeGreaterThan(permissionGuard)
+  })
+})
+
+describe("SupportService resident password reset approval edge cases", () => {
+  it("guards already-approved password reset requests before generating another temporary password", () => {
+    const source = readFileSync(join(process.cwd(), "src/services/support.service.ts"), "utf8")
+    const alreadyGeneratedGuard = source.indexOf(
+      'previous.status === "waiting_on_resident"'
+    )
+    const completedGuard = source.indexOf(
+      'previous.status === "resolved" || previous.status === "closed"'
+    )
+    const resetSideEffect = source.indexOf("resetResidentTemporaryPassword")
+
+    expect(alreadyGeneratedGuard).toBeGreaterThan(-1)
+    expect(completedGuard).toBeGreaterThan(-1)
+    expect(resetSideEffect).toBeGreaterThan(-1)
+    expect(alreadyGeneratedGuard).toBeLessThan(resetSideEffect)
+    expect(completedGuard).toBeLessThan(resetSideEffect)
   })
 })

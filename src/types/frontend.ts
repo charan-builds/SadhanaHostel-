@@ -20,6 +20,34 @@ export type GalleryItem = {
   imageUrl?: string
 }
 
+export type EmployeeAccommodationRoomImage = GalleryItem
+
+export type EmployeeAccommodationRoom = {
+  id: string
+  title: string
+  description: string
+  capacity: number
+  amenities: string[]
+  images: EmployeeAccommodationRoomImage[]
+}
+
+export type PublicHostelRule = {
+  id: string
+  category: string
+  title: string
+  description: string
+  displayOrder: number
+  updatedAt: string
+}
+
+export type LeadFormContent = {
+  title: string
+  subtitle: string
+  description: string
+  ctaText: string
+  imageUrl?: string
+}
+
 export type TestimonialItem = {
   name: string
   role: string

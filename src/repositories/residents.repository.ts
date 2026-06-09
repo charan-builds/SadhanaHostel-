@@ -1,4 +1,5 @@
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
+import { normalizeDateRange } from "@/lib/date-range"
 import {
   normalizeOptionalPhoneNumber,
   phoneLastTen,
@@ -52,6 +53,8 @@ export type ListResidentsFilters = PaginationParams & {
   status?: ResidentStatus
   residentType?: ResidentType
   search?: string
+  fromDate?: string
+  toDate?: string
 }
 
 export class ResidentsRepository {
@@ -60,6 +63,7 @@ export class ResidentsRepository {
   async list(filters: ListResidentsFilters): Promise<PaginatedResult<ResidentRow>> {
     const { page, pageSize, from, to } = normalizePagination(filters)
     const search = sanitizeSearchTerm(filters.search)
+    const range = normalizeDateRange(filters)
 
     let query = this.db
       .from("residents")
@@ -78,6 +82,14 @@ export class ResidentsRepository {
 
     if (filters.residentType) {
       query = query.eq("resident_type", filters.residentType)
+    }
+
+    if (range.fromDate) {
+      query = query.gte("created_at", range.fromDate)
+    }
+
+    if (range.toDate) {
+      query = query.lte("created_at", range.toDate)
     }
 
     if (search) {

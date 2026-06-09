@@ -33,7 +33,7 @@ export function AdminOnboardingVerificationClient() {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [search, setSearch] = useState("")
-  const [rejectionReason, setRejectionReason] = useState("")
+  const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({})
   const queue = useOnboardingQueue({
     organizationId: organizationId ?? "",
     hostelId,
@@ -44,10 +44,19 @@ export function AdminOnboardingVerificationClient() {
   const review = useReviewOnboarding()
   const residents = queue.data?.data ?? []
 
+  function updateRejectionReason(residentId: string, value: string) {
+    setRejectionReasons((current) => ({
+      ...current,
+      [residentId]: value,
+    }))
+  }
+
   async function reviewResident(residentId: string, status: "verified" | "rejected") {
     if (!organizationId) {
       return
     }
+
+    const rejectionReason = rejectionReasons[residentId]?.trim()
 
     await review.mutateAsync({
       organizationId,
@@ -55,7 +64,11 @@ export function AdminOnboardingVerificationClient() {
       status,
       rejectionReason: status === "rejected" ? rejectionReason : undefined,
     })
-    setRejectionReason("")
+    setRejectionReasons((current) => {
+      const next = { ...current }
+      delete next[residentId]
+      return next
+    })
     await queue.refetch()
       toast.success(status === "verified" ? "Resident activated." : "Resident sent back.")
   }
@@ -124,90 +137,207 @@ export function AdminOnboardingVerificationClient() {
               message="Residents disappear from this list after completing profile and hostel rules."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Resident</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Profile</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Updated</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {residents.map((resident) => {
-                    const profileComplete = Boolean(
-                      resident.full_name &&
-                        resident.date_of_birth &&
-                        resident.phone &&
-                        resident.parent_phone &&
-                        resident.emergency_contact_phone &&
-                        resident.permanent_address &&
-                        resident.hostel_id
-                    )
-                    const ready = resident.onboarding_status === "verification_pending"
+            <div className="grid gap-3">
+              <div className="grid gap-3 lg:hidden">
+                {residents.map((resident) => (
+                  <OnboardingResidentCard
+                    key={resident.id}
+                    resident={resident}
+                    rejectionReason={rejectionReasons[resident.id] ?? ""}
+                    reviewPending={review.isPending}
+                    onReasonChange={(value) => updateRejectionReason(resident.id, value)}
+                    onReview={(status) => void reviewResident(resident.id, status)}
+                  />
+                ))}
+              </div>
 
-                    return (
-                      <TableRow key={resident.id}>
-                        <TableCell>
-                          <p className="font-medium">{resident.full_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {resident.admission_number}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <p>{resident.phone ?? "-"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {resident.email ?? "No email"}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <span className={profileComplete ? "text-emerald-700" : "text-amber-700"}>
-                            {profileComplete ? "Profile ready" : "Profile incomplete"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={resident.onboarding_status ?? "profile_incomplete"} />
-                        </TableCell>
-                        <TableCell>{formatDateTime(resident.updated_at)}</TableCell>
-                        <TableCell>
-                          <div className="grid gap-2">
-                            <Button
-                              size="sm"
-                              disabled={!ready || review.isPending}
-                              onClick={() => void reviewResident(resident.id, "verified")}
-                            >
-                              <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                              Activate
-                            </Button>
-                            <Textarea
-                              value={rejectionReason}
-                              onChange={(event) => setRejectionReason(event.target.value)}
-                              placeholder="Reason for rejection"
-                              className="min-h-16 min-w-56"
-                            />
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              disabled={!rejectionReason.trim() || review.isPending}
-                              onClick={() => void reviewResident(resident.id, "rejected")}
-                            >
-                              <XCircle className="size-3.5" aria-hidden="true" />
-                              Reject
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+              <div className="hidden overflow-x-auto rounded-lg border lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Resident</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Profile</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Updated</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {residents.map((resident) => {
+                      const profileComplete = isProfileComplete(resident)
+                      const ready = resident.onboarding_status === "verification_pending"
+                      const rejectionReason = rejectionReasons[resident.id] ?? ""
+
+                      return (
+                        <TableRow key={resident.id}>
+                          <TableCell>
+                            <p className="font-medium">{resident.full_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {resident.admission_number}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p>{resident.phone ?? "-"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {resident.email ?? "No email"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <span className={profileComplete ? "text-emerald-700" : "text-amber-700"}>
+                              {profileComplete ? "Profile ready" : "Profile incomplete"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={resident.onboarding_status ?? "profile_incomplete"} />
+                          </TableCell>
+                          <TableCell>{formatDateTime(resident.updated_at)}</TableCell>
+                          <TableCell>
+                            <div className="grid gap-2">
+                              <Button
+                                size="sm"
+                                disabled={!ready || review.isPending}
+                                onClick={() => void reviewResident(resident.id, "verified")}
+                              >
+                                <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                                Activate
+                              </Button>
+                              <Textarea
+                                value={rejectionReason}
+                                onChange={(event) => updateRejectionReason(resident.id, event.target.value)}
+                                placeholder="Reason for rejection"
+                                className="min-h-16 min-w-56"
+                              />
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={!rejectionReason.trim() || review.isPending}
+                                onClick={() => void reviewResident(resident.id, "rejected")}
+                              >
+                                <XCircle className="size-3.5" aria-hidden="true" />
+                                Reject
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function isProfileComplete(resident: {
+  full_name: string | null
+  date_of_birth: string | null
+  phone: string | null
+  parent_phone: string | null
+  emergency_contact_phone: string | null
+  permanent_address: string | null
+  hostel_id: string | null
+}) {
+  return Boolean(
+    resident.full_name &&
+      resident.date_of_birth &&
+      resident.phone &&
+      resident.parent_phone &&
+      resident.emergency_contact_phone &&
+      resident.permanent_address &&
+      resident.hostel_id
+  )
+}
+
+function OnboardingResidentCard({
+  resident,
+  rejectionReason,
+  reviewPending,
+  onReasonChange,
+  onReview,
+}: {
+  resident: {
+    id: string
+    full_name: string | null
+    admission_number: string | null
+    phone: string | null
+    email: string | null
+    date_of_birth: string | null
+    parent_phone: string | null
+    emergency_contact_phone: string | null
+    permanent_address: string | null
+    hostel_id: string | null
+    onboarding_status?: string | null
+    updated_at: string
+  }
+  rejectionReason: string
+  reviewPending: boolean
+  onReasonChange: (value: string) => void
+  onReview: (status: "verified" | "rejected") => void
+}) {
+  const profileComplete = isProfileComplete(resident)
+  const ready = resident.onboarding_status === "verification_pending"
+
+  return (
+    <div className="grid gap-4 rounded-lg border bg-background p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium">{resident.full_name}</p>
+          <p className="text-xs text-muted-foreground">{resident.admission_number}</p>
+        </div>
+        <StatusBadge status={resident.onboarding_status ?? "profile_incomplete"} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">Phone</p>
+          <p className="font-medium">{resident.phone ?? "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Updated</p>
+          <p className="font-medium">{formatDateTime(resident.updated_at)}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">Email</p>
+          <p className="truncate font-medium">{resident.email ?? "No email"}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-xs text-muted-foreground">Profile</p>
+          <p className={profileComplete ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+            {profileComplete ? "Profile ready" : "Profile incomplete"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Button
+          size="sm"
+          disabled={!ready || reviewPending}
+          onClick={() => onReview("verified")}
+        >
+          <CheckCircle2 className="size-3.5" aria-hidden="true" />
+          Activate
+        </Button>
+        <Textarea
+          value={rejectionReason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          placeholder="Reason for rejection"
+          className="min-h-16"
+        />
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={!rejectionReason.trim() || reviewPending}
+          onClick={() => onReview("rejected")}
+        >
+          <XCircle className="size-3.5" aria-hidden="true" />
+          Reject
+        </Button>
+      </div>
     </div>
   )
 }

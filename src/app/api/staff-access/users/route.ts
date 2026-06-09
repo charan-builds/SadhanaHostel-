@@ -2,6 +2,7 @@ import {
   createdResponse,
   getQueryParams,
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
   withApiRoute,
 } from "@/lib/api"
@@ -19,10 +20,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  return withApiRoute(request, { route: "staff_access.users.create" }, async () => {
-    const service = await StaffAccessService.create()
-    const created = await service.createStaff(await parseJsonBody(request))
+  return withApiRoute(
+    request,
+    {
+      route: "staff_access.users.create",
+      rateLimit: RATE_LIMIT_POLICIES.staffAccessWrite,
+    },
+    async () => {
+      const service = await StaffAccessService.create()
+      const created = await service.createStaff(await parseJsonBody(request))
 
-    return createdResponse(created, "Staff access created successfully.")
-  })
+      return createdResponse(created, "Staff access created successfully.")
+    }
+  )
 }

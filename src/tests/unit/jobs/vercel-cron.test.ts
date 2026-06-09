@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { executeVercelCron } from "@/jobs/scheduler/vercel-cron"
-import { incrementMetric } from "@/lib/metrics"
+import { incrementMetric, recordTimingMetric } from "@/lib/metrics"
 
 const mocks = vi.hoisted(() => ({
   db: {},
@@ -25,6 +25,7 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/metrics", () => ({
   incrementMetric: vi.fn(),
+  recordTimingMetric: vi.fn(),
 }))
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -77,6 +78,12 @@ describe("executeVercelCron", () => {
     const result = await executeVercelCron(cronRequest(), "payment-reminders")
 
     expect(result.organizationCount).toBe(2)
+    expect(result.outcomeSummary).toEqual({
+      completed: 1,
+      failed: 1,
+      skipped: 0,
+    })
+    expect(result.durationMs).toEqual(expect.any(Number))
     expect(result.results).toEqual([
       {
         organizationId: "org-failed",
@@ -108,6 +115,25 @@ describe("executeVercelCron", () => {
       cronName: "payment-reminders",
       source: "manual",
       status: "partial_failure",
+    })
+    expect(recordTimingMetric).toHaveBeenCalledWith(
+      "cron.duration",
+      expect.any(Number),
+      {
+        cronName: "payment-reminders",
+        source: "manual",
+        status: "partial_failure",
+      }
+    )
+    expect(incrementMetric).toHaveBeenCalledWith("cron.organizations", 1, {
+      cronName: "payment-reminders",
+      source: "manual",
+      status: "completed",
+    })
+    expect(incrementMetric).toHaveBeenCalledWith("cron.organizations", 1, {
+      cronName: "payment-reminders",
+      source: "manual",
+      status: "failed",
     })
   })
 })

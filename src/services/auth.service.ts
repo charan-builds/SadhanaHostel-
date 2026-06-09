@@ -631,12 +631,19 @@ export class AuthService {
 
   private async revokeCurrentUserPushSubscriptions() {
     try {
-      const authUser = await this.getCurrentAuthUser()
+      const context = await this.getCurrentContext()
+      const organizationId = context.organizationId ?? context.profile.organization_id
+
+      if (!organizationId) {
+        return
+      }
+
       const repository = new PushSubscriptionsRepository(createSupabaseAdminClient())
 
       await repository.revokeForUser({
-        userId: authUser.id,
-        actorUserId: authUser.id,
+        organizationId,
+        userId: context.authUser.id,
+        actorUserId: context.authUser.id,
       })
     } catch (error) {
       logger.warn({

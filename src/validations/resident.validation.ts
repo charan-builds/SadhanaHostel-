@@ -5,6 +5,7 @@ import { Constants } from "@/types/database"
 
 import {
   dateOnlySchema,
+  isoDateSchema,
   moneySchema,
   optionalEmailSchema,
   paginationSchema,
@@ -18,6 +19,8 @@ export const residentListSchema = paginationSchema.extend({
   status: z.enum(Constants.public.Enums.resident_status_enum).optional(),
   residentType: z.enum(Constants.public.Enums.resident_type_enum).optional(),
   search: z.string().trim().max(120).optional(),
+  fromDate: isoDateSchema.optional(),
+  toDate: isoDateSchema.optional(),
 })
 
 const createResidentBaseSchema = z.object({

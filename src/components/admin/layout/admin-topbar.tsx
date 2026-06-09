@@ -1,12 +1,15 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
-import { Bell, CheckCheck, LogOut, Search } from "lucide-react"
+import { Bell, CheckCheck, ClipboardCheck, History, LogOut, Plus } from "lucide-react"
 import { toast } from "sonner"
 
+import { AdminGlobalSearch } from "@/components/admin/layout/admin-global-search"
 import { AdminMobileSidebar } from "@/components/admin/layout/admin-mobile-sidebar"
+import { adminQuickActions } from "@/components/admin/layout/admin-sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,7 +28,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatDateTime, humanizeEnum } from "@/lib/format"
@@ -86,21 +88,15 @@ export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
         <AdminMobileSidebar logoUrl={logoUrl} />
 
-        <div className="relative hidden min-w-0 flex-1 md:block">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            placeholder="Search residents, payments, notices..."
-            className="h-10 max-w-md bg-white/70 pl-8"
-            aria-label="Search admin workspace"
-            readOnly
-          />
-        </div>
+        <AdminGlobalSearch
+          organizationId={organizationId}
+          hostelId={hostelId}
+          className="block"
+        />
 
         <div className="ml-auto flex items-center gap-2">
+          <AdminProductivityMenu />
+
           <Button
             type="button"
             variant="outline"
@@ -238,5 +234,53 @@ export function AdminTopbar({ logoUrl }: { logoUrl?: string | null }) {
         </SheetContent>
       </Sheet>
     </header>
+  )
+}
+
+function AdminProductivityMenu() {
+  const productivityItems = [
+    ...adminQuickActions,
+    {
+      title: "Open operations",
+      href: "/admin/operations",
+      icon: ClipboardCheck,
+    },
+    {
+      title: "Follow up dues",
+      href: "/admin/finance/followups",
+      icon: History,
+    },
+  ] as const
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className="hidden h-10 gap-2 sm:inline-flex"
+          aria-label="Open admin productivity actions"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          Quick Actions
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel>Admin productivity</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {productivityItems.map((item) => {
+          const Icon = item.icon
+
+          return (
+            <DropdownMenuItem key={item.href} asChild>
+              <Link href={item.href as Route}>
+                <Icon className="size-4" aria-hidden="true" />
+                {item.title}
+              </Link>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 
 import { AboutPreview } from "@/components/public/about-preview"
+import { AdmissionPathSection } from "@/components/public/admission-path-section"
 import { FacilitiesPreview } from "@/components/public/facilities-preview"
 import { FinalCta } from "@/components/public/final-cta"
 import { GalleryPreview } from "@/components/public/gallery-preview"
@@ -56,13 +57,14 @@ export default async function HomePage() {
         galleryItems={cms.galleryItems}
         mapLink={cms.mapLink}
       />
+      <AdmissionPathSection />
       <HomeHighlights facilities={cms.facilities} />
       <AboutPreview />
       <LocalSearchLinks />
       <FacilitiesPreview facilities={cms.facilities} galleryItems={cms.galleryItems} />
       <GalleryPreview galleryItems={cms.galleryItems} />
       <TestimonialsSection />
-      <InquirySection />
+      <InquirySection leadForm={cms.leadForm} />
       <LocationCta mapLink={cms.mapLink} />
       <SeoFaqSection />
       <FinalCta />

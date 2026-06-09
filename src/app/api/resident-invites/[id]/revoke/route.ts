@@ -1,4 +1,4 @@
-import { parseJsonBody, successResponse, withApiRoute } from "@/lib/api"
+import { parseJsonBody, RATE_LIMIT_POLICIES, successResponse, withApiRoute } from "@/lib/api"
 import { ResidentInviteService } from "@/services/invites"
 
 export const dynamic = "force-dynamic"
@@ -14,6 +14,7 @@ export async function POST(request: Request, context: RouteContext) {
     request,
     {
       route: "resident_invites.revoke",
+      rateLimit: RATE_LIMIT_POLICIES.staffAccessWrite,
     },
     async () => {
       const service = await ResidentInviteService.create()

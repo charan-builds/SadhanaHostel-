@@ -297,74 +297,88 @@ export function AdminStaffAccessClient() {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Hostel</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <div className="font-medium">{row.user.full_name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {row.user.email ?? row.user.phone ?? row.user_id}
-                        </div>
-                      </TableCell>
-                      <TableCell>{humanizeEnum(row.role)}</TableCell>
-                      <TableCell>{row.hostel?.name ?? "Organization-wide"}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={row.accountState} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Select
-                            value={row.accountState}
-                            onValueChange={(value) => void updateStatus(row, value as StatusFilter)}
-                          >
-                            <SelectTrigger className="h-9 w-32" aria-label="Change account status">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {accountStatuses.filter((item) => item !== "deleted").map((item) => (
-                                <SelectItem key={item} value={item}>
-                                  {humanizeEnum(item)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => void handleResetPassword(row)}
-                          >
-                            <KeyRound className="size-4" />
-                            Reset
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => setRevokeTarget(row)}
-                          >
-                            <UserX className="size-4" />
-                            Revoke
-                          </Button>
-                        </div>
-                      </TableCell>
+            <div className="grid gap-3">
+              <div className="grid gap-3 lg:hidden">
+                {rows.map((row) => (
+                  <StaffAccessCard
+                    key={row.id}
+                    row={row}
+                    onStatusChange={(nextStatus) => void updateStatus(row, nextStatus)}
+                    onResetPassword={() => void handleResetPassword(row)}
+                    onRevoke={() => setRevokeTarget(row)}
+                  />
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-lg border lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Hostel</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div className="font-medium">{row.user.full_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.user.email ?? row.user.phone ?? row.user_id}
+                          </div>
+                        </TableCell>
+                        <TableCell>{humanizeEnum(row.role)}</TableCell>
+                        <TableCell>{row.hostel?.name ?? "Organization-wide"}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={row.accountState} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            <Select
+                              value={row.accountState}
+                              onValueChange={(value) => void updateStatus(row, value as StatusFilter)}
+                            >
+                              <SelectTrigger className="h-9 w-32" aria-label="Change account status">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {accountStatuses.filter((item) => item !== "deleted").map((item) => (
+                                  <SelectItem key={item} value={item}>
+                                    {humanizeEnum(item)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => void handleResetPassword(row)}
+                            >
+                              <KeyRound className="size-4" />
+                              Reset
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => setRevokeTarget(row)}
+                            >
+                              <UserX className="size-4" />
+                              Revoke
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -381,6 +395,81 @@ export function AdminStaffAccessClient() {
         variant="danger"
         onConfirm={confirmRevoke}
       />
+    </div>
+  )
+}
+
+function StaffAccessCard({
+  row,
+  onStatusChange,
+  onResetPassword,
+  onRevoke,
+}: {
+  row: StaffAccessAccount
+  onStatusChange: (nextStatus: StatusFilter) => void
+  onResetPassword: () => void
+  onRevoke: () => void
+}) {
+  return (
+    <div className="grid gap-4 rounded-lg border bg-background p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium">{row.user.full_name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {row.user.email ?? row.user.phone ?? row.user_id}
+          </p>
+        </div>
+        <StatusBadge status={row.accountState} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">Role</p>
+          <p className="font-medium">{humanizeEnum(row.role)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Hostel</p>
+          <p className="font-medium">{row.hostel?.name ?? "Organization-wide"}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <Select
+          value={row.accountState}
+          onValueChange={(value) => onStatusChange(value as StatusFilter)}
+        >
+          <SelectTrigger className="h-10" aria-label="Change account status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {accountStatuses.filter((item) => item !== "deleted").map((item) => (
+              <SelectItem key={item} value={item}>
+                {humanizeEnum(item)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={onResetPassword}
+        >
+          <KeyRound className="size-4" />
+          Reset
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={onRevoke}
+        >
+          <UserX className="size-4" />
+          Revoke
+        </Button>
+      </div>
     </div>
   )
 }

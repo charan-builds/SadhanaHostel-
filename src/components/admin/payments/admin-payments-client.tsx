@@ -21,6 +21,10 @@ import type { Route } from "next"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
+import {
+  MonthwiseDateRangeControls,
+  type MonthwiseDateBasis,
+} from "@/components/admin/analytics/monthwise-date-range-controls"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { LoadingState } from "@/components/shared/loading-state"
 import { PageHeader } from "@/components/shared/page-header"
@@ -81,6 +85,11 @@ import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
 import { sanitizeCsvCell } from "@/lib/csv"
 import { formatCurrency, formatDateTime } from "@/lib/format"
+import {
+  getMonthwiseQuickFilterRange,
+  type MonthwiseDateRange,
+  type MonthwiseQuickFilter,
+} from "@/lib/monthwise-analytics"
 import type { Tables } from "@/types/database"
 
 type PaymentRow = Tables<"payments">
@@ -119,9 +128,21 @@ export function AdminPaymentsClient() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [paymentOutcome, setPaymentOutcome] = useState<PaymentOutcome | null>(null)
+  const [quickFilter, setQuickFilter] =
+    useState<MonthwiseQuickFilter>("this-month")
+  const [range, setRange] = useState<MonthwiseDateRange>(() =>
+    getMonthwiseQuickFilterRange("this-month")
+  )
+  const [dateBasis, setDateBasis] = useState<MonthwiseDateBasis>("activity")
+  const fromDate = range.fromDate
+  const toDate = range.toDate
+  const invalidDateRange = fromDate > toDate
   const payments = usePayments({
     organizationId: organizationId ?? "",
     hostelId,
+    fromDate,
+    toDate,
+    dateBasis,
     page: 1,
     pageSize: 50,
   })
@@ -294,7 +315,10 @@ export function AdminPaymentsClient() {
 
   function exportVisibleRows() {
     const csv = [
-      ["Payment ID", "Resident ID", "Amount", "Reference", "Status", "Created"].join(","),
+      ["Date Range", `${fromDate} to ${toDate}`].join(","),
+      ["Date Basis", dateBasis].join(","),
+      [],
+      ["Payment ID", "Resident ID", "Amount", "Reference", "Status", "Created", "Verified"].join(","),
       ...filteredRows.map((payment) =>
         [
           payment.id,
@@ -303,6 +327,7 @@ export function AdminPaymentsClient() {
           payment.transaction_id ?? payment.manual_reference ?? "",
           payment.status,
           payment.created_at,
+          payment.verified_at ?? "",
         ]
           .map((value) => `"${sanitizeCsvCell(value).replaceAll("\"", "\"\"")}"`)
           .join(",")
@@ -312,7 +337,7 @@ export function AdminPaymentsClient() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = url
-    anchor.download = "sadhana-payments.csv"
+    anchor.download = `sadhana-payments-${fromDate}-to-${toDate}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
     toast.success("Payments export prepared.")
@@ -329,7 +354,7 @@ export function AdminPaymentsClient() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={!filteredRows.length}
+                disabled={!filteredRows.length || invalidDateRange}
                 onClick={exportVisibleRows}
               >
                 <ArrowDownToLine className="size-4" aria-hidden="true" />
@@ -378,6 +403,18 @@ export function AdminPaymentsClient() {
             }
           />
         ) : null}
+
+        <MonthwiseDateRangeControls
+          title="Payment History"
+          description="Filter payment review and collection history by month, quick range, or custom range."
+          range={range}
+          quickFilter={quickFilter}
+          onRangeChange={setRange}
+          onQuickFilterChange={setQuickFilter}
+          dateBasis={dateBasis}
+          onDateBasisChange={setDateBasis}
+          invalid={invalidDateRange}
+        />
 
         <motion.section variants={reveal} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <RevenueCard

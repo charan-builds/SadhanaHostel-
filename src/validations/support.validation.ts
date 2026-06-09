@@ -2,7 +2,7 @@ import { z } from "zod"
 
 import { Constants } from "@/types/database"
 
-import { paginationSchema, uuidSchema } from "./common.validation"
+import { isoDateSchema, paginationSchema, uuidSchema } from "./common.validation"
 
 export const supportCategorySchema = z.enum([
   "onboarding",
@@ -10,9 +10,11 @@ export const supportCategorySchema = z.enum([
   "invite",
   "upload",
   "room",
+  "gate_pass",
   "lost_found",
   "maintenance",
   "safety",
+  "visitor",
   "account",
   "session",
   "general",
@@ -35,6 +37,8 @@ export const supportRequestListSchema = paginationSchema.extend({
   priority: supportPrioritySchema.optional(),
   workflow: z.string().trim().max(80).optional(),
   search: z.string().trim().max(120).optional(),
+  fromDate: isoDateSchema.optional(),
+  toDate: isoDateSchema.optional(),
 })
 
 export const supportRequestCreateSchema = z.object({

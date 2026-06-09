@@ -32,6 +32,7 @@ import {
   useCurrentResident,
   useLeaves,
   useNotices,
+  useResidentHostelRules,
   useResidentPaymentLedger,
   useSupportRequests,
 } from "@/hooks"
@@ -79,6 +80,11 @@ export function ResidentDashboardClient() {
     page: 1,
     pageSize: 8,
   })
+  const rulesStatus = useResidentHostelRules({
+    organizationId: organizationId ?? "",
+    page: 1,
+    pageSize: 100,
+  })
   const homeExperience = useMemo(() => {
     if (!resident.data) {
       return null
@@ -124,6 +130,15 @@ export function ResidentDashboardClient() {
     ledger.isLoading || leaves.isLoading || notices.isLoading || supportRequests.isLoading
   const secondaryError =
     ledger.error ?? leaves.error ?? notices.error ?? supportRequests.error ?? null
+  const feeDueDate =
+    ledger.data?.primaryDueRecord?.due_date ??
+    ledger.data?.billing.currentDueDate ??
+    ledger.data?.billing.nextDueDate ??
+    null
+  const rulesUpdated =
+    rulesStatus.data?.acceptance &&
+    !rulesStatus.data.acceptance.isAccepted &&
+    Boolean(rulesStatus.data.acceptance.latestAcceptedVersion)
 
   return (
     <div className="grid gap-6">
@@ -132,13 +147,32 @@ export function ResidentDashboardClient() {
         description={`Welcome, ${resident.data.preferred_name || resident.data.full_name}. Your hostel day, money, notices, requests, and profile are in one place.`}
         actions={
           <Button asChild>
-            <Link href={"/resident/payments" as Route}>
+            <Link href={"/resident/pay-fees" as Route}>
               <CreditCard className="size-4" aria-hidden="true" />
               Pay fee
             </Link>
           </Button>
         }
       />
+
+      {rulesUpdated ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-semibold">Rules Updated</p>
+                <p className="mt-1 text-sm">
+                  Review the latest hostel rules and accept the current version.
+                </p>
+              </div>
+            </div>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href={"/resident/rules" as Route}>Review rules</Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {secondaryError ? (
         <APIErrorState
@@ -150,6 +184,13 @@ export function ResidentDashboardClient() {
             void notices.refetch()
             void supportRequests.refetch()
           }}
+        />
+      ) : null}
+
+      {homeExperience.counts.currentDue > 0 ? (
+        <ResidentFeeDueCard
+          amount={homeExperience.counts.currentDue}
+          dueDate={feeDueDate}
         />
       ) : null}
 
@@ -256,6 +297,47 @@ export function ResidentDashboardClient() {
   )
 }
 
+function ResidentFeeDueCard({
+  amount,
+  dueDate,
+}: {
+  amount: number
+  dueDate: string | null
+}) {
+  return (
+    <MotionReveal>
+      <section className="rounded-xl border border-warning/30 bg-warning-surface p-5 text-warning-foreground shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-background/75 ring-1 ring-warning/20">
+              <CreditCard className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-medium opacity-80">Highest priority</p>
+              <h2 className="mt-1 text-2xl font-semibold">
+                Fee Due: {formatCurrency(amount)}
+              </h2>
+              <p className="mt-1 text-sm leading-6 opacity-85">
+                Due Date: {dueDate ? formatDate(dueDate) : "Not assigned"}
+              </p>
+            </div>
+          </div>
+          <Button
+            asChild
+            size="lg"
+            className="min-h-12 bg-background text-foreground hover:bg-background/90"
+          >
+            <Link href={"/resident/pay-fees" as Route}>
+              PAY NOW
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
+        </div>
+      </section>
+    </MotionReveal>
+  )
+}
+
 function SmartActionCenter({
   actions,
   isLoading,
@@ -263,6 +345,10 @@ function SmartActionCenter({
   actions: ResidentSmartAction[]
   isLoading: boolean
 }) {
+  const visibleActions = actions.slice(0, 5)
+  const primaryAction = visibleActions[0]
+  const secondaryActions = visibleActions.slice(1)
+
   return (
     <MotionReveal>
       <section className="rounded-xl border bg-background p-5 shadow-sm">
@@ -294,23 +380,49 @@ function SmartActionCenter({
               </div>
             </div>
           </div>
-        ) : (
+        ) : primaryAction ? (
           <div className="mt-5 grid gap-3">
-            {actions.slice(0, 5).map((action) => (
-              <ResidentSmartActionCard key={action.id} action={action} />
-            ))}
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-primary">
+                Next best step
+              </p>
+              <ResidentSmartActionCard action={primaryAction} emphasis="primary" />
+            </div>
+
+            {secondaryActions.length > 0 ? (
+              <div className="grid gap-3">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
+                  Also keep an eye on
+                </p>
+                {secondaryActions.map((action) => (
+                  <ResidentSmartActionCard key={action.id} action={action} />
+                ))}
+              </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </section>
     </MotionReveal>
   )
 }
 
-function ResidentSmartActionCard({ action }: { action: ResidentSmartAction }) {
+function ResidentSmartActionCard({
+  action,
+  emphasis = "default",
+}: {
+  action: ResidentSmartAction
+  emphasis?: "default" | "primary"
+}) {
   const Icon = actionToneIcon[action.tone]
 
   return (
-    <article className={`rounded-lg border p-4 ${actionToneClassName[action.tone]}`}>
+    <article
+      className={`rounded-lg border p-4 ${
+        emphasis === "primary"
+          ? "border-primary/30 bg-background text-foreground shadow-sm"
+          : actionToneClassName[action.tone]
+      }`}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/75 ring-1 ring-white/70">
@@ -336,6 +448,7 @@ function ResidentSmartActionCard({ action }: { action: ResidentSmartAction }) {
 
 function ResidentHealthCard({ experience }: { experience: ResidentHomeExperience }) {
   const health = experience.health
+  const nextSteps = buildResidentHealthNextSteps(experience)
 
   return (
     <MotionReveal>
@@ -374,6 +487,35 @@ function ResidentHealthCard({ experience }: { experience: ResidentHomeExperience
             Missing: {health.missingProfileFields.join(", ")}
           </div>
         ) : null}
+
+        {nextSteps.length > 0 ? (
+          <div className="mt-5 rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
+              Improve your score
+            </p>
+            <div className="mt-3 grid gap-2">
+              {nextSteps.map((step) => (
+                <Button
+                  key={step.href}
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-auto justify-between gap-3 py-2 text-left"
+                >
+                  <Link href={step.href as Route}>
+                    <span>
+                      <span className="block font-medium">{step.title}</span>
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        {step.description}
+                      </span>
+                    </span>
+                    <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+                  </Link>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
     </MotionReveal>
   )
@@ -384,9 +526,9 @@ function QuickActions() {
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <QuickAction
         icon={CreditCard}
-        href="/resident/payments"
+        href="/resident/pay-fees"
         title="Pay fee"
-        description="Open ledger, pay by UPI, and upload proof."
+        description="Enter amount, generate QR, and upload proof."
       />
       <QuickAction
         icon={MessageCircle}
@@ -625,6 +767,65 @@ function HealthBar({ label, value }: { label: string; value: number }) {
       </div>
     </div>
   )
+}
+
+function buildResidentHealthNextSteps(experience: ResidentHomeExperience) {
+  const steps: Array<{
+    href: ResidentHomeRoute
+    title: string
+    description: string
+  }> = []
+
+  if (experience.health.missingProfileFields.length > 0) {
+    steps.push({
+      href: "/resident/profile",
+      title: "Complete profile",
+      description: `${experience.health.missingProfileFields.length} profile field${experience.health.missingProfileFields.length === 1 ? "" : "s"} missing`,
+    })
+  }
+
+  if (experience.counts.currentDue > 0) {
+    steps.push({
+      href: "/resident/pay-fees",
+      title: "Clear fee dues",
+      description: `${formatCurrency(experience.counts.currentDue)} currently due`,
+    })
+  } else if (experience.counts.pendingVerification > 0) {
+    steps.push({
+      href: "/resident/payments",
+      title: "Track payment",
+      description: `${formatCurrency(experience.counts.pendingVerification)} waiting for verification`,
+    })
+  }
+
+  if (experience.counts.acknowledgementPending > 0 || experience.counts.unreadNotices > 0) {
+    steps.push({
+      href: "/resident/notices",
+      title: "Open notices",
+      description:
+        experience.counts.acknowledgementPending > 0
+          ? `${experience.counts.acknowledgementPending} acknowledgement pending`
+          : `${experience.counts.unreadNotices} unread notice${experience.counts.unreadNotices === 1 ? "" : "s"}`,
+    })
+  }
+
+  if (experience.counts.openComplaints > 0) {
+    steps.push({
+      href: "/resident/support",
+      title: "Check complaints",
+      description: `${experience.counts.openComplaints} open complaint${experience.counts.openComplaints === 1 ? "" : "s"}`,
+    })
+  }
+
+  if (experience.counts.pendingLeaves > 0) {
+    steps.push({
+      href: "/resident/leave",
+      title: "Track leave",
+      description: `${experience.counts.pendingLeaves} leave request${experience.counts.pendingLeaves === 1 ? "" : "s"} pending`,
+    })
+  }
+
+  return steps.slice(0, 4)
 }
 
 function formatTimelineDescription(event: ResidentTimelineEvent) {

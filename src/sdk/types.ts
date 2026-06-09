@@ -39,7 +39,7 @@ export type UploadProgress = {
 }
 
 export type SearchResult = {
-  entity_type: "residents" | "payments" | "rooms" | "notices"
+  entity_type: "residents" | "payments" | "rooms" | "notices" | "complaints" | "reports"
   entity_id: string
   title: string
   subtitle: string | null

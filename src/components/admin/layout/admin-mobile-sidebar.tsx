@@ -22,6 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { anyRoleHasPermission } from "@/constants/auth"
 import { hostelConfig } from "@/constants/hostel"
 import { useOperationalAlerts, useSupportRequests } from "@/hooks"
 import { useAuth } from "@/lib/auth"
@@ -38,7 +39,7 @@ const mobileNavigationGroups = [
   },
   {
     title: "Residents",
-    hrefs: ["/admin/leads", "/admin/reservations", "/admin/vacancy", "/admin/residents", "/admin/rooms"],
+    hrefs: ["/admin/leads", "/admin/reservations", "/admin/residents", "/admin/rooms"],
   },
   {
     title: "Money",
@@ -57,11 +58,23 @@ const mobileNavigationGroups = [
   },
   {
     title: "Operations",
-    hrefs: ["/admin/reports", "/admin/operations/automation", "/admin/launch-readiness"],
+    hrefs: [
+      "/admin/operations",
+      "/admin/reports",
+      "/admin/operations/intelligence",
+      "/admin/operations/automation",
+      "/admin/launch-readiness",
+    ],
   },
   {
     title: "Settings",
-    hrefs: ["/admin/website", "/admin/gallery", "/admin/settings/staff-access", "/admin/settings"],
+    hrefs: [
+      "/admin/website",
+      "/admin/gallery",
+      "/admin/settings/staff-access",
+      "/admin/settings/rules",
+      "/admin/settings",
+    ],
   },
 ] as const
 
@@ -74,8 +87,9 @@ export function AdminMobileSidebar({ logoUrl }: { logoUrl?: string | null }) {
   const pathname = usePathname()
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
+  const canManageSupport = anyRoleHasPermission(session?.roles ?? [], "residents.manage")
   const passwordResetRequests = useSupportRequests({
-    organizationId: organizationId ?? "",
+    organizationId: canManageSupport ? organizationId ?? "" : "",
     hostelId,
     status: "open",
     category: "account",
@@ -84,7 +98,7 @@ export function AdminMobileSidebar({ logoUrl }: { logoUrl?: string | null }) {
     pageSize: 1,
   })
   const operationalAlerts = useOperationalAlerts({
-    organizationId: organizationId ?? undefined,
+    organizationId: canManageSupport ? organizationId ?? undefined : undefined,
     hostelId,
   })
   const passwordResetCount = passwordResetRequests.data?.meta.total ?? 0

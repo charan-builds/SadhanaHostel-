@@ -2,7 +2,16 @@
 
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
+import {
+  ClipboardCheck,
+  IndianRupee,
+  MapPin,
+  MessageCircle,
+  Navigation,
+  Phone,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
@@ -68,6 +77,12 @@ export function HomeHero({
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button asChild size="lg" className="h-11 px-4">
+              <a href="#inquiry" aria-label="Check hostel room availability">
+                <ClipboardCheck className="size-4" aria-hidden="true" />
+                Check Availability
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="h-11 border-white/20 bg-white/10 px-4 text-white hover:bg-white/15">
               <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
                 <Phone className="size-4" aria-hidden="true" />
                 Call Now
@@ -96,9 +111,47 @@ export function HomeHero({
               </a>
             </Button>
           </div>
+
+          <div className="mt-8 grid max-w-4xl gap-3 sm:grid-cols-3">
+            <HeroTrustSignal
+              icon={IndianRupee}
+              label="Student rooms"
+              value={`₹${hostelConfig.fees.student}/month`}
+            />
+            <HeroTrustSignal
+              icon={ShieldCheck}
+              label="Core facilities"
+              value="Food, WiFi, CCTV, water"
+            />
+            <HeroTrustSignal
+              icon={MessageCircle}
+              label="Before you visit"
+              value="Call or WhatsApp to confirm availability"
+            />
+          </div>
         </motion.div>
 
       </div>
     </section>
+  )
+}
+
+function HeroTrustSignal({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-white/15 bg-white/10 p-4 text-white shadow-sm backdrop-blur-xl">
+      <Icon className="size-4 text-blue-200" aria-hidden="true" />
+      <p className="mt-3 text-xs font-medium uppercase tracking-normal text-white/60">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold leading-5">{value}</p>
+    </div>
   )
 }

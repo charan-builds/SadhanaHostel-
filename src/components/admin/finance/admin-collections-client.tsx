@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   Banknote,
+  ChevronDown,
   Clock3,
   CreditCard,
   Eye,
@@ -317,7 +318,53 @@ function CollectionResidentRow({
       <div>
         <StatusBadge status={row.resident.status} />
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:justify-end">
+      <div className="grid gap-2 lg:hidden">
+        <Button size="sm" className="w-full justify-start" onClick={() => onOpen(row, "ledger")}>
+          <Eye className="size-3.5" aria-hidden="true" />
+          Open Ledger
+        </Button>
+        <div className="grid grid-cols-3 gap-2">
+          <Button size="sm" variant="outline" className="justify-start" onClick={() => onRecord(row, "cash")}>
+            <Banknote className="size-3.5" aria-hidden="true" />
+            Cash
+          </Button>
+          <Button size="sm" variant="outline" className="justify-start" onClick={() => onRecord(row, "upi")}>
+            <IndianRupee className="size-3.5" aria-hidden="true" />
+            UPI
+          </Button>
+          <Button asChild size="sm" variant="outline" className="justify-start" disabled={!row.resident.phone}>
+            <a href={row.resident.phone ? `tel:${row.resident.phone}` : undefined}>
+              <PhoneCall className="size-3.5" aria-hidden="true" />
+              Call
+            </a>
+          </Button>
+        </div>
+        <details className="rounded-lg border bg-muted/20 p-2">
+          <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 px-2 text-sm font-medium">
+            More actions
+            <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+          </summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button size="sm" variant="outline" className="justify-start" onClick={() => onRecord(row, "bank_transfer")}>
+              <CreditCard className="size-3.5" aria-hidden="true" />
+              Bank
+            </Button>
+            <Button asChild size="sm" variant="outline" className="justify-start" disabled={!whatsappUrl}>
+              <a href={whatsappUrl ?? undefined} target="_blank" rel="noreferrer">
+                <MessageCircle className="size-3.5" aria-hidden="true" />
+                WhatsApp
+              </a>
+            </Button>
+            <Button size="sm" variant="outline" className="justify-start" onClick={() => onOpen(row, "invoices")}>
+              Invoices
+            </Button>
+            <Button size="sm" variant="outline" className="justify-start" onClick={() => onOpen(row, "receipts")}>
+              Receipts
+            </Button>
+          </div>
+        </details>
+      </div>
+      <div className="hidden flex-wrap gap-2 lg:flex xl:justify-end">
         <Button size="sm" variant="outline" className="justify-start sm:justify-center" onClick={() => onRecord(row, "cash")}>
           <Banknote className="size-3.5" aria-hidden="true" />
           Cash

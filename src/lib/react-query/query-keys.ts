@@ -99,9 +99,15 @@ export const queryKeys = {
     },
   },
   platform: {
-    setupStatus: ["platform", "setup-status"] as const,
-    organization: ["platform", "organization"] as const,
-    hostels: ["platform", "hostels"] as const,
+    setupStatus(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "platform", "setup-status"] as const
+    },
+    organization(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "platform", "organization"] as const
+    },
+    hostels(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "platform", "hostels"] as const
+    },
   },
   staffAccess: {
     all(scope: TenantScope) {
@@ -154,6 +160,9 @@ export const queryKeys = {
     list(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.leaves.all(scope), "list", filters] as const
     },
+    settings(scope: TenantScope) {
+      return [...queryKeys.leaves.all(scope), "settings"] as const
+    },
   },
   notices: {
     all(scope: TenantScope) {
@@ -161,6 +170,17 @@ export const queryKeys = {
     },
     list(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.notices.all(scope), "list", filters] as const
+    },
+  },
+  hostelRules: {
+    all(scope: TenantScope) {
+      return [...queryKeys.tenant(scope), "hostel-rules"] as const
+    },
+    list(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.hostelRules.all(scope), "list", filters] as const
+    },
+    residentStatus(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.hostelRules.all(scope), "resident-status", filters] as const
     },
   },
   notifications: {
@@ -194,6 +214,9 @@ export const queryKeys = {
     },
     facilities(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.website.all(scope), "facilities", filters] as const
+    },
+    employeeRooms(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.website.all(scope), "employee-rooms", filters] as const
     },
     gallery(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.website.all(scope), "gallery", filters] as const

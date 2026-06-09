@@ -2,9 +2,12 @@ import { apiClient } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
   CreateFacilityInput,
+  CreateEmployeeAccommodationRoomInput,
   CreateGalleryItemInput,
   DeleteGalleryItemInput,
+  EmployeeAccommodationRoomsListInput,
   FacilitiesListInput,
+  UpdateEmployeeAccommodationRoomInput,
   GalleryListInput,
   UpdateFacilityInput,
   UpdateWebsiteSettingInput,
@@ -22,6 +25,13 @@ export type GalleryItemView = Tables<"gallery"> & {
 export type GalleryUploadResult = {
   gallery: GalleryItemView
   document: Tables<"documents">
+}
+
+export type EmployeeAccommodationRoomImage = GalleryItemView
+
+export type EmployeeAccommodationRoomView = Tables<"employee_accommodation_rooms"> & {
+  imageCategory: string
+  images: EmployeeAccommodationRoomImage[]
 }
 
 export const websiteSdk = {
@@ -58,6 +68,27 @@ export const websiteSdk = {
       "/api/website/facilities",
       input
     )
+  },
+
+  listEmployeeAccommodationRooms(params: EmployeeAccommodationRoomsListInput) {
+    return apiClient.get<PaginatedResult<EmployeeAccommodationRoomView>>(
+      "/api/website/employee-rooms",
+      params
+    )
+  },
+
+  createEmployeeAccommodationRoom(input: CreateEmployeeAccommodationRoomInput) {
+    return apiClient.post<
+      EmployeeAccommodationRoomView,
+      CreateEmployeeAccommodationRoomInput
+    >("/api/website/employee-rooms", input)
+  },
+
+  updateEmployeeAccommodationRoom(input: UpdateEmployeeAccommodationRoomInput) {
+    return apiClient.patch<
+      EmployeeAccommodationRoomView,
+      UpdateEmployeeAccommodationRoomInput
+    >("/api/website/employee-rooms", input)
   },
 
   listGallery(params: GalleryListInput) {

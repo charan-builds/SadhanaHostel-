@@ -1,4 +1,5 @@
 import type { Database, Tables, TablesInsert, TablesUpdate } from "@/types/database"
+import { normalizeDateRange } from "@/lib/date-range"
 
 import {
   createPaginationMeta,
@@ -20,6 +21,8 @@ export type ListNoticesFilters = PaginationParams & {
   audienceType?: string
   activeOnly?: boolean
   search?: string
+  fromDate?: string
+  toDate?: string
 }
 
 export class NoticesRepository {
@@ -28,6 +31,7 @@ export class NoticesRepository {
   async list(filters: ListNoticesFilters): Promise<PaginatedResult<NoticeRow>> {
     const { page, pageSize, from, to } = normalizePagination(filters)
     const search = sanitizeSearchTerm(filters.search)
+    const range = normalizeDateRange(filters)
 
     let query = this.db
       .from("notices")
@@ -51,6 +55,14 @@ export class NoticesRepository {
 
     if (filters.activeOnly) {
       query = query.eq("is_active", true)
+    }
+
+    if (range.fromDate) {
+      query = query.gte("published_at", range.fromDate)
+    }
+
+    if (range.toDate) {
+      query = query.lte("published_at", range.toDate)
     }
 
     if (search) {

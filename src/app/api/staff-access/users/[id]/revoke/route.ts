@@ -1,5 +1,6 @@
 import {
   parseJsonBody,
+  RATE_LIMIT_POLICIES,
   successResponse,
   withApiRoute,
 } from "@/lib/api"
@@ -12,14 +13,21 @@ type StaffUserRouteContext = {
 }
 
 export async function POST(request: Request, context: StaffUserRouteContext) {
-  return withApiRoute(request, { route: "staff_access.users.revoke" }, async () => {
-    const { id } = await context.params
-    const service = await StaffAccessService.create()
-    const result = await service.revokeStaff({
-      ...(await parseJsonBody(request)),
-      targetUserId: id,
-    })
+  return withApiRoute(
+    request,
+    {
+      route: "staff_access.users.revoke",
+      rateLimit: RATE_LIMIT_POLICIES.staffAccessWrite,
+    },
+    async () => {
+      const { id } = await context.params
+      const service = await StaffAccessService.create()
+      const result = await service.revokeStaff({
+        ...(await parseJsonBody(request)),
+        targetUserId: id,
+      })
 
-    return successResponse(result, "Staff access revoked.")
-  })
+      return successResponse(result, "Staff access revoked.")
+    }
+  )
 }

@@ -25,6 +25,28 @@ export type OwnerAllocation = Pick<
   "room_id" | "resident_id" | "allocated_from" | "allocated_to" | "status"
 >
 
+export type OwnerAdmissionLead = {
+  id: string
+  created_at: string
+  status: string
+}
+
+export type OwnerSupportRequest = Pick<
+  Tables<"support_requests">,
+  "category" | "created_at" | "metadata" | "priority" | "status"
+>
+
+export type OwnerNotice = Pick<
+  Tables<"notices">,
+  "created_at" | "published_at" | "requires_acknowledgement" | "status"
+>
+
+export type OwnerNoticeRead = Pick<Tables<"notice_reads">, "read_at">
+export type OwnerNoticeAcknowledgement = Pick<
+  Tables<"notice_acknowledgements">,
+  "acknowledged_at"
+>
+
 export type OwnerResident = ResidentLifecycleRow & {
   id: string
   created_at: string
@@ -523,6 +545,146 @@ export class AnalyticsRepository {
     }
 
     return data ?? []
+  }
+
+  async listAdmissionLeadsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.analyticsDb()
+      .from("leads")
+      .select("id,created_at,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+      .order("created_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load admission lead analytics.")
+    }
+
+    return (data ?? []) as unknown as OwnerAdmissionLead[]
+  }
+
+  async listSupportRequestsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("support_requests")
+      .select("category,created_at,metadata,priority,status")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+      .order("created_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load complaint analytics.")
+    }
+
+    return (data ?? []) as OwnerSupportRequest[]
+  }
+
+  async listNoticesPublishedInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("notices")
+      .select("created_at,published_at,requires_acknowledgement,status")
+      .eq("organization_id", organizationId)
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .is("deleted_at", null)
+      .gte("published_at", fromDate)
+      .lte("published_at", toDate)
+      .order("published_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.or(`hostel_id.is.null,hostel_id.eq.${hostelId}`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load notice publication analytics.")
+    }
+
+    return (data ?? []) as OwnerNotice[]
+  }
+
+  async listNoticeReadsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("notice_reads")
+      .select("read_at")
+      .eq("organization_id", organizationId)
+      .gte("read_at", fromDate)
+      .lte("read_at", toDate)
+      .order("read_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.or(`hostel_id.is.null,hostel_id.eq.${hostelId}`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load notice read analytics.")
+    }
+
+    return (data ?? []) as OwnerNoticeRead[]
+  }
+
+  async listNoticeAcknowledgementsInRange(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("notice_acknowledgements")
+      .select("acknowledged_at")
+      .eq("organization_id", organizationId)
+      .gte("acknowledged_at", fromDate)
+      .lte("acknowledged_at", toDate)
+      .order("acknowledged_at", { ascending: true })
+
+    if (hostelId) {
+      query = query.or(`hostel_id.is.null,hostel_id.eq.${hostelId}`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load notice acknowledgement analytics.")
+    }
+
+    return (data ?? []) as OwnerNoticeAcknowledgement[]
   }
 
   async listResidentsCreatedInRange(

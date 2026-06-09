@@ -1,8 +1,10 @@
 import { apiClient } from "@/lib/api-client"
+import type { LeaveManagementSettings } from "@/lib/leaves/settings"
 import type { Tables } from "@/types/database"
 import type {
   CreateLeaveRequestInput,
   LeaveListInput,
+  LeaveSettingsQueryInput,
   ReviewLeaveRequestInput,
 } from "@/validations/leave.validation"
 
@@ -21,6 +23,10 @@ export const leavesSdk = {
       "/api/leaves",
       input
     )
+  },
+
+  settings(params: LeaveSettingsQueryInput) {
+    return apiClient.get<LeaveManagementSettings>("/api/leaves/settings", params)
   },
 
   approve(input: Omit<ReviewLeaveRequestInput, "status">) {
