@@ -17,6 +17,7 @@ import { createManualPaymentReceiptMarker } from "@/lib/payments/manual-receipt-
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getRequestId } from "@/lib/tracing"
+import { inspectUploadFile } from "@/lib/uploads/file-security"
 import { PaymentSettingsRepository } from "@/repositories/payment-settings.repository"
 import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
@@ -901,10 +902,9 @@ export class PaymentsService {
     const context = await this.authService.requirePermission("finance.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
-    this.validateQrFile(file)
+    const fileInspection = await this.validateQrFile(file)
 
-    const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"
-    const storagePath = `${values.organizationId}/payment-settings/qr/${values.hostelId}/current.${extension}`
+    const storagePath = `${values.organizationId}/payment-settings/qr/${values.hostelId}/current.${fileInspection.extension}`
 
     await this.uploadsRepository.uploadObject("payment-qr-codes", storagePath, file, {
       upsert: true,
@@ -930,8 +930,8 @@ export class PaymentsService {
       newValues: {
         bucketName: "payment-qr-codes",
         storagePath,
-        contentType: file.type,
-        size: file.size,
+        contentType: fileInspection.mimeType,
+        size: fileInspection.size,
         signedUrlExpiresAt,
       },
       metadata: {
@@ -1983,17 +1983,12 @@ export class PaymentsService {
   }
 
   private validateQrFile(file: File) {
-    if (!file || file.size === 0) {
-      throw badRequest("A non-empty QR image is required.")
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      throw badRequest("QR image must be 2 MB or smaller.")
-    }
-
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      throw badRequest("QR image must be a JPEG, PNG, or WebP file.")
-    }
+    return inspectUploadFile(file, {
+      allowedMimeTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
+      maxBytes: 2 * 1024 * 1024,
+      label: "QR image",
+      fallbackBaseName: "qr",
+    })
   }
 }
 

@@ -10,6 +10,7 @@ import { logAuditEvent } from "@/lib/logger"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabasePublicServerClient } from "@/lib/supabase/public-server"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { inspectUploadFile } from "@/lib/uploads/file-security"
 import { AdmissionsRepository } from "@/repositories/admissions.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
@@ -447,12 +448,12 @@ export class WebsiteService {
       values.hostelId
     )
 
-    this.validateGalleryFile(file)
+    const fileInspection = await this.validateGalleryFile(file)
 
     const storagePath = this.buildGalleryStoragePath(
       values.organizationId,
       hostelId ?? undefined,
-      file.name
+      fileInspection.safeFileName
     )
 
     await this.uploadsRepository.uploadObject(GALLERY_BUCKET, storagePath, file, {
@@ -461,7 +462,6 @@ export class WebsiteService {
     })
 
     try {
-      const checksum = await this.calculateChecksum(file)
       const document = await this.uploadsRepository.createDocument({
         organization_id: values.organizationId,
         hostel_id: hostelId,
@@ -469,10 +469,10 @@ export class WebsiteService {
         document_type: "gallery_image",
         bucket_name: GALLERY_BUCKET,
         storage_path: storagePath,
-        file_name: file.name,
-        mime_type: file.type,
-        file_size_bytes: file.size,
-        checksum,
+        file_name: fileInspection.safeFileName,
+        mime_type: fileInspection.mimeType,
+        file_size_bytes: fileInspection.size,
+        checksum: fileInspection.checksum,
         is_public: values.status === "published",
         status: "verified",
         created_by: context.authUser.id,
@@ -577,17 +577,12 @@ export class WebsiteService {
   }
 
   private validateGalleryFile(file: File) {
-    if (!file || file.size === 0) {
-      throw badRequest("A non-empty gallery image is required.")
-    }
-
-    if (file.size > MAX_GALLERY_IMAGE_BYTES) {
-      throw badRequest("Gallery image is larger than the allowed upload size.")
-    }
-
-    if (!GALLERY_IMAGE_MIME_TYPES.has(file.type)) {
-      throw badRequest("Gallery image must be a JPG, PNG, or WebP file.")
-    }
+    return inspectUploadFile(file, {
+      allowedMimeTypes: GALLERY_IMAGE_MIME_TYPES,
+      maxBytes: MAX_GALLERY_IMAGE_BYTES,
+      label: "gallery image",
+      fallbackBaseName: "image",
+    })
   }
 
   private async loadMissingPublicGalleryDocuments(items: GalleryRepositoryItem[]) {
@@ -700,27 +695,9 @@ export class WebsiteService {
   private buildGalleryStoragePath(
     organizationId: string,
     hostelId: string | undefined,
-    fileName: string
+    safeFileName: string
   ) {
-    return `${organizationId}/${hostelId ?? "global"}/gallery/${crypto.randomUUID()}-${this.safeFileName(fileName)}`
-  }
-
-  private safeFileName(fileName: string) {
-    const safeFileName = fileName
-      .toLowerCase()
-      .replace(/[^a-z0-9.]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-
-    return safeFileName || "image"
-  }
-
-  private async calculateChecksum(file: File) {
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
-
-    return Array.from(new Uint8Array(digest))
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")
+    return `${organizationId}/${hostelId ?? "global"}/gallery/${crypto.randomUUID()}-${safeFileName}`
   }
 }
 

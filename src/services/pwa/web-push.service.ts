@@ -48,12 +48,13 @@ export class WebPushService {
 
     webpush.setVapidDetails(config.subject, config.publicKey, config.privateKey)
 
-    const subscriptions =
+    const subscriptions = dedupeSubscriptionsByEndpoint(
       await this.pushSubscriptionsRepository.listActiveForRecipient({
         organizationId: notification.organization_id,
         userId: notification.recipient_user_id,
         residentId: notification.resident_id,
       })
+    )
 
     if (subscriptions.length === 0) {
       return { sent: 0, failed: 0, skipped: 1 }
@@ -204,6 +205,18 @@ function toWebPushSubscription(subscription: PushSubscriptionRow): PushSubscript
       auth: subscription.auth_key,
     },
   }
+}
+
+function dedupeSubscriptionsByEndpoint(subscriptions: PushSubscriptionRow[]) {
+  const subscriptionsByEndpoint = new Map<string, PushSubscriptionRow>()
+
+  for (const subscription of subscriptions) {
+    if (!subscriptionsByEndpoint.has(subscription.endpoint)) {
+      subscriptionsByEndpoint.set(subscription.endpoint, subscription)
+    }
+  }
+
+  return [...subscriptionsByEndpoint.values()]
 }
 
 function buildPushPayload(notification: NotificationRow) {

@@ -123,6 +123,36 @@ describe("WebPushService", () => {
     )
   })
 
+  it("deduplicates active subscriptions by endpoint before delivery", async () => {
+    mocks.listActiveForRecipient.mockResolvedValue([
+      subscriptionFixture({
+        id: "00000000-0000-4000-8000-000000000401",
+        last_seen_at: "2026-06-07T00:00:00.000Z",
+      }),
+      subscriptionFixture({
+        id: "00000000-0000-4000-8000-000000000402",
+        last_seen_at: "2026-06-06T00:00:00.000Z",
+      }),
+    ])
+    mocks.sendNotification.mockResolvedValue({
+      statusCode: 201,
+      headers: {
+        "x-endpoint-message-id": "provider-message-1",
+      },
+    })
+
+    const service = new WebPushService({} as never, { retryDelayMs: 0 })
+    const result = await service.sendForNotification(notificationFixture())
+
+    expect(result).toEqual({ sent: 1, failed: 0, skipped: 0 })
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1)
+    expect(mocks.updateSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscriptionId: "00000000-0000-4000-8000-000000000401",
+      })
+    )
+  })
+
   it("does not retry permanently gone endpoints and revokes them", async () => {
     mocks.listActiveForRecipient.mockResolvedValue([subscriptionFixture({ failure_count: 2 })])
     mocks.sendNotification.mockRejectedValue(

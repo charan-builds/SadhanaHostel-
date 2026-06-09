@@ -2,7 +2,7 @@
 
 Date: 2026-06-07
 
-Last updated: 2026-06-08
+Last updated: 2026-06-09
 
 Branch: `backend-feature-migration`
 
@@ -3482,6 +3482,116 @@ Generated static pages using 15 workers (37/37)
 ### Risk Assessment
 
 GO for Batch 39. Risk is low to medium because the change narrows finance behavior and rejects conflicting idempotency reuse without changing schema, APIs, tenant isolation, auth, or payment verification RPCs.
+
+## Batch 40: Upload Security And Push Delivery Reliability
+
+### Problem Found
+
+Two concrete P1 risks were found and fixed:
+
+- User-supplied uploads relied on declared MIME type and size, while filenames were sanitized for storage paths but original potentially dangerous filenames were still persisted in document metadata.
+- Web Push delivery sent once per active subscription row, so duplicate endpoint rows could produce duplicate resident push notifications.
+
+### Root Cause
+
+Upload validation was duplicated across resident uploads, CMS/gallery uploads, and payment QR uploads. Each path performed MIME allow-list checks independently and did not verify file signatures. Push delivery assumed repository/database uniqueness was sufficient and did not protect the delivery loop against duplicate endpoint rows returned by storage.
+
+### Files Changed
+
+- `src/lib/uploads/file-security.ts`
+- `src/services/uploads.service.ts`
+- `src/services/website.service.ts`
+- `src/services/payments.service.ts`
+- `src/services/pwa/web-push.service.ts`
+- `src/tests/unit/lib/upload-file-security.test.ts`
+- `src/tests/security/uploads-access.test.ts`
+- `src/tests/unit/services/website.service.test.ts`
+- `src/tests/unit/services/payments.service.test.ts`
+- `src/tests/unit/services/web-push.service.test.ts`
+- `MASTER_PRODUCT_EVOLUTION_REPORT.md`
+
+### Code Implemented
+
+- Added shared upload inspection that verifies:
+  - non-empty file body
+  - maximum byte size
+  - MIME allow-list
+  - magic-byte/file-signature match for PDF, JPEG, PNG, and WebP
+  - canonical extension by accepted MIME type
+  - path-traversal and double-extension filename normalization
+  - SHA-256 checksum from the inspected bytes
+- Applied shared inspection to:
+  - resident documents
+  - resident profile photos
+  - payment proofs
+  - gallery and employee-accommodation gallery uploads
+  - payment QR uploads
+- Persisted sanitized filenames in document metadata instead of raw user-controlled names.
+- Added Web Push delivery deduplication by endpoint before provider delivery attempts.
+
+### Tests Added
+
+- Added upload-file security tests for MIME spoof rejection, filename normalization, canonical extension selection, and fallback filenames.
+- Added resident/payment upload security coverage for spoofed image bodies and sanitized payment-proof metadata.
+- Added CMS gallery upload service coverage for sanitized metadata and spoofed body rejection before storage writes.
+- Added payment QR upload coverage for spoofed body rejection before storage writes.
+- Added Web Push coverage proving duplicate endpoint rows produce only one provider send.
+
+### Validation Results
+
+Focused suite:
+
+```text
+npm run test -- src/tests/unit/lib/upload-file-security.test.ts src/tests/security/uploads-access.test.ts src/tests/unit/services/payments.service.test.ts src/tests/unit/services/website.service.test.ts
+Test Files  4 passed (4)
+Tests       34 passed (34)
+```
+
+```text
+npm run test -- src/tests/unit/services/web-push.service.test.ts
+Test Files  1 passed (1)
+Tests       4 passed (4)
+```
+
+Full gate:
+
+```text
+npm run lint
+PASS
+```
+
+```text
+npm run typecheck
+PASS
+```
+
+```text
+npm run test
+Test Files  154 passed | 3 skipped (157)
+Tests       653 passed | 5 skipped (658)
+```
+
+```text
+npm run test:security
+Test Files  8 passed | 2 skipped (10)
+Tests       76 passed | 3 skipped (79)
+```
+
+```text
+npm run test:smoke
+Tests       59 passed | 12 skipped
+```
+
+```text
+npm run build
+PASS
+Compiled successfully
+Generated static pages using 15 workers (37/37)
+```
+
+### Risk Assessment
+
+GO for Batch 40. Risk is low to medium because upload validation is stricter and may reject files that previously relied only on MIME headers, but this is intentional security hardening. No schema, route contract, tenant model, payment workflow, auth workflow, or public website flow was changed. Push deduplication is low risk because it only suppresses duplicate sends to the same endpoint.
 
 ## Remaining Risks
 

@@ -14,6 +14,18 @@ import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { PaymentSettingRow } from "@/types/payment-operations"
 import type { Tables } from "@/types/database"
 
+const VALID_PNG_BYTES = new Uint8Array([
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
+  0x00,
+])
+
 function createServiceHarness() {
   const service = new PaymentsService({} as never)
   const authService = {
@@ -1104,7 +1116,7 @@ describe("PaymentsService", () => {
 
   it("uploads QR images to the tenant-scoped current path and audits the replacement", async () => {
     const harness = createServiceHarness()
-    const file = new File(["qr"], "qr.png", { type: "image/png" })
+    const file = new File([VALID_PNG_BYTES], "qr.png", { type: "image/png" })
 
     harness.uploadsRepository.createSignedUrl.mockResolvedValue("https://storage.test/signed")
 
@@ -1141,5 +1153,24 @@ describe("PaymentsService", () => {
         request_id: "request-123",
       })
     )
+  })
+
+  it("rejects QR uploads whose body does not match the declared image type", async () => {
+    const harness = createServiceHarness()
+    const file = new File(["not-a-real-image"], "qr.png", { type: "image/png" })
+
+    await expect(
+      harness.service.uploadPaymentQr(
+        {
+          organizationId: TEST_ORGANIZATION_ID,
+          hostelId: TEST_HOSTEL_ID,
+        },
+        file
+      )
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    })
+
+    expect(harness.uploadsRepository.uploadObject).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ import { badRequest, forbidden } from "@/lib/api/api-error"
 import { logAuditEvent } from "@/lib/logger"
 import { incrementMetric } from "@/lib/metrics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { inspectUploadFile } from "@/lib/uploads/file-security"
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import type { ResidentWithOnboarding } from "@/repositories/residents.repository"
@@ -167,8 +168,11 @@ export class UploadsService {
     const context = await this.authService.getCurrentContext()
 
     this.authService.requireOrganizationAccess(context, input.organizationId)
-    this.validateFile(input.file, input.allowedMimeTypes, input.maxBytes)
-    const checksum = await this.calculateChecksum(input.file)
+    const fileInspection = await inspectUploadFile(input.file, {
+      allowedMimeTypes: input.allowedMimeTypes,
+      maxBytes: input.maxBytes,
+      label: "file",
+    })
 
     const resident = await this.residentsRepository.getById(
       input.residentId,
@@ -213,12 +217,12 @@ export class UploadsService {
           input.organizationId,
           input.residentId,
           input.paymentId,
-          input.file.name
+          fileInspection.safeFileName
         )
       : this.buildResidentStoragePath(
           input.organizationId,
           input.residentId,
-          input.file.name
+          fileInspection.safeFileName
         )
 
     await this.uploadsRepository.uploadObject(
@@ -237,10 +241,10 @@ export class UploadsService {
         document_type: input.documentType,
         bucket_name: input.bucketName,
         storage_path: storagePath,
-        file_name: input.file.name,
-        mime_type: input.file.type,
-        file_size_bytes: input.file.size,
-        checksum,
+        file_name: fileInspection.safeFileName,
+        mime_type: fileInspection.mimeType,
+        file_size_bytes: fileInspection.size,
+        checksum: fileInspection.checksum,
         is_public: input.isPublic ?? false,
         created_by: context.authUser.id,
         updated_by: context.authUser.id,
@@ -339,52 +343,20 @@ export class UploadsService {
       : "profile_incomplete"
   }
 
-  private validateFile(file: File, allowedMimeTypes: Set<string>, maxBytes: number) {
-    if (!file || file.size === 0) {
-      throw badRequest("A non-empty file is required.")
-    }
-
-    if (file.size > maxBytes) {
-      throw badRequest("File is larger than the allowed upload size.")
-    }
-
-    if (!allowedMimeTypes.has(file.type)) {
-      throw badRequest("File type is not allowed for this upload.")
-    }
-  }
-
   private buildResidentStoragePath(
     organizationId: string,
     residentId: string,
-    fileName: string
+    safeFileName: string
   ) {
-    return `${organizationId}/${residentId}/${crypto.randomUUID()}-${this.safeFileName(fileName)}`
+    return `${organizationId}/${residentId}/${crypto.randomUUID()}-${safeFileName}`
   }
 
   private buildPaymentProofStoragePath(
     organizationId: string,
     residentId: string,
     paymentId: string,
-    fileName: string
+    safeFileName: string
   ) {
-    return `${organizationId}/${residentId}/${paymentId}/${crypto.randomUUID()}-${this.safeFileName(fileName)}`
-  }
-
-  private safeFileName(fileName: string) {
-    const safeFileName = fileName
-      .toLowerCase()
-      .replace(/[^a-z0-9.]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-
-    return safeFileName || "upload"
-  }
-
-  private async calculateChecksum(file: File) {
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
-
-    return Array.from(new Uint8Array(digest))
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")
+    return `${organizationId}/${residentId}/${paymentId}/${crypto.randomUUID()}-${safeFileName}`
   }
 }
