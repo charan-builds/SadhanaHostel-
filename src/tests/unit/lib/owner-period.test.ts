@@ -9,14 +9,26 @@ import {
 describe("owner analytics periods", () => {
   const now = new Date("2026-06-09T12:00:00.000Z")
 
-  it("builds month presets from UTC calendar boundaries", () => {
-    expect(getOwnerPeriodRange("this_month", now)).toEqual({
+  it("builds core period presets from UTC calendar boundaries", () => {
+    expect(getOwnerPeriodRange("day", now)).toEqual({
+      fromDate: "2026-06-09",
+      toDate: "2026-06-09",
+    })
+    expect(getOwnerPeriodRange("week", now)).toEqual({
+      fromDate: "2026-06-08",
+      toDate: "2026-06-09",
+    })
+    expect(getOwnerPeriodRange("month", now)).toEqual({
       fromDate: "2026-06-01",
       toDate: "2026-06-09",
     })
-    expect(getOwnerPeriodRange("last_month", now)).toEqual({
-      fromDate: "2026-05-01",
-      toDate: "2026-05-31",
+    expect(getOwnerPeriodRange("quarter", now)).toEqual({
+      fromDate: "2026-04-01",
+      toDate: "2026-06-09",
+    })
+    expect(getOwnerPeriodRange("year", now)).toEqual({
+      fromDate: "2026-01-01",
+      toDate: "2026-06-09",
     })
   })
 
@@ -24,7 +36,7 @@ describe("owner analytics periods", () => {
     expect(
       getPreviousOwnerPeriod(
         { fromDate: "2026-06-01", toDate: "2026-06-09" },
-        "this_month"
+        "month"
       )
     ).toEqual({
       fromDate: "2026-05-01",
@@ -36,8 +48,23 @@ describe("owner analytics periods", () => {
     expect(
       formatOwnerPeriodLabel(
         { fromDate: "2026-06-01", toDate: "2026-06-09" },
-        "this_month"
+        "month"
       )
     ).toBe("June 2026")
+  })
+
+  it("labels current quarter and year presets clearly", () => {
+    expect(
+      formatOwnerPeriodLabel(
+        { fromDate: "2026-04-01", toDate: "2026-06-09" },
+        "quarter"
+      )
+    ).toBe("Q2 2026")
+    expect(
+      formatOwnerPeriodLabel(
+        { fromDate: "2026-01-01", toDate: "2026-06-09" },
+        "year"
+      )
+    ).toBe("2026")
   })
 })

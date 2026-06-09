@@ -393,6 +393,7 @@ export class AnalyticsService {
   ) {
     const months = buildMonthBuckets(fromDate, toDate)
     const periodEnd = new Date(toDate)
+    const yearStart = new Date(Date.UTC(periodEnd.getUTCFullYear(), 0, 1)).toISOString()
     const [
       residents,
       reservations,
@@ -402,6 +403,10 @@ export class AnalyticsService {
       allocations,
       supportRequests,
       noticeNotifications,
+      revenueScopePayments,
+      advanceBalances,
+      advanceRefunds,
+      leads,
     ] = await Promise.all([
       this.analyticsRepository.listOwnerResidents(organizationId, hostelId),
       this.analyticsRepository.listOwnerReservations(organizationId, fromDate, toDate, hostelId),
@@ -426,6 +431,15 @@ export class AnalyticsService {
         toDate,
         hostelId
       ),
+      this.analyticsRepository.listPaymentsForRevenueScope(
+        organizationId,
+        yearStart,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listOwnerAdvanceBalances(organizationId, hostelId),
+      this.analyticsRepository.listOwnerAdvanceRefunds(organizationId, hostelId),
+      this.analyticsRepository.countOwnerLeads(organizationId, fromDate, toDate, hostelId),
     ])
 
     const operationalResidents = residents.filter((resident) =>
@@ -488,6 +502,16 @@ export class AnalyticsService {
           paymentConversion: 0,
         }))
       : monthly
+    const advanceLiability = hostelModules.startupFinanceZero
+      ? 0
+      : sum(advanceBalances.map((row) => Number(row.remaining_advance_balance ?? 0)))
+    const refundLiability = hostelModules.startupFinanceZero
+      ? 0
+      : sum(
+          advanceRefunds
+            .filter((refund) => ["requested", "approved"].includes(refund.status))
+            .map((refund) => refund.amount)
+        )
     const revenue = hostelModules.startupFinanceZero
       ? 0
       : sum(verifiedPayments.map((payment) => payment.amount))
@@ -522,6 +546,36 @@ export class AnalyticsService {
       fromDate,
       toDate
     )
+    const activeRooms = rooms.filter((room) => room.status === "active")
+    const totalBeds = sum(activeRooms.map((room) => room.capacity))
+    const periodEndDate = toDate.slice(0, 10)
+    const occupiedBeds = new Set(
+      allocations
+        .filter((allocation) =>
+          allocation.status === "active" &&
+          allocation.allocated_from <= periodEndDate &&
+          (!allocation.allocated_to || allocation.allocated_to >= periodEndDate)
+        )
+        .map((allocation) => allocation.resident_id)
+    ).size
+    const vacantBeds = Math.max(0, totalBeds - occupiedBeds)
+    const dailyRevenue = hostelModules.startupFinanceZero
+      ? 0
+      : sum(
+          revenueScopePayments
+            .filter((payment) => payment.verified_at?.slice(0, 10) === periodEndDate)
+            .map((payment) => payment.amount)
+        )
+    const monthlyRevenue = hostelModules.startupFinanceZero
+      ? 0
+      : sum(
+          revenueScopePayments
+            .filter((payment) => payment.verified_at?.slice(0, 7) === periodEndDate.slice(0, 7))
+            .map((payment) => payment.amount)
+        )
+    const yearlyRevenue = hostelModules.startupFinanceZero
+      ? 0
+      : sum(revenueScopePayments.map((payment) => payment.amount))
     const noticeReadCount = noticeNotifications.filter(
       (notification) =>
         Boolean(notification.read_at) &&
@@ -545,12 +599,26 @@ export class AnalyticsService {
       range: { fromDate, toDate },
       summary: {
         revenue,
+        dailyRevenue,
+        monthlyRevenue,
+        yearlyRevenue,
         billed,
         pendingDues,
         overdueAmount,
+        expectedCollection: billed,
+        actualCollection: revenue,
+        collectionEfficiency: percent(revenue, billed),
         collectionRate: percent(paidAmount, billed),
         occupancyRate,
+        occupiedBeds,
+        vacantBeds,
+        occupancyPercent: percent(occupiedBeds, totalBeds),
+        outstandingDues: pendingDues,
+        advanceLiability,
+        refundLiability,
+        leads,
         admissions,
+        conversionRate: percent(admissions, leads),
         complaints,
         noticeEngagement,
         unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
@@ -573,7 +641,12 @@ export class AnalyticsService {
       duesAging: hostelModules.startupFinanceZero
         ? []
         : buildDuesAging(pendingFeeRecords, periodEnd),
-      trends: financeMonthly,
+      trends: financeMonthly.map((trend) => ({
+        ...trend,
+        collectionEfficiency: percent(trend.revenue, trend.billed),
+        advanceLiability,
+        occupancyRate,
+      })),
       forecasts: {
         revenue: revenueForecast,
       },
@@ -827,13 +900,26 @@ function buildOwnerAnalyticsCsv(
     ["Total Residents", String(dashboard.summary.totalResidents)],
     ["Active Residents", String(dashboard.summary.activeResidents)],
     ["Billing Residents", String(dashboard.summary.billingResidents)],
+    ["Daily Revenue", String(dashboard.summary.dailyRevenue)],
+    ["Monthly Revenue", String(dashboard.summary.monthlyRevenue)],
+    ["Yearly Revenue", String(dashboard.summary.yearlyRevenue)],
     ["Revenue", String(dashboard.summary.revenue)],
     ["Billed", String(dashboard.summary.billed)],
+    ["Expected Collection", String(dashboard.summary.expectedCollection)],
+    ["Actual Collection", String(dashboard.summary.actualCollection)],
+    ["Collection Efficiency", `${dashboard.summary.collectionEfficiency}%`],
     ["Pending Dues", String(dashboard.summary.pendingDues)],
     ["Overdue Amount", String(dashboard.summary.overdueAmount)],
+    ["Advance Liability", String(dashboard.summary.advanceLiability)],
+    ["Refund Liability", String(dashboard.summary.refundLiability)],
     ["Collection Rate", `${dashboard.summary.collectionRate}%`],
     ["Average Occupancy", `${dashboard.summary.occupancyRate}%`],
+    ["Occupied Beds", String(dashboard.summary.occupiedBeds)],
+    ["Vacant Beds", String(dashboard.summary.vacantBeds)],
+    ["Occupancy %", `${dashboard.summary.occupancyPercent}%`],
+    ["Leads", String(dashboard.summary.leads)],
     ["Admissions", String(dashboard.summary.admissions)],
+    ["Conversion %", `${dashboard.summary.conversionRate}%`],
     ["Complaints", String(dashboard.summary.complaints)],
     ["Notice Engagement", `${dashboard.summary.noticeEngagement}%`],
     ["Unpaid Residents", String(dashboard.summary.unpaidResidents)],
@@ -891,12 +977,23 @@ async function buildOwnerAnalyticsPdf(
     ["Total Residents", String(dashboard.summary.totalResidents)],
     ["Active Residents", String(dashboard.summary.activeResidents)],
     ["Billing Residents", String(dashboard.summary.billingResidents)],
+    ["Daily Revenue", `INR ${dashboard.summary.dailyRevenue}`],
+    ["Monthly Revenue", `INR ${dashboard.summary.monthlyRevenue}`],
+    ["Yearly Revenue", `INR ${dashboard.summary.yearlyRevenue}`],
     ["Revenue", `INR ${dashboard.summary.revenue}`],
     ["Billed", `INR ${dashboard.summary.billed}`],
+    ["Expected Collection", `INR ${dashboard.summary.expectedCollection}`],
+    ["Actual Collection", `INR ${dashboard.summary.actualCollection}`],
+    ["Collection Efficiency", `${dashboard.summary.collectionEfficiency}%`],
     ["Pending Dues", `INR ${dashboard.summary.pendingDues}`],
     ["Overdue Amount", `INR ${dashboard.summary.overdueAmount}`],
+    ["Advance Liability", `INR ${dashboard.summary.advanceLiability}`],
+    ["Refund Liability", `INR ${dashboard.summary.refundLiability}`],
     ["Collection Rate", `${dashboard.summary.collectionRate}%`],
     ["Average Occupancy", `${dashboard.summary.occupancyRate}%`],
+    ["Occupied Beds", String(dashboard.summary.occupiedBeds)],
+    ["Vacant Beds", String(dashboard.summary.vacantBeds)],
+    ["Leads", String(dashboard.summary.leads)],
     ["Admissions", String(dashboard.summary.admissions)],
     ["Complaints", String(dashboard.summary.complaints)],
     ["Notice Engagement", `${dashboard.summary.noticeEngagement}%`],

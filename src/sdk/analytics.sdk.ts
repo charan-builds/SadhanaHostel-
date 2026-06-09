@@ -72,12 +72,26 @@ export type OwnerAnalytics = {
   }
   summary: {
     revenue: number
+    dailyRevenue: number
+    monthlyRevenue: number
+    yearlyRevenue: number
     billed: number
     pendingDues: number
     overdueAmount: number
+    expectedCollection: number
+    actualCollection: number
+    collectionEfficiency: number
     collectionRate: number
     occupancyRate: number
+    occupiedBeds: number
+    vacantBeds: number
+    occupancyPercent: number
+    outstandingDues: number
+    advanceLiability: number
+    refundLiability: number
+    leads: number
     admissions: number
+    conversionRate: number
     complaints: number
     noticeEngagement: number
     unpaidResidents: number
@@ -111,6 +125,9 @@ export type OwnerAnalytics = {
     confirmedReservations: number
     reservationAdvance: number
     paymentConversion: number
+    collectionEfficiency: number
+    advanceLiability: number
+    occupancyRate: number
   }>
   forecasts: {
     revenue: {

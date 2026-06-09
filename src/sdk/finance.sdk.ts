@@ -2,6 +2,20 @@ import { apiClient } from "@/lib/api-client"
 import type { FinanceDashboard } from "@/lib/finance/finance-dashboard"
 import type { CollectionFollowupRow } from "@/repositories/collection-followups.repository"
 import type {
+  AdvanceLedgerSummary,
+  AdvanceOwnerDashboard,
+  AdvancePaymentDepositRow,
+  AdvancePaymentRefundRow,
+  AdvanceReports,
+} from "@/types/advance-ledger"
+import type {
+  AdvanceAllocationRunInput,
+  AdvanceDepositCreateInput,
+  AdvanceLedgerQueryInput,
+  AdvanceRefundApproveInput,
+  AdvanceRefundCreateInput,
+  AdvanceReportsInput,
+  AdvanceSettlementInput,
   CollectionFollowupCompleteInput,
   CollectionFollowupCreateInput,
   CollectionFollowupListInput,
@@ -44,5 +58,60 @@ export const financeSdk = {
       },
       { retry: 0 }
     )
+  },
+  advanceLedger(params: AdvanceLedgerQueryInput) {
+    return apiClient.get<AdvanceLedgerSummary>("/api/finance/advance-ledger", params)
+  },
+  recordAdvanceDeposit(input: AdvanceDepositCreateInput) {
+    return apiClient.post<AdvancePaymentDepositRow, AdvanceDepositCreateInput>(
+      "/api/finance/advance-ledger/deposits",
+      input,
+      { retry: 0 }
+    )
+  },
+  allocateAdvance(input: AdvanceAllocationRunInput) {
+    return apiClient.post<
+      { processed: number; results: Array<Record<string, unknown>> },
+      AdvanceAllocationRunInput
+    >("/api/finance/advance-ledger/allocate", input, { retry: 0 })
+  },
+  requestAdvanceRefund(input: AdvanceRefundCreateInput) {
+    return apiClient.post<AdvancePaymentRefundRow, AdvanceRefundCreateInput>(
+      "/api/finance/advance-ledger/refunds",
+      input,
+      { retry: 0 }
+    )
+  },
+  approveAdvanceRefund(input: AdvanceRefundApproveInput) {
+    return apiClient.post<
+      AdvancePaymentRefundRow,
+      Omit<AdvanceRefundApproveInput, "refundId">
+    >(
+      `/api/finance/advance-ledger/refunds/${input.refundId}/approve`,
+      {
+        organizationId: input.organizationId,
+        action: input.action,
+        ...(input.notes ? { notes: input.notes } : {}),
+      },
+      { retry: 0 }
+    )
+  },
+  advanceReports(params: AdvanceReportsInput) {
+    return apiClient.get<{
+      reports: AdvanceReports
+      ownerDashboard: AdvanceOwnerDashboard
+    }>("/api/finance/advance-ledger/reports", params)
+  },
+  advanceSettlement(params: AdvanceSettlementInput) {
+    return apiClient.get<{
+      resident: AdvanceLedgerSummary["resident"]
+      totalAdvance: number
+      consumed: number
+      remaining: number
+      refundable: number
+      coveredUntil: string | null
+      nextDueDate: string | null
+      refunds: AdvancePaymentRefundRow[]
+    }>("/api/finance/advance-ledger/settlement", params)
   },
 }

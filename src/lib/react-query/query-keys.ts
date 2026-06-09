@@ -22,6 +22,9 @@ export const queryKeys = {
     detail(scope: TenantScope, residentId: string) {
       return [...queryKeys.residents.all(scope), "detail", residentId] as const
     },
+    lifecycle(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.residents.all(scope), "lifecycle", filters] as const
+    },
   },
   rooms: {
     all(scope: TenantScope) {
@@ -97,6 +100,15 @@ export const queryKeys = {
     followups(scope: TenantScope, filters: Record<string, unknown>) {
       return [...queryKeys.finance.all(scope), "followups", filters] as const
     },
+    advanceLedger(scope: TenantScope, residentId: string) {
+      return [...queryKeys.finance.all(scope), "advance-ledger", residentId] as const
+    },
+    advanceReports(scope: TenantScope, filters: Record<string, unknown>) {
+      return [...queryKeys.finance.all(scope), "advance-reports", filters] as const
+    },
+    advanceSettlement(scope: TenantScope, residentId: string) {
+      return [...queryKeys.finance.all(scope), "advance-settlement", residentId] as const
+    },
   },
   platform: {
     setupStatus: ["platform", "setup-status"] as const,
@@ -134,6 +146,9 @@ export const queryKeys = {
     },
     identity(scope: TenantScope) {
       return [...queryKeys.operations.all(scope), "identity"] as const
+    },
+    whatsappAutomation(scope: TenantScope) {
+      return [...queryKeys.operations.all(scope), "whatsapp-automation"] as const
     },
   },
   launch: {

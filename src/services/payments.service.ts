@@ -1162,7 +1162,7 @@ export class PaymentsService {
       throw conflict("Calculated fee total cannot be negative.")
     }
 
-    return this.paymentsRepository.createFeeRecord({
+    const feeRecord = await this.paymentsRepository.createFeeRecord({
       organization_id: values.organizationId,
       hostel_id: values.hostelId,
       resident_id: values.residentId,
@@ -1188,6 +1188,29 @@ export class PaymentsService {
       created_by: context.authUser.id,
       updated_by: context.authUser.id,
     })
+
+    if (isSupabaseQueryClient(this.db)) {
+      try {
+        const { AdvanceLedgerService } = await import("@/services/advance-ledger")
+        await new AdvanceLedgerService(this.db).allocateForResidentSystem({
+          organizationId: values.organizationId,
+          hostelId: values.hostelId,
+          residentId: values.residentId,
+          actorUserId: context.authUser.id,
+          limit: 1,
+        })
+      } catch (error) {
+        logError(error, {
+          event: "advance_ledger.auto_allocation_after_fee_generation_failed",
+          organizationId: values.organizationId,
+          hostelId: values.hostelId,
+          residentId: values.residentId,
+          monthlyFeeRecordId: feeRecord.id,
+        })
+      }
+    }
+
+    return feeRecord
   }
 
   async reconcilePaymentInvoices(input: unknown) {
@@ -1882,6 +1905,10 @@ function createScreenshotPaymentReference(idempotencyKey: string) {
   const compactKey = idempotencyKey.replace(/[^A-Za-z0-9]/g, "").slice(0, 32)
 
   return `SCREENSHOT-${compactKey || crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+}
+
+function isSupabaseQueryClient(db: AppSupabaseClient) {
+  return typeof (db as { from?: unknown }).from === "function"
 }
 
 function compareFeeRecordsByDueDate(

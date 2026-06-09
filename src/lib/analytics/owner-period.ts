@@ -1,10 +1,9 @@
 export type OwnerPeriodPreset =
-  | "today"
-  | "this_month"
-  | "last_month"
-  | "last_3_months"
-  | "last_6_months"
-  | "this_year"
+  | "day"
+  | "week"
+  | "month"
+  | "quarter"
+  | "year"
   | "custom"
 
 export type OwnerPeriodRange = {
@@ -16,12 +15,11 @@ export const OWNER_PERIOD_PRESETS: Array<{
   value: OwnerPeriodPreset
   label: string
 }> = [
-  { value: "today", label: "Today" },
-  { value: "this_month", label: "This Month" },
-  { value: "last_month", label: "Last Month" },
-  { value: "last_3_months", label: "Last 3 Months" },
-  { value: "last_6_months", label: "Last 6 Months" },
-  { value: "this_year", label: "This Year" },
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "quarter", label: "Quarter" },
+  { value: "year", label: "Year" },
   { value: "custom", label: "Custom Range" },
 ]
 
@@ -33,29 +31,33 @@ export function getOwnerPeriodRange(
   const year = now.getUTCFullYear()
   const month = now.getUTCMonth()
 
-  if (preset === "today") {
+  if (preset === "day") {
     return { fromDate: today, toDate: today }
   }
 
-  if (preset === "this_month") {
+  if (preset === "week") {
+    const start = new Date(
+      Date.UTC(year, month, now.getUTCDate() - mondayOffset(now))
+    )
+
+    return {
+      fromDate: dateInput(start),
+      toDate: today,
+    }
+  }
+
+  if (preset === "month") {
     return {
       fromDate: dateInput(new Date(Date.UTC(year, month, 1))),
       toDate: today,
     }
   }
 
-  if (preset === "last_month") {
-    return {
-      fromDate: dateInput(new Date(Date.UTC(year, month - 1, 1))),
-      toDate: dateInput(new Date(Date.UTC(year, month, 0))),
-    }
-  }
-
-  if (preset === "last_3_months" || preset === "last_6_months") {
-    const monthCount = preset === "last_3_months" ? 3 : 6
+  if (preset === "quarter") {
+    const quarterStartMonth = Math.floor(month / 3) * 3
 
     return {
-      fromDate: dateInput(new Date(Date.UTC(year, month - monthCount + 1, 1))),
+      fromDate: dateInput(new Date(Date.UTC(year, quarterStartMonth, 1))),
       toDate: today,
     }
   }
@@ -73,7 +75,7 @@ export function getPreviousOwnerPeriod(
   const from = parseDateInput(range.fromDate)
   const to = parseDateInput(range.toDate)
 
-  if (preset === "today") {
+  if (preset === "day") {
     const previousDay = addUtcDays(from, -1)
 
     return {
@@ -82,7 +84,7 @@ export function getPreviousOwnerPeriod(
     }
   }
 
-  if (preset === "this_month") {
+  if (preset === "month") {
     const previousStart = new Date(
       Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1)
     )
@@ -104,18 +106,21 @@ export function getPreviousOwnerPeriod(
     }
   }
 
-  if (preset === "last_month") {
+  if (preset === "quarter") {
+    const previousStart = new Date(
+      Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 3, 1)
+    )
+    const elapsedDays =
+      Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1
+    const previousEnd = addUtcDays(previousStart, elapsedDays - 1)
+
     return {
-      fromDate: dateInput(
-        new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1))
-      ),
-      toDate: dateInput(
-        new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 0))
-      ),
+      fromDate: dateInput(previousStart),
+      toDate: dateInput(previousEnd),
     }
   }
 
-  if (preset === "this_year") {
+  if (preset === "year") {
     return {
       fromDate: `${from.getUTCFullYear() - 1}-01-01`,
       toDate: dateInput(
@@ -148,13 +153,12 @@ export function formatOwnerPeriodLabel(
   const from = parseDateInput(range.fromDate)
   const to = parseDateInput(range.toDate)
 
-  if (preset === "today") {
+  if (preset === "day") {
     return formatDay(from)
   }
 
   if (
-    preset === "this_month" ||
-    preset === "last_month" ||
+    preset === "month" ||
     (from.getUTCFullYear() === to.getUTCFullYear() &&
       from.getUTCMonth() === to.getUTCMonth() &&
       from.getUTCDate() === 1 &&
@@ -165,6 +169,21 @@ export function formatOwnerPeriodLabel(
       year: "numeric",
       timeZone: "UTC",
     }).format(from)
+  }
+
+  if (preset === "quarter") {
+    return `Q${Math.floor(from.getUTCMonth() / 3) + 1} ${from.getUTCFullYear()}`
+  }
+
+  if (
+    preset === "year" ||
+    (from.getUTCMonth() === 0 &&
+      from.getUTCDate() === 1 &&
+      to.getUTCMonth() === 11 &&
+      to.getUTCDate() === 31 &&
+      from.getUTCFullYear() === to.getUTCFullYear())
+  ) {
+    return String(from.getUTCFullYear())
   }
 
   return `${formatDay(from)} to ${formatDay(to)}`
@@ -212,4 +231,8 @@ function daysInMonth(date: Date) {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)
   ).getUTCDate()
+}
+
+function mondayOffset(date: Date) {
+  return (date.getUTCDay() + 6) % 7
 }

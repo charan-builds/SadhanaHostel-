@@ -5,10 +5,12 @@ import type {
   ResidentLifecycleRepairResult,
   ResidentPasswordResetResult,
 } from "@/types/residents"
+import type { ResidentLifecycleControlCenter } from "@/types/resident-lifecycle"
 import type {
   CheckoutResidentInput,
   CreateResidentInput,
   RepairResidentLifecycleInput,
+  ResidentLifecycleControlCenterInput,
   ResidentIdMutationInput,
   ResidentListInput,
   UpdateOwnResidentProfileInput,
@@ -21,6 +23,13 @@ export const residentsSdk = {
   list(params: ResidentListInput) {
     return apiClient.get<PaginatedResult<Tables<"residents">>>(
       "/api/residents",
+      params
+    )
+  },
+
+  lifecycleControlCenter(params: ResidentLifecycleControlCenterInput) {
+    return apiClient.get<ResidentLifecycleControlCenter>(
+      "/api/residents/lifecycle-control-center",
       params
     )
   },

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { uuidSchema } from "./common.validation"
+import { dateOnlySchema, moneySchema, uuidSchema } from "./common.validation"
 import { automationRunSchema } from "./operations.validation"
 
 export const financeDashboardSchema = z.object({
@@ -64,9 +64,68 @@ export const collectionFollowupCompleteSchema = z.object({
   notes: z.string().trim().min(1).max(2000).optional(),
 })
 
+export const advanceLedgerQuerySchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  residentId: uuidSchema.optional(),
+})
+
+export const advanceDepositCreateSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema,
+  residentId: uuidSchema,
+  amount: moneySchema.refine((value) => value > 0, "Advance amount must be greater than 0."),
+  paymentMode: z.enum(["cash", "upi", "bank_transfer"]).default("cash"),
+  transactionId: z.string().trim().min(3).max(120).optional().or(z.literal("")),
+  receivedDate: dateOnlySchema.default(() => new Date().toISOString().slice(0, 10)),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+  idempotencyKey: z.string().trim().min(8).max(256).optional(),
+})
+
+export const advanceAllocationRunSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  residentId: uuidSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+})
+
+export const advanceRefundCreateSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema,
+  residentId: uuidSchema,
+  amount: moneySchema.refine((value) => value > 0, "Refund amount must be greater than 0."),
+  reason: z.string().trim().min(3).max(1000),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+})
+
+export const advanceRefundApproveSchema = z.object({
+  organizationId: uuidSchema,
+  refundId: uuidSchema,
+  action: z.enum(["approve", "reject", "mark_paid"]),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
+})
+
+export const advanceReportsSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  residentId: uuidSchema.optional(),
+})
+
+export const advanceSettlementSchema = z.object({
+  organizationId: uuidSchema,
+  residentId: uuidSchema,
+})
+
 export type FinanceDashboardInput = z.infer<typeof financeDashboardSchema>
 export type FinanceAutomationRunInput = z.infer<typeof financeAutomationRunSchema>
 export type CollectionFollowupListInput = z.infer<typeof collectionFollowupListSchema>
 export type CollectionFollowupCreateInput = z.input<typeof collectionFollowupCreateSchema>
 export type CollectionFollowupCompleteInput = z.input<typeof collectionFollowupCompleteSchema>
 export type CollectionFollowupPriority = z.infer<typeof collectionFollowupPrioritySchema>
+export type AdvanceLedgerQueryInput = z.infer<typeof advanceLedgerQuerySchema>
+export type AdvanceDepositCreateInput = z.input<typeof advanceDepositCreateSchema>
+export type AdvanceAllocationRunInput = z.input<typeof advanceAllocationRunSchema>
+export type AdvanceRefundCreateInput = z.input<typeof advanceRefundCreateSchema>
+export type AdvanceRefundApproveInput = z.input<typeof advanceRefundApproveSchema>
+export type AdvanceReportsInput = z.input<typeof advanceReportsSchema>
+export type AdvanceSettlementInput = z.input<typeof advanceSettlementSchema>

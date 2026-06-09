@@ -167,6 +167,14 @@ export const updateOwnResidentProfileSchema = z.object({
   permanentAddress: z.string().trim().max(500).optional(),
 })
 
+export const residentLifecycleControlCenterSchema = z.object({
+  organizationId: uuidSchema,
+  hostelId: uuidSchema.optional(),
+  search: z.string().trim().max(120).optional(),
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Use YYYY-MM format.").optional(),
+  roomId: uuidSchema.optional(),
+})
+
 export type ResidentListInput = z.infer<typeof residentListSchema>
 export type CreateResidentInput = z.infer<typeof createResidentSchema>
 export type UpdateResidentInput = z.infer<typeof updateResidentSchema>
@@ -174,3 +182,6 @@ export type ResidentIdMutationInput = z.infer<typeof residentIdMutationSchema>
 export type CheckoutResidentInput = z.infer<typeof checkoutResidentSchema>
 export type RepairResidentLifecycleInput = z.infer<typeof repairResidentLifecycleSchema>
 export type UpdateOwnResidentProfileInput = z.infer<typeof updateOwnResidentProfileSchema>
+export type ResidentLifecycleControlCenterInput = z.infer<
+  typeof residentLifecycleControlCenterSchema
+>

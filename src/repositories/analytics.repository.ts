@@ -61,6 +61,25 @@ export type OwnerFeeRecord = Pick<
   "resident_id" | "period_month" | "due_date" | "total_amount" | "paid_amount" | "balance_amount" | "status"
 >
 
+export type OwnerAdvanceBalance = {
+  organization_id: string
+  hostel_id: string
+  resident_id: string
+  remaining_advance_balance: number
+  total_advance_received: number
+  total_advance_consumed: number
+  total_advance_refunded: number
+}
+
+export type OwnerAdvanceRefund = {
+  id: string
+  amount: number
+  status: string
+  created_at: string
+  approved_at: string | null
+  paid_at: string | null
+}
+
 export type ResidentGrowthRow = ResidentLifecycleRow & {
   id: string
   created_at: string
@@ -454,6 +473,34 @@ export class AnalyticsRepository {
     return data ?? []
   }
 
+  async listPaymentsForRevenueScope(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("payments")
+      .select("amount,status,method,created_at,verified_at")
+      .eq("organization_id", organizationId)
+      .eq("status", "verified")
+      .gte("verified_at", fromDate)
+      .lte("verified_at", toDate)
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner revenue scope.")
+    }
+
+    return data ?? []
+  }
+
   async listFeeRecordsInRange(
     organizationId: string,
     fromDate: string,
@@ -672,6 +719,72 @@ export class AnalyticsRepository {
     }
 
     return (data ?? []) as unknown as OwnerReservation[]
+  }
+
+  async countOwnerLeads(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.analyticsDb()
+      .from("leads")
+      .select("id", { count: "exact" })
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { count, error } = await query.range(0, 0)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner lead analytics.")
+    }
+
+    return count ?? 0
+  }
+
+  async listOwnerAdvanceBalances(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("advance_balance_view")
+      .select("*")
+      .eq("organization_id", organizationId)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner advance liability.")
+    }
+
+    return (data ?? []) as unknown as OwnerAdvanceBalance[]
+  }
+
+  async listOwnerAdvanceRefunds(organizationId: string, hostelId?: string) {
+    let query = this.analyticsDb()
+      .from("advance_payment_refunds")
+      .select("id,amount,status,created_at,approved_at,paid_at")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query.range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner refund liability.")
+    }
+
+    return (data ?? []) as unknown as OwnerAdvanceRefund[]
   }
 
   async listOwnerFeeRecords(

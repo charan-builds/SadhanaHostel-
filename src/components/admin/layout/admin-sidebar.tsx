@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   Megaphone,
+  MessageCircle,
   Plus,
   ReceiptText,
   RefreshCcw,
@@ -31,6 +32,8 @@ import {
   Sparkles,
   UserRoundPlus,
   Users,
+  WalletCards,
+  Workflow,
   type LucideIcon,
 } from "lucide-react"
 
@@ -60,13 +63,22 @@ export const adminNavigationItems: AdminNavigationItem[] = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Owner Dashboard", href: "/admin/owner-dashboard", icon: BarChart3 },
   { title: "Leads", href: "/admin/leads", icon: UserRoundPlus },
-  { title: "Residents", href: "/admin/residents", icon: Users },
+  {
+    title: "Residents",
+    href: "/admin/residents",
+    icon: Users,
+    children: [
+      { title: "Directory", href: "/admin/residents", icon: Users },
+      { title: "Lifecycle", href: "/admin/residents/lifecycle", icon: Workflow },
+    ],
+  },
   {
     title: "Finance",
     href: "/admin/finance",
     icon: IndianRupee,
     children: [
       { title: "Dashboard", href: "/admin/finance", icon: Gauge },
+      { title: "Advance Ledger", href: "/admin/finance/advance-ledger", icon: WalletCards },
       { title: "Collections", href: "/admin/finance/collections", icon: ClipboardCheck },
       { title: "Followups", href: "/admin/finance/followups", icon: History },
       { title: "Receipts", href: "/admin/finance/receipts", icon: ReceiptText },
@@ -86,6 +98,7 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     ? [{ title: "Launch Readiness", href: "/admin/launch-readiness", icon: ClipboardCheck }]
     : []),
   { title: "Automation", href: "/admin/operations/automation", icon: Bot },
+  { title: "WhatsApp", href: "/admin/whatsapp-automation", icon: MessageCircle },
   { title: "Staff & Access", href: "/admin/settings/staff-access", icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]

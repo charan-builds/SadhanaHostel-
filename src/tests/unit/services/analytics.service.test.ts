@@ -99,6 +99,14 @@ describe("AnalyticsService", () => {
             verified_at: null,
           },
         ]),
+        listPaymentsForRevenueScope: vi.fn().mockResolvedValue([
+          {
+            amount: 3500,
+            status: "verified",
+            created_at: "2026-05-31T23:00:00.000Z",
+            verified_at: "2026-06-01T01:00:00.000Z",
+          },
+        ]),
         listOwnerFeeRecords: vi.fn().mockResolvedValue([
           {
             resident_id: RESIDENT_ID,
@@ -114,6 +122,9 @@ describe("AnalyticsService", () => {
         listRoomAllocationsInRange: vi.fn().mockResolvedValue([]),
         listOwnerSupportRequests: vi.fn().mockResolvedValue([]),
         listOwnerNoticeNotifications: vi.fn().mockResolvedValue([]),
+        listOwnerAdvanceBalances: vi.fn().mockResolvedValue([]),
+        listOwnerAdvanceRefunds: vi.fn().mockResolvedValue([]),
+        countOwnerLeads: vi.fn().mockResolvedValue(0),
       },
     })
 
@@ -175,6 +186,14 @@ describe("AnalyticsService", () => {
             verified_at: "2026-06-05T00:00:00.000Z",
           },
         ]),
+        listPaymentsForRevenueScope: vi.fn().mockResolvedValue([
+          {
+            amount: 4000,
+            status: "verified",
+            created_at: "2026-06-05T00:00:00.000Z",
+            verified_at: "2026-06-05T00:00:00.000Z",
+          },
+        ]),
         listOwnerFeeRecords: vi.fn().mockResolvedValue([
           {
             resident_id: RESIDENT_ID,
@@ -220,6 +239,13 @@ describe("AnalyticsService", () => {
             read_at: null,
           },
         ]),
+        listOwnerAdvanceBalances: vi.fn().mockResolvedValue([
+          { resident_id: RESIDENT_ID, remaining_advance_balance: 12000 },
+        ]),
+        listOwnerAdvanceRefunds: vi.fn().mockResolvedValue([
+          { amount: 2000, status: "requested" },
+        ]),
+        countOwnerLeads: vi.fn().mockResolvedValue(4),
       },
     })
 
@@ -255,7 +281,11 @@ describe("AnalyticsService", () => {
       overdueAmount: 1000,
       collectionRate: 80,
       occupancyRate: 10,
+      advanceLiability: 12000,
+      refundLiability: 2000,
+      leads: 4,
       admissions: 1,
+      conversionRate: 25,
       complaints: 2,
       noticeEngagement: 50,
     })
@@ -273,12 +303,26 @@ describe("AnalyticsService", () => {
         },
         summary: {
           revenue: 50000,
+          dailyRevenue: 1500,
+          monthlyRevenue: 50000,
+          yearlyRevenue: 250000,
           billed: 55000,
           pendingDues: 5000,
           overdueAmount: 2000,
+          expectedCollection: 55000,
+          actualCollection: 50000,
+          collectionEfficiency: 90.91,
           collectionRate: 90.91,
           occupancyRate: 92,
+          occupiedBeds: 46,
+          vacantBeds: 4,
+          occupancyPercent: 92,
+          outstandingDues: 5000,
+          advanceLiability: 75000,
+          refundLiability: 5000,
+          leads: 20,
           admissions: 12,
+          conversionRate: 60,
           complaints: 3,
           noticeEngagement: 88,
           unpaidResidents: 2,

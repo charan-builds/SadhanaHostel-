@@ -65,9 +65,9 @@ export function OwnerDashboardClient() {
   const { organizationId } = useAuth()
   const hostels = useHostels(Boolean(organizationId))
   const [hostelFilter, setHostelFilter] = useState("all")
-  const [preset, setPreset] = useState<OwnerPeriodPreset>("this_month")
+  const [preset, setPreset] = useState<OwnerPeriodPreset>("month")
   const [range, setRange] = useState<OwnerPeriodRange>(() =>
-    getOwnerPeriodRange("this_month")
+    getOwnerPeriodRange("month")
   )
   const [downloading, setDownloading] = useState<ExportFormat | null>(null)
   const [highlightRefresh, setHighlightRefresh] = useState(false)
@@ -506,6 +506,51 @@ export function OwnerDashboardClient() {
               />
             </section>
 
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard
+                title="Revenue Intelligence"
+                value={formatCurrency(data.summary.monthlyRevenue)}
+                description={`Daily ${formatCurrency(data.summary.dailyRevenue)} · Yearly ${formatCurrency(data.summary.yearlyRevenue)}`}
+                icon={IndianRupee}
+                tone="success"
+              />
+              <StatCard
+                title="Collection Efficiency"
+                value={`${data.summary.collectionEfficiency}%`}
+                description={`Expected ${formatCurrency(data.summary.expectedCollection)} · Actual ${formatCurrency(data.summary.actualCollection)}`}
+                icon={Activity}
+                tone={data.summary.collectionEfficiency >= 85 ? "success" : "warning"}
+              />
+              <StatCard
+                title="Occupancy"
+                value={`${data.summary.occupancyPercent}%`}
+                description={`${data.summary.occupiedBeds} occupied · ${data.summary.vacantBeds} vacant`}
+                icon={BedDouble}
+                tone={data.summary.occupancyPercent >= 80 ? "success" : "warning"}
+              />
+              <StatCard
+                title="Advance Liability"
+                value={formatCurrency(data.summary.advanceLiability)}
+                description={`Refund liability ${formatCurrency(data.summary.refundLiability)}`}
+                icon={ShieldCheck}
+                tone={data.summary.refundLiability > 0 ? "warning" : "info"}
+              />
+              <StatCard
+                title="Outstanding Dues"
+                value={formatCurrency(data.summary.outstandingDues)}
+                description={`Overdue ${formatCurrency(data.summary.overdueAmount)}`}
+                icon={MessageSquareWarning}
+                tone={data.summary.outstandingDues > 0 ? "warning" : "success"}
+              />
+              <StatCard
+                title="Admissions Conversion"
+                value={`${data.summary.conversionRate}%`}
+                description={`${data.summary.leads} leads · ${data.summary.admissions} admissions`}
+                icon={UserPlus}
+                tone={data.summary.conversionRate >= 40 ? "success" : "info"}
+              />
+            </section>
+
             <OwnerDecisionSection
               data={data}
               previous={previous}
@@ -556,6 +601,76 @@ export function OwnerDashboardClient() {
                     label="Resident churn"
                     value={`${data.summary.residentChurn}%`}
                     detail={`${data.summary.averageStayDurationDays} average stay days`}
+                  />
+                </CardContent>
+              </Card>
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Collection Trend</CardTitle>
+                  <CardDescription>
+                    Collection efficiency across the selected period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <TrendChart
+                    data={data.trends}
+                    lines={[
+                      {
+                        key: "collectionEfficiency",
+                        label: "Efficiency",
+                        color: "#0891b2",
+                      },
+                    ]}
+                    formatValue={(value) => `${value}%`}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Occupancy Trend</CardTitle>
+                  <CardDescription>
+                    Occupied bed rate across the selected period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <TrendChart
+                    data={data.trends}
+                    lines={[
+                      {
+                        key: "occupancyRate",
+                        label: "Occupancy",
+                        color: "#16a34a",
+                      },
+                    ]}
+                    formatValue={(value) => `${value}%`}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Advance Liability Trend</CardTitle>
+                  <CardDescription>
+                    Advance balance carried as hostel liability.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <TrendChart
+                    data={data.trends}
+                    lines={[
+                      {
+                        key: "advanceLiability",
+                        label: "Liability",
+                        color: "#7c3aed",
+                      },
+                    ]}
                   />
                 </CardContent>
               </Card>
@@ -954,6 +1069,7 @@ function percentChange(current: number, previous?: number) {
 function TrendChart({
   data,
   lines,
+  formatValue = formatCurrency,
 }: {
   data: OwnerAnalytics["trends"]
   lines: Array<{
@@ -961,6 +1077,7 @@ function TrendChart({
     label: string
     color: string
   }>
+  formatValue?: (value: number) => string
 }) {
   const width = 720
   const height = 260
@@ -1068,7 +1185,7 @@ function TrendChart({
                 >
                   <span>{line.label}</span>
                   <span className="font-medium text-foreground">
-                    {formatCurrency(Number(item[line.key] ?? 0))}
+                    {formatValue(Number(item[line.key] ?? 0))}
                   </span>
                 </div>
               ))}

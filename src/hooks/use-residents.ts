@@ -8,6 +8,7 @@ import type {
   CheckoutResidentInput,
   CreateResidentInput,
   RepairResidentLifecycleInput,
+  ResidentLifecycleControlCenterInput,
   ResidentListInput,
   UpdateOwnResidentProfileInput,
   UpdateResidentInput,
@@ -18,6 +19,23 @@ export function useResidents(params: ResidentListInput) {
     queryKey: queryKeys.residents.list(params, params),
     queryFn: () => residentsSdk.list(params),
     enabled: Boolean(params.organizationId),
+  })
+}
+
+export function useResidentLifecycleControlCenter(
+  params: ResidentLifecycleControlCenterInput
+) {
+  return useQuery({
+    queryKey: queryKeys.residents.lifecycle(
+      {
+        organizationId: params.organizationId,
+        hostelId: params.hostelId,
+      },
+      params
+    ),
+    queryFn: () => residentsSdk.lifecycleControlCenter(params),
+    enabled: Boolean(params.organizationId),
+    staleTime: 30_000,
   })
 }
 

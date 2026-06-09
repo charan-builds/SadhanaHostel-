@@ -15,11 +15,13 @@ import {
   LayoutDashboard,
   LifeBuoy,
   Mail,
+  MessageCircle,
   Settings,
   ShieldCheck,
   User,
   UserRoundPlus,
   Users,
+  Workflow,
 } from "lucide-react"
 import type { Route } from "next"
 
@@ -41,6 +43,7 @@ export const adminNavigation: NavItem[] = [
   { title: "Owner Dashboard", href: "/admin/owner-dashboard" as Route, icon: BarChart3 },
   { title: "Leads", href: "/admin/leads" as Route, icon: UserRoundPlus },
   { title: "Residents", href: "/admin/residents", icon: Users },
+  { title: "Lifecycle", href: "/admin/residents/lifecycle" as Route, icon: Workflow },
   { title: "Payments", href: "/admin/payments", icon: CreditCard },
   { title: "Leaves", href: "/admin/leaves", icon: CalendarDays },
   { title: "Website", href: "/admin/website", icon: Globe },
@@ -50,6 +53,7 @@ export const adminNavigation: NavItem[] = [
     ? [{ title: "Launch Readiness", href: "/admin/launch-readiness" as Route, icon: ClipboardCheck }]
     : []),
   { title: "Automation", href: "/admin/operations/automation" as Route, icon: Bot },
+  { title: "WhatsApp", href: "/admin/whatsapp-automation" as Route, icon: MessageCircle },
   { title: "Staff & Access", href: "/admin/settings/staff-access" as Route, icon: KeyRound },
   { title: "Settings", href: "/admin/settings", icon: Settings },
 ]

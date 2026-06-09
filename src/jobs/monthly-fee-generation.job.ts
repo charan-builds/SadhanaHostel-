@@ -1,6 +1,8 @@
 import { PaymentsRepository } from "@/repositories/payments.repository"
 import { ResidentsRepository } from "@/repositories/residents.repository"
 import { billingDayFromJoinedOn, buildBillingDateForMonth } from "@/lib/finance/billing-date"
+import { logError } from "@/lib/logger"
+import { AdvanceLedgerService } from "@/services/advance-ledger"
 
 import type { JobDefinition, OrganizationJobPayload } from "./types"
 
@@ -22,12 +24,14 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
   async run(payload, context) {
     const residentsRepository = new ResidentsRepository(context.db)
     const paymentsRepository = new PaymentsRepository(context.db)
+    const advanceLedgerService = new AdvanceLedgerService(context.db, context.db)
     const residents = await residentsRepository.listActiveForBilling(
       payload.organizationId,
       payload.hostelId
     )
     let processed = 0
     let skipped = 0
+    let allocationFailures = 0
 
     for (const resident of residents) {
       const existing = await paymentsRepository.findFeeRecordByResidentPeriod(
@@ -64,6 +68,28 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
         },
       })
 
+      if (isSupabaseQueryClient(context.db)) {
+        try {
+          await advanceLedgerService.allocateForResidentSystem({
+            organizationId: payload.organizationId,
+            hostelId: resident.hostel_id,
+            residentId: resident.id,
+            actorUserId: context.requestedBy,
+            limit: 1,
+          })
+        } catch (error) {
+          allocationFailures += 1
+          logError(error, {
+            event: "advance_ledger.auto_allocation_after_monthly_job_failed",
+            organizationId: payload.organizationId,
+            hostelId: resident.hostel_id,
+            residentId: resident.id,
+            periodMonth: payload.periodMonth,
+            runId: context.runId,
+          })
+        }
+      }
+
       processed += 1
     }
 
@@ -78,7 +104,12 @@ export const monthlyFeeGenerationJob: JobDefinition<MonthlyFeeGenerationPayload>
         hostelId: payload.hostelId,
         periodMonth: payload.periodMonth,
         residentCount: residents.length,
+        allocationFailures,
       },
     }
   },
+}
+
+function isSupabaseQueryClient(db: unknown) {
+  return typeof (db as { from?: unknown }).from === "function"
 }

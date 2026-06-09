@@ -17,7 +17,13 @@ import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { APIErrorState, EmptyState } from "@/components/system"
 import { Button } from "@/components/ui/button"
-import { useCurrentResident, useLeaves, useNotices, useResidentPaymentLedger } from "@/hooks"
+import {
+  useAdvanceLedger,
+  useCurrentResident,
+  useLeaves,
+  useNotices,
+  useResidentPaymentLedger,
+} from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
 
@@ -26,6 +32,14 @@ export function ResidentDashboardClient() {
   const resident = useCurrentResident(organizationId ?? undefined)
   const hostelId = resident.data?.hostel_id ?? session?.hostelIds[0]
   const ledger = useResidentPaymentLedger(
+    organizationId
+      ? {
+          organizationId,
+          residentId: resident.data?.id,
+        }
+      : undefined
+  )
+  const advanceLedger = useAdvanceLedger(
     organizationId
       ? {
           organizationId,
@@ -75,9 +89,10 @@ export function ResidentDashboardClient() {
     ledger.data?.primaryDueRecord
   const monthlyLeft = currentRecord?.balance_amount ?? ledger.data?.totals.currentDue ?? 0
   const currentDue = Math.max(ledger.data?.totals.currentDue ?? 0, monthlyLeft)
-  const advancePaid = ledger.data?.totals.advanceBalance ?? 0
-  const advanceLeft = Math.max(resident.data.monthly_fee_amount - advancePaid, 0)
-  const totalPayable = currentDue + advanceLeft
+  const advanceBalance = advanceLedger.data?.balance.remainingAdvanceBalance ?? 0
+  const coveredMonths =
+    advanceLedger.data?.coveredMonths.filter((month) => month.status === "covered").length ?? 0
+  const totalPayable = currentDue
 
   return (
     <div className="grid gap-6">
@@ -119,11 +134,13 @@ export function ResidentDashboardClient() {
         <ResidentMetric
           icon={IndianRupee}
           label="Advance"
-          value={formatCurrency(advancePaid)}
+          value={formatCurrency(advanceBalance)}
           detail={
-            advanceLeft > 0
-              ? `${formatCurrency(advanceLeft)} advance left`
-              : "Advance requirement covered"
+            advanceLedger.data?.coveredUntil
+              ? `${coveredMonths} month(s), covered until ${advanceLedger.data.coveredUntil}`
+              : advanceLedger.isLoading
+                ? "Advance ledger loading"
+                : "No advance balance"
           }
         />
         <ResidentMetric
