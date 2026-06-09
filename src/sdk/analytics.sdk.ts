@@ -1,7 +1,6 @@
 import {
   FrontendApiError,
   apiClient,
-  getCurrentAccessToken,
   notifyApiAuthFailure,
   type ApiResponse,
 } from "@/lib/api-client"
@@ -75,6 +74,12 @@ export type OwnerAnalytics = {
     revenue: number
     billed: number
     pendingDues: number
+    overdueAmount: number
+    collectionRate: number
+    occupancyRate: number
+    admissions: number
+    complaints: number
+    noticeEngagement: number
     unpaidResidents: number
     totalResidents: number
     activeResidents: number
@@ -121,6 +126,7 @@ export type OwnerAnalytics = {
     description: string
     action: string
   }>
+  hasData: boolean
   generatedAt: string
 }
 
@@ -144,17 +150,12 @@ export const analyticsSdk = {
   },
 
   async downloadOwner(params: OwnerAnalyticsExportInput): Promise<OwnerAnalyticsDownload> {
-    const token = await getCurrentAccessToken()
     const requestId = createRequestId()
     const path = "/api/v1/analytics/owner/export"
     const headers = new Headers({
       accept: params.format === "pdf" ? "application/pdf" : "text/csv",
       "x-request-id": requestId,
     })
-
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`)
-    }
 
     const response = await fetch(buildApiUrl(path, params), {
       method: "GET",

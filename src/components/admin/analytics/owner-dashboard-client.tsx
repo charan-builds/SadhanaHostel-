@@ -1,14 +1,20 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
+  Activity,
   AlertTriangle,
-  BarChart3,
+  BedDouble,
+  CalendarDays,
   Download,
   IndianRupee,
   Loader2,
+  MessageSquareWarning,
+  RefreshCw,
+  ShieldCheck,
+  TrendingDown,
   TrendingUp,
-  Users,
+  UserPlus,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -35,49 +41,105 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useHostels, useOwnerAnalytics } from "@/hooks"
+import {
+  OWNER_PERIOD_PRESETS,
+  formatOwnerExactRange,
+  formatOwnerPeriodLabel,
+  getOwnerPeriodRange,
+  getPreviousOwnerPeriod,
+  type OwnerPeriodPreset,
+  type OwnerPeriodRange,
+} from "@/lib/analytics/owner-period"
 import { FrontendApiError } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth"
-import { formatCurrency, humanizeEnum } from "@/lib/format"
+import { formatCurrency, formatDateTime, humanizeEnum } from "@/lib/format"
 import { useRealtimeOwnerAnalytics } from "@/lib/realtime"
-import { useFinanceDashboard, useHostels, useOwnerAnalytics } from "@/hooks"
+import { cn } from "@/lib/utils"
 import { analyticsSdk, type OwnerAnalytics } from "@/sdk"
 
 type ExportFormat = "csv" | "pdf"
+type HealthStatus = "good" | "attention" | "critical"
 
 export function OwnerDashboardClient() {
-  const { organizationId, session } = useAuth()
-  const defaultHostelId = session?.hostelIds[0]
+  const { organizationId } = useAuth()
   const hostels = useHostels(Boolean(organizationId))
-  const [hostelFilter, setHostelFilter] = useState(defaultHostelId ?? "all")
-  const [fromDate, setFromDate] = useState(() => monthsAgoInput(5))
-  const [toDate, setToDate] = useState(() => todayInput())
+  const [hostelFilter, setHostelFilter] = useState("all")
+  const [preset, setPreset] = useState<OwnerPeriodPreset>("this_month")
+  const [range, setRange] = useState<OwnerPeriodRange>(() =>
+    getOwnerPeriodRange("this_month")
+  )
   const [downloading, setDownloading] = useState<ExportFormat | null>(null)
-  const hostelId = hostelFilter === "all" ? defaultHostelId : hostelFilter
+  const [highlightRefresh, setHighlightRefresh] = useState(false)
+  const lastCompletedScope = useRef<string | null>(null)
+  const hostelId = hostelFilter === "all" ? undefined : hostelFilter
+  const previousRange = useMemo(
+    () => getPreviousOwnerPeriod(range, preset),
+    [preset, range]
+  )
   const ownerAnalytics = useOwnerAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
-    fromDate,
-    toDate,
+    ...range,
   })
-  const financeDashboard = useFinanceDashboard(
-    organizationId
-      ? {
-          organizationId,
-          hostelId,
-        }
-      : undefined
-  )
+  const previousAnalytics = useOwnerAnalytics({
+    organizationId: organizationId ?? "",
+    hostelId,
+    ...previousRange,
+  })
 
   useRealtimeOwnerAnalytics({ enabled: Boolean(organizationId) })
 
   const selectedHostelLabel = useMemo(() => {
     if (hostelFilter === "all") {
-      return "Sadhana Boys Hostel"
+      return (hostels.data?.length ?? 0) > 1
+        ? "All Hostels"
+        : hostels.data?.[0]?.name ?? "Sadhana Boys Hostel"
     }
 
-    return hostels.data?.find((hostel) => hostel.id === hostelFilter)?.name ?? "Selected hostel"
+    return (
+      hostels.data?.find((hostel) => hostel.id === hostelFilter)?.name ??
+      "Selected hostel"
+    )
   }, [hostelFilter, hostels.data])
   const showHostelFilter = (hostels.data?.length ?? 0) > 1
+  const viewingLabel = formatOwnerPeriodLabel(range, preset)
+  const previousLabel = formatOwnerPeriodLabel(previousRange, "custom")
+  const exactRangeLabel = formatOwnerExactRange(range)
+  const refreshScope = `${hostelFilter}:${range.fromDate}:${range.toDate}`
+
+  useEffect(() => {
+    if (!ownerAnalytics.data || ownerAnalytics.isFetching) {
+      return
+    }
+
+    if (
+      lastCompletedScope.current &&
+      lastCompletedScope.current !== refreshScope
+    ) {
+      toast.success(`Analytics updated for ${viewingLabel}`)
+      setHighlightRefresh(true)
+      const timeout = window.setTimeout(() => setHighlightRefresh(false), 1400)
+      lastCompletedScope.current = refreshScope
+
+      return () => window.clearTimeout(timeout)
+    }
+
+    lastCompletedScope.current = refreshScope
+  }, [
+    ownerAnalytics.data,
+    ownerAnalytics.isFetching,
+    refreshScope,
+    viewingLabel,
+  ])
+
+  function selectPreset(nextPreset: OwnerPeriodPreset) {
+    setPreset(nextPreset)
+
+    if (nextPreset !== "custom") {
+      setRange(getOwnerPeriodRange(nextPreset))
+    }
+  }
 
   async function download(format: ExportFormat) {
     if (!organizationId) {
@@ -85,13 +147,15 @@ export function OwnerDashboardClient() {
     }
 
     setDownloading(format)
+    const toastId = toast.loading(
+      `Exporting ${viewingLabel} report as ${format.toUpperCase()}...`
+    )
 
     try {
       const result = await analyticsSdk.downloadOwner({
         organizationId,
         hostelId,
-        fromDate,
-        toDate,
+        ...range,
         format,
       })
       const url = URL.createObjectURL(result.blob)
@@ -100,12 +164,13 @@ export function OwnerDashboardClient() {
       anchor.download = result.fileName
       anchor.click()
       URL.revokeObjectURL(url)
-      toast.success("Owner analytics export started.")
+      toast.success(`${viewingLabel} report download started.`, { id: toastId })
     } catch (error) {
       toast.error(
         error instanceof FrontendApiError
           ? error.message
-          : "Owner analytics export failed."
+          : "Owner analytics export failed.",
+        { id: toastId }
       )
     } finally {
       setDownloading(null)
@@ -122,7 +187,18 @@ export function OwnerDashboardClient() {
   }
 
   if (ownerAnalytics.isLoading) {
-    return <LoadingState variant="dashboard" />
+    return (
+      <ResponsiveContainer size="wide" className="grid gap-4 px-0 sm:px-0">
+        <div
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+          role="status"
+        >
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Loading analytics...
+        </div>
+        <LoadingState variant="dashboard" />
+      </ResponsiveContainer>
+    )
   }
 
   if (ownerAnalytics.isError) {
@@ -136,7 +212,7 @@ export function OwnerDashboardClient() {
   }
 
   const data = ownerAnalytics.data
-  const finance = financeDashboard.data
+  const previous = previousAnalytics.data
 
   if (!data) {
     return (
@@ -147,18 +223,21 @@ export function OwnerDashboardClient() {
     )
   }
 
+  const refreshing = ownerAnalytics.isFetching
+  const exportDisabled = Boolean(downloading) || refreshing || !data.hasData
+
   return (
     <ResponsiveContainer size="wide" className="grid gap-6 px-0 sm:px-0">
       <PageHeader
         title="Owner Dashboard"
-        description="Business intelligence for revenue, dues, resident access, and payment risk."
+        description="Period-specific business performance, health signals, and owner actions."
         badge={selectedHostelLabel}
         actions={
           <>
             <Button
               type="button"
               variant="outline"
-              disabled={Boolean(downloading)}
+              disabled={exportDisabled}
               onClick={() => void download("csv")}
             >
               {downloading === "csv" ? (
@@ -170,7 +249,7 @@ export function OwnerDashboardClient() {
             </Button>
             <Button
               type="button"
-              disabled={Boolean(downloading)}
+              disabled={exportDisabled}
               onClick={() => void download("pdf")}
             >
               {downloading === "pdf" ? (
@@ -184,274 +263,692 @@ export function OwnerDashboardClient() {
         }
       />
 
-      <Card>
-        <CardContent className="grid gap-3 pt-0 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="grid gap-2">
-            <Label htmlFor="owner-hostel-filter">Hostel</Label>
-            {showHostelFilter ? (
-              <Select value={hostelFilter} onValueChange={setHostelFilter}>
-                <SelectTrigger id="owner-hostel-filter" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {hostels.data?.map((hostel) => (
-                    <SelectItem key={hostel.id} value={hostel.id}>
-                      {hostel.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input id="owner-hostel-filter" value={selectedHostelLabel} readOnly />
-            )}
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="owner-from-date">From</Label>
-            <Input
-              id="owner-from-date"
-              type="date"
-              value={fromDate}
-              onChange={(event) => setFromDate(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="owner-to-date">To</Label>
-            <Input
-              id="owner-to-date"
-              type="date"
-              value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
-            />
-          </div>
-          <div className="flex items-end">
+      <section
+        aria-labelledby="business-period-heading"
+        className="border-y bg-muted/30 py-5"
+      >
+        <div className="grid gap-5 px-1">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2
+                id="business-period-heading"
+                className="text-base font-semibold"
+              >
+                Business Performance Period
+              </h2>
+              <div className="mt-2 grid gap-1 text-sm text-muted-foreground sm:grid-cols-3 sm:gap-6">
+                <p>
+                  Viewing:{" "}
+                  <strong className="font-semibold text-foreground">
+                    {viewingLabel}
+                  </strong>
+                </p>
+                <p>
+                  Compared With:{" "}
+                  <strong className="font-semibold text-foreground">
+                    {previousLabel}
+                  </strong>
+                </p>
+                <p>
+                  Last Updated:{" "}
+                  <strong className="font-semibold text-foreground">
+                    {formatDateTime(data.generatedAt)}
+                  </strong>
+                </p>
+              </div>
+            </div>
             <Button
               type="button"
               variant="outline"
-              className="w-full"
-              onClick={() => void ownerAnalytics.refetch()}
+              disabled={refreshing}
+              onClick={() => {
+                void ownerAnalytics.refetch()
+                void previousAnalytics.refetch()
+              }}
             >
-              <BarChart3 className="size-4" aria-hidden="true" />
+              {refreshing ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw className="size-4" aria-hidden="true" />
+              )}
               Refresh
             </Button>
           </div>
-        </CardContent>
-      </Card>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          title="Today's Revenue"
-          value={formatCurrency(finance?.owner.summary.todayRevenue ?? 0)}
-          description="Verified collections today"
-          icon={IndianRupee}
-          tone="success"
-        />
-        <StatCard
-          title="This Month Revenue"
-          value={formatCurrency(finance?.owner.summary.revenue ?? data.summary.revenue)}
-          description="Verified monthly collections"
-          icon={TrendingUp}
-          tone="success"
-        />
-        <StatCard
-          title="Pending Collection"
-          value={formatCurrency(finance?.kpis.pendingAmount ?? data.summary.pendingDues)}
-          description={`${finance?.kpis.residentsWithPending ?? data.summary.unpaidResidents} residents pending`}
-          icon={AlertTriangle}
-          tone="warning"
-        />
-        <StatCard
-          title="Overdue Collection"
-          value={formatCurrency(finance?.kpis.overdueAmount ?? 0)}
-          description="Past due date balance"
-          icon={AlertTriangle}
-          tone={(finance?.kpis.overdueAmount ?? 0) > 0 ? "warning" : "success"}
-        />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Owner Collection Pulse</CardTitle>
-            <CardDescription>Daily hostel collection signals from Finance.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <OwnerMiniMetric
-              label="Residents Due Today"
-              value={finance?.dueWindows.todayCount ?? 0}
-              detail={formatCurrency(finance?.dueWindows.today ?? 0)}
-            />
-            <OwnerMiniMetric
-              label="Upcoming Dues"
-              value={formatCurrency(finance?.owner.upcomingDues.next7Days ?? 0)}
-              detail="Next 7 days"
-            />
-            <OwnerMiniMetric
-              label="Cash Today"
-              value={formatCurrency(finance?.owner.collectionToday.cash ?? 0)}
-              detail="Counter collections"
-            />
-            <OwnerMiniMetric
-              label="UPI + Bank Today"
-              value={formatCurrency(
-                (finance?.owner.collectionToday.upi ?? 0) +
-                  (finance?.owner.collectionToday.bank ?? 0)
-              )}
-              detail="Digital collections"
-            />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Collections</CardTitle>
-            <CardDescription>Latest verified payments from Finance.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {(finance?.recentPayments ?? []).slice(0, 5).length === 0 ? (
-              <EmptyState title="No recent collections" message="Verified payments will appear here." />
-            ) : (
-              (finance?.recentPayments ?? []).slice(0, 5).map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                  <div>
-                    <p className="font-medium">{humanizeEnum(payment.method)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {payment.verified_at ?? payment.created_at}
-                    </p>
-                  </div>
-                  <span className="font-semibold">{formatCurrency(payment.amount)}</span>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          title="Active Residents"
-          value={data.summary.activeResidents}
-          description={`${data.summary.billingResidents} residents in billing`}
-          icon={Users}
-          tone="info"
-        />
-        <StatCard
-          title="Revenue"
-          value={formatCurrency(data.summary.revenue)}
-          description={`${data.summary.paymentConversion}% payment conversion`}
-          icon={IndianRupee}
-          tone="success"
-        />
-        <StatCard
-          title="Pending Dues"
-          value={formatCurrency(data.summary.pendingDues)}
-          description={`${data.summary.unpaidResidents} unpaid residents`}
-          icon={AlertTriangle}
-          tone={data.summary.pendingDues > 0 ? "warning" : "success"}
-        />
-        <StatCard
-          title="Growth"
-          value={`${data.summary.monthlyGrowth}%`}
-          description={`${data.summary.residentChurn}% resident churn`}
-          icon={TrendingUp}
-          tone={data.summary.monthlyGrowth >= 0 ? "info" : "warning"}
-        />
-      </section>
-
-      <section className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue Trend</CardTitle>
-            <CardDescription>
-              Monthly owner view across collections and billed dues.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TrendChart
-              data={data.trends}
-              lines={[
-                { key: "revenue", label: "Revenue", color: "#2563eb" },
-                { key: "billed", label: "Billed", color: "#16a34a" },
-                { key: "dues", label: "Dues", color: "#f59e0b" },
-              ]}
-            />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Operational Insights</CardTitle>
-            <CardDescription>
-              Prioritized owner actions from dues, resident access, and payment signals.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {data.insights.length === 0 ? (
-              <EmptyState
-                title="No owner action needed"
-                message="No finance or resident-access risks are currently detected."
-              />
-            ) : null}
-            {data.insights.map((insight) => (
-              <article key={`${insight.severity}-${insight.title}`} className="rounded-lg border p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={insight.severity === "critical" ? "destructive" : "secondary"}>
-                    {humanizeEnum(insight.severity)}
-                  </Badge>
-                  <h2 className="text-sm font-semibold">{insight.title}</h2>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">{insight.description}</p>
-                <p className="mt-2 text-sm font-medium">{insight.action}</p>
-              </article>
+          <div
+            className="flex flex-wrap gap-1 rounded-lg border bg-background p-1"
+            aria-label="Analytics period presets"
+          >
+            {OWNER_PERIOD_PRESETS.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={preset === option.value ? "default" : "ghost"}
+                aria-pressed={preset === option.value}
+                onClick={() => selectPreset(option.value)}
+              >
+                {option.value === "custom" ? (
+                  <CalendarDays className="size-3.5" aria-hidden="true" />
+                ) : null}
+                {option.label}
+              </Button>
             ))}
-          </CardContent>
-        </Card>
-      </section>
+          </div>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dues Aging</CardTitle>
-            <CardDescription>Outstanding balances by overdue age.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BarList
-              data={data.duesAging.map((item) => ({
-                label: item.label,
-                value: item.amount,
-                detail: `${item.records} records`,
-              }))}
-              formatValue={formatCurrency}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Resident Verification</CardTitle>
-            <CardDescription>
-              Verification health for residents in the selected scope.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DonutMetric
-              value={data.onboarding.completed}
-              total={data.onboarding.totalResidents}
-              label={`${data.onboarding.completionRate}% verified`}
-            />
-            <div className="mt-4 grid gap-2">
-              {Object.entries(data.onboarding.pending).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
-                  <span>{humanizeEnum(status)}</span>
-                  <span className="font-semibold">{count}</span>
-                </div>
-              ))}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {showHostelFilter ? (
+              <div className="grid gap-2">
+                <Label htmlFor="owner-hostel-filter">Hostel</Label>
+                <Select value={hostelFilter} onValueChange={setHostelFilter}>
+                  <SelectTrigger id="owner-hostel-filter" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Hostels</SelectItem>
+                    {hostels.data?.map((hostel) => (
+                      <SelectItem key={hostel.id} value={hostel.id}>
+                        {hostel.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="grid gap-2">
+              <Label htmlFor="owner-from-date">From</Label>
+              <Input
+                id="owner-from-date"
+                type="date"
+                value={range.fromDate}
+                onChange={(event) => {
+                  const fromDate = event.target.value
+                  setPreset("custom")
+                  setRange((current) => ({
+                    fromDate,
+                    toDate:
+                      current.toDate < fromDate ? fromDate : current.toDate,
+                  }))
+                }}
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div className="grid gap-2">
+              <Label htmlFor="owner-to-date">To</Label>
+              <Input
+                id="owner-to-date"
+                type="date"
+                value={range.toDate}
+                onChange={(event) => {
+                  const toDate = event.target.value
+                  setPreset("custom")
+                  setRange((current) => ({
+                    fromDate:
+                      current.fromDate > toDate ? toDate : current.fromDate,
+                    toDate,
+                  }))
+                }}
+              />
+            </div>
+          </div>
+        </div>
       </section>
+
+      {refreshing ? <RefreshSkeleton /> : null}
+
+      <div
+        className={cn(
+          "grid gap-6 transition-opacity duration-200",
+          refreshing && "opacity-55"
+        )}
+        aria-busy={refreshing}
+      >
+        {!data.hasData ? (
+          <EmptyState
+            title="No analytics available for selected period"
+            message={`No resident, finance, occupancy, complaint, or notice activity was found for ${exactRangeLabel}.`}
+          />
+        ) : (
+          <>
+            <PeriodSummary data={data} viewingLabel={viewingLabel} />
+
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Revenue Collected"
+                value={formatCurrency(data.summary.revenue)}
+                description={`Based on ${exactRangeLabel}`}
+                icon={IndianRupee}
+                tone="success"
+                trend={
+                  <MetricComparison
+                    current={data.summary.revenue}
+                    previous={previous?.summary.revenue}
+                    previousLabel={previousLabel}
+                  />
+                }
+              />
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Outstanding"
+                value={formatCurrency(data.summary.pendingDues)}
+                description={`Based on ${exactRangeLabel}`}
+                icon={AlertTriangle}
+                tone={data.summary.pendingDues > 0 ? "warning" : "success"}
+                trend={
+                  <MetricComparison
+                    current={data.summary.pendingDues}
+                    previous={previous?.summary.pendingDues}
+                    previousLabel={previousLabel}
+                    favorable="lower"
+                  />
+                }
+              />
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Collection Rate"
+                value={`${data.summary.collectionRate}%`}
+                description={`Based on ${exactRangeLabel}`}
+                icon={Activity}
+                tone={data.summary.collectionRate >= 85 ? "success" : "warning"}
+                trend={
+                  <MetricComparison
+                    current={data.summary.collectionRate}
+                    previous={previous?.summary.collectionRate}
+                    previousLabel={previousLabel}
+                  />
+                }
+              />
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Average Occupancy"
+                value={`${data.summary.occupancyRate}%`}
+                description={`Based on ${exactRangeLabel}`}
+                icon={BedDouble}
+                tone={data.summary.occupancyRate >= 80 ? "success" : "warning"}
+                trend={
+                  <MetricComparison
+                    current={data.summary.occupancyRate}
+                    previous={previous?.summary.occupancyRate}
+                    previousLabel={previousLabel}
+                  />
+                }
+              />
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Admissions"
+                value={data.summary.admissions}
+                description={`Based on ${exactRangeLabel}`}
+                icon={UserPlus}
+                tone="info"
+                trend={
+                  <MetricComparison
+                    current={data.summary.admissions}
+                    previous={previous?.summary.admissions}
+                    previousLabel={previousLabel}
+                  />
+                }
+              />
+              <StatCard
+                className={refreshClass(highlightRefresh)}
+                title="Overdue Amount"
+                value={formatCurrency(data.summary.overdueAmount)}
+                description={`Based on ${exactRangeLabel}`}
+                icon={MessageSquareWarning}
+                tone={data.summary.overdueAmount > 0 ? "danger" : "success"}
+                trend={
+                  <MetricComparison
+                    current={data.summary.overdueAmount}
+                    previous={previous?.summary.overdueAmount}
+                    previousLabel={previousLabel}
+                    favorable="lower"
+                  />
+                }
+              />
+            </section>
+
+            <OwnerDecisionSection
+              data={data}
+              previous={previous}
+              exactRangeLabel={exactRangeLabel}
+            />
+
+            <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue Trend</CardTitle>
+                  <CardDescription>
+                    Collections, billing, and outstanding dues across the selected period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <TrendChart
+                    data={data.trends}
+                    lines={[
+                      { key: "revenue", label: "Revenue", color: "#2563eb" },
+                      { key: "billed", label: "Billed", color: "#16a34a" },
+                      { key: "dues", label: "Dues", color: "#f59e0b" },
+                    ]}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resident Activity</CardTitle>
+                  <CardDescription>
+                    Admissions, active residents, and departures for this period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <OwnerMiniMetric
+                    label="Active at period end"
+                    value={data.summary.activeResidents}
+                    detail={`${data.summary.billingResidents} residents in billing`}
+                  />
+                  <OwnerMiniMetric
+                    label="Admissions"
+                    value={data.summary.admissions}
+                    detail={`${data.summary.monthlyGrowth}% growth`}
+                  />
+                  <OwnerMiniMetric
+                    label="Resident churn"
+                    value={`${data.summary.residentChurn}%`}
+                    detail={`${data.summary.averageStayDurationDays} average stay days`}
+                  />
+                </CardContent>
+              </Card>
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Complaints</CardTitle>
+                  <CardDescription>
+                    Resident support requests opened during this period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <OwnerMiniMetric
+                    label="Requests opened"
+                    value={data.summary.complaints}
+                    detail={
+                      data.summary.complaints === 0
+                        ? "No resident complaints recorded"
+                        : "Review open requests and resolution times"
+                    }
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Notice Engagement</CardTitle>
+                  <CardDescription>
+                    Share of notice notifications read by recipients.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <DonutMetric
+                    value={data.summary.noticeEngagement}
+                    total={100}
+                    label={`${data.summary.noticeEngagement}% read`}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resident Verification</CardTitle>
+                  <CardDescription>
+                    Verification completion for residents admitted in this period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <DonutMetric
+                    value={data.onboarding.completed}
+                    total={data.onboarding.totalResidents}
+                    label={`${data.onboarding.completionRate}% verified`}
+                  />
+                </CardContent>
+              </Card>
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dues Aging</CardTitle>
+                  <CardDescription>
+                    Outstanding balances from fee records in this period.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent>
+                  <BarList
+                    data={data.duesAging.map((item) => ({
+                      label: item.label,
+                      value: item.amount,
+                      detail: `${item.records} records`,
+                    }))}
+                    formatValue={formatCurrency}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Owner Actions</CardTitle>
+                  <CardDescription>
+                    Prioritized actions from the selected period&apos;s signals.
+                  </CardDescription>
+                  <PeriodBasis label={exactRangeLabel} />
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  {data.insights.map((insight) => (
+                    <article
+                      key={`${insight.severity}-${insight.title}`}
+                      className="rounded-lg border p-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            insight.severity === "critical"
+                              ? "destructive"
+                              : "secondary"
+                          }
+                        >
+                          {humanizeEnum(insight.severity)}
+                        </Badge>
+                        <h3 className="text-sm font-semibold">{insight.title}</h3>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {insight.description}
+                      </p>
+                      <p className="mt-2 text-sm font-medium">{insight.action}</p>
+                    </article>
+                  ))}
+                </CardContent>
+              </Card>
+            </section>
+          </>
+        )}
+      </div>
     </ResponsiveContainer>
   )
+}
+
+function PeriodSummary({
+  data,
+  viewingLabel,
+}: {
+  data: OwnerAnalytics
+  viewingLabel: string
+}) {
+  const metrics = [
+    ["Revenue Collected", formatCurrency(data.summary.revenue)],
+    ["Outstanding", formatCurrency(data.summary.pendingDues)],
+    ["Occupancy", `${data.summary.occupancyRate}%`],
+    ["Admissions", String(data.summary.admissions)],
+    ["Complaints", String(data.summary.complaints)],
+    ["Notice Engagement", `${data.summary.noticeEngagement}%`],
+  ]
+
+  return (
+    <section
+      className="border-y border-emerald-200 bg-emerald-50/60 py-4"
+      aria-label={`Viewing ${viewingLabel}`}
+    >
+      <div className="px-1">
+        <p className="text-sm font-semibold text-emerald-950">
+          Viewing {viewingLabel}
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {metrics.map(([label, value]) => (
+            <div key={label}>
+              <p className="text-xs text-emerald-800">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-emerald-950">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function OwnerDecisionSection({
+  data,
+  previous,
+  exactRangeLabel,
+}: {
+  data: OwnerAnalytics
+  previous?: OwnerAnalytics
+  exactRangeLabel: string
+}) {
+  const decisions = buildHealthDecisions(data, previous)
+
+  return (
+    <section className="grid gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold">Owner Decision Center</h2>
+          <p className="text-sm text-muted-foreground">
+            What is healthy, what needs attention, and why.
+          </p>
+        </div>
+        <PeriodBasis label={exactRangeLabel} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {decisions.map((decision) => (
+          <Card key={decision.title} size="sm">
+            <CardHeader>
+              <CardTitle>{decision.title}</CardTitle>
+              <HealthBadge status={decision.status} />
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {decision.reason}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function buildHealthDecisions(
+  data: OwnerAnalytics,
+  previous?: OwnerAnalytics
+): Array<{ title: string; status: HealthStatus; reason: string }> {
+  const revenueChange = percentChange(
+    data.summary.revenue,
+    previous?.summary.revenue
+  )
+  const revenueStatus: HealthStatus =
+    data.summary.revenue <= 0
+      ? "critical"
+      : revenueChange < -10
+        ? "attention"
+        : "good"
+  const occupancyStatus: HealthStatus =
+    data.summary.occupancyRate >= 85
+      ? "good"
+      : data.summary.occupancyRate >= 65
+        ? "attention"
+        : "critical"
+  const collectionStatus: HealthStatus =
+    data.summary.collectionRate >= 90
+      ? "good"
+      : data.summary.collectionRate >= 75
+        ? "attention"
+        : "critical"
+  const satisfactionStatus: HealthStatus =
+    data.summary.complaints <= 2 && data.summary.noticeEngagement >= 70
+      ? "good"
+      : data.summary.complaints <= 5
+        ? "attention"
+        : "critical"
+  const riskStatus: HealthStatus =
+    data.summary.overdueAmount === 0
+      ? "good"
+      : data.summary.collectionRate >= 75
+        ? "attention"
+        : "critical"
+
+  return [
+    {
+      title: "Revenue Health",
+      status: revenueStatus,
+      reason:
+        revenueChange === 0
+          ? `${formatCurrency(data.summary.revenue)} collected with no material period-over-period change.`
+          : `${formatCurrency(data.summary.revenue)} collected, ${Math.abs(
+              revenueChange
+            )}% ${revenueChange >= 0 ? "above" : "below"} the previous period.`,
+    },
+    {
+      title: "Occupancy Health",
+      status: occupancyStatus,
+      reason: `${data.summary.occupancyRate}% average bed occupancy across the selected period.`,
+    },
+    {
+      title: "Collection Health",
+      status: collectionStatus,
+      reason: `${data.summary.collectionRate}% of billed fees collected; ${formatCurrency(
+        data.summary.pendingDues
+      )} remains outstanding.`,
+    },
+    {
+      title: "Resident Satisfaction",
+      status: satisfactionStatus,
+      reason: `${data.summary.complaints} complaints and ${data.summary.noticeEngagement}% notice engagement.`,
+    },
+    {
+      title: "Operational Risk",
+      status: riskStatus,
+      reason:
+        data.summary.overdueAmount > 0
+          ? `${formatCurrency(data.summary.overdueAmount)} is overdue and needs follow-up.`
+          : "No overdue balance was detected for this period.",
+    },
+  ]
+}
+
+function HealthBadge({ status }: { status: HealthStatus }) {
+  const label =
+    status === "good"
+      ? "Good"
+      : status === "attention"
+        ? "Needs Attention"
+        : "Critical"
+
+  return (
+    <Badge
+      variant={status === "critical" ? "destructive" : "secondary"}
+      className={cn(
+        status === "good" &&
+          "border-emerald-200 bg-emerald-50 text-emerald-700",
+        status === "attention" &&
+          "border-amber-200 bg-amber-50 text-amber-700"
+      )}
+    >
+      {status === "good" ? (
+        <ShieldCheck className="size-3" aria-hidden="true" />
+      ) : (
+        <AlertTriangle className="size-3" aria-hidden="true" />
+      )}
+      {label}
+    </Badge>
+  )
+}
+
+function MetricComparison({
+  current,
+  previous,
+  previousLabel,
+  favorable = "higher",
+}: {
+  current: number
+  previous?: number
+  previousLabel: string
+  favorable?: "higher" | "lower"
+}) {
+  if (previous === undefined) {
+    return <span className="text-muted-foreground">Comparison loading...</span>
+  }
+
+  const change = percentChange(current, previous)
+  const improved = favorable === "higher" ? change >= 0 : change <= 0
+  const Icon = change >= 0 ? TrendingUp : TrendingDown
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1",
+        improved ? "text-emerald-700" : "text-red-700"
+      )}
+    >
+      <Icon className="size-3.5" aria-hidden="true" />
+      {Math.abs(change)}% vs {previousLabel}
+    </span>
+  )
+}
+
+function PeriodBasis({ label }: { label: string }) {
+  return (
+    <p className="text-xs font-medium text-muted-foreground">
+      Based on: <span className="text-foreground">{label}</span>
+    </p>
+  )
+}
+
+function RefreshSkeleton() {
+  return (
+    <div
+      className="grid gap-3"
+      role="status"
+      aria-live="polite"
+      aria-label="Refreshing dashboard"
+    >
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        Refreshing dashboard...
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-20 animate-pulse rounded-lg border bg-muted/70"
+            aria-hidden="true"
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function refreshClass(active: boolean) {
+  return active
+    ? "rounded-xl ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-background"
+    : undefined
+}
+
+function percentChange(current: number, previous?: number) {
+  if (previous === undefined || (previous === 0 && current === 0)) {
+    return 0
+  }
+
+  if (previous === 0) {
+    return 100
+  }
+
+  return Number((((current - previous) / Math.abs(previous)) * 100).toFixed(1))
 }
 
 function TrendChart({
@@ -459,7 +956,11 @@ function TrendChart({
   lines,
 }: {
   data: OwnerAnalytics["trends"]
-  lines: Array<{ key: keyof OwnerAnalytics["trends"][number]; label: string; color: string }>
+  lines: Array<{
+    key: keyof OwnerAnalytics["trends"][number]
+    label: string
+    color: string
+  }>
 }) {
   const width = 720
   const height = 260
@@ -476,7 +977,12 @@ function TrendChart({
     height - padding - (value / maxValue) * (height - padding * 2)
 
   if (data.length === 0) {
-    return <EmptyState title="No trend data yet" message="Monthly analytics will appear after operational records exist." />
+    return (
+      <EmptyState
+        title="No trend data for selected period"
+        message="Monthly analytics will appear when operational records exist."
+      />
+    )
   }
 
   return (
@@ -487,10 +993,19 @@ function TrendChart({
         viewBox={`0 0 ${width} ${height}`}
         className="min-h-64 w-full min-w-[640px]"
       >
-        <line x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} stroke="#e5e7eb" />
+        <line
+          x1={padding}
+          x2={width - padding}
+          y1={height - padding}
+          y2={height - padding}
+          stroke="#e5e7eb"
+        />
         {lines.map((line) => {
           const points = data
-            .map((item, index) => `${xFor(index)},${yFor(Number(item[line.key] ?? 0))}`)
+            .map(
+              (item, index) =>
+                `${xFor(index)},${yFor(Number(item[line.key] ?? 0))}`
+            )
             .join(" ")
 
           return (
@@ -503,30 +1018,40 @@ function TrendChart({
                 strokeLinejoin="round"
                 points={points}
               />
-              {data.map((item, index) => {
-                const value = Number(item[line.key] ?? 0)
-                const x = xFor(index)
-                const y = yFor(value)
-
-                return (
-                  <g key={`${String(line.key)}-${item.month}`}>
-                    <circle cx={x} cy={y} r="5" fill={line.color} />
-                  </g>
-                )
-              })}
+              {data.map((item, index) => (
+                <circle
+                  key={`${String(line.key)}-${item.month}`}
+                  cx={xFor(index)}
+                  cy={yFor(Number(item[line.key] ?? 0))}
+                  r="5"
+                  fill={line.color}
+                />
+              ))}
             </g>
           )
         })}
         {data.map((item, index) => (
-          <text key={item.month} x={xFor(index)} y={height - 6} textAnchor="middle" className="fill-muted-foreground text-[10px]">
-            {item.month.slice(5)}
+          <text
+            key={item.month}
+            x={xFor(index)}
+            y={height - 6}
+            textAnchor="middle"
+            className="fill-muted-foreground text-[10px]"
+          >
+            {item.month}
           </text>
         ))}
       </svg>
       <div className="mt-3 flex flex-wrap gap-3">
         {lines.map((line) => (
-          <span key={String(line.key)} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="size-3 rounded-full" style={{ backgroundColor: line.color }} />
+          <span
+            key={String(line.key)}
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <span
+              className="size-3 rounded-full"
+              style={{ backgroundColor: line.color }}
+            />
             {line.label}
           </span>
         ))}
@@ -537,7 +1062,10 @@ function TrendChart({
             <p className="font-medium">{item.month}</p>
             <div className="mt-2 grid gap-1 text-muted-foreground">
               {lines.map((line) => (
-                <div key={String(line.key)} className="flex items-center justify-between gap-3">
+                <div
+                  key={String(line.key)}
+                  className="flex items-center justify-between gap-3"
+                >
                   <span>{line.label}</span>
                   <span className="font-medium text-foreground">
                     {formatCurrency(Number(item[line.key] ?? 0))}
@@ -561,7 +1089,8 @@ function DonutMetric({
   total: number
   label: string
 }) {
-  const percentage = total <= 0 ? 0 : Math.min(100, Math.round((value / total) * 100))
+  const percentage =
+    total <= 0 ? 0 : Math.min(100, Math.round((value / total) * 100))
 
   return (
     <div className="flex items-center gap-4">
@@ -613,18 +1142,34 @@ function BarList({
 }) {
   const maxValue = Math.max(1, ...data.map((item) => item.value))
 
+  if (data.length === 0) {
+    return (
+      <EmptyState
+        title="No outstanding dues"
+        message="No fee balances were found for the selected period."
+      />
+    )
+  }
+
   return (
     <div className="grid gap-3">
       {data.map((item) => (
         <div key={item.label} className="grid gap-1">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-medium">{item.label}</span>
-            <span className="text-muted-foreground">{formatValue(item.value)}</span>
+            <span className="text-muted-foreground">
+              {formatValue(item.value)}
+            </span>
           </div>
           <div className="h-2 rounded-full bg-muted">
             <div
               className="h-2 rounded-full bg-blue-600"
-              style={{ width: `${Math.max(4, (item.value / maxValue) * 100)}%` }}
+              style={{
+                width:
+                  item.value === 0
+                    ? "0%"
+                    : `${Math.max(4, (item.value / maxValue) * 100)}%`,
+              }}
             />
           </div>
           <p className="text-xs text-muted-foreground">{item.detail}</p>
@@ -632,16 +1177,4 @@ function BarList({
       ))}
     </div>
   )
-}
-
-function todayInput() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function monthsAgoInput(months: number) {
-  const date = new Date()
-  date.setUTCMonth(date.getUTCMonth() - months)
-  date.setUTCDate(1)
-
-  return date.toISOString().slice(0, 10)
 }

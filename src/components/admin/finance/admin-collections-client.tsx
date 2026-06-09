@@ -537,7 +537,7 @@ function CollectionLedgerDrawer({
       expiresInSeconds: 900,
     })
 
-    window.open(result.signedUrl, "_blank", "noopener,noreferrer")
+    window.open(result.downloadUrl, "_blank", "noopener,noreferrer")
   }
 
   return (

@@ -356,7 +356,7 @@ export function ResidentPaymentsClient() {
         invoiceId,
         expiresInSeconds: 900,
       })
-      window.open(result.signedUrl, "_blank", "noopener,noreferrer")
+      window.open(result.downloadUrl, "_blank", "noopener,noreferrer")
     } catch (error) {
       toast.error(
         error instanceof FrontendApiError

@@ -30,6 +30,7 @@ export type PermissionKey =
   | "admin.dashboard.view"
   | "admissions.manage"
   | "analytics.view"
+  | "automation.manage"
   | "cms.manage"
   | "finance.manage"
   | "iam.manage"
@@ -46,6 +47,7 @@ export const ROLE_PERMISSIONS = {
     "admin.dashboard.view",
     "admissions.manage",
     "analytics.view",
+    "automation.manage",
     "cms.manage",
     "finance.manage",
     "iam.manage",
@@ -61,6 +63,7 @@ export const ROLE_PERMISSIONS = {
     "admin.dashboard.view",
     "admissions.manage",
     "analytics.view",
+    "automation.manage",
     "cms.manage",
     "finance.manage",
     "iam.manage",
@@ -76,6 +79,7 @@ export const ROLE_PERMISSIONS = {
     "admin.dashboard.view",
     "admissions.manage",
     "analytics.view",
+    "automation.manage",
     "cms.manage",
     "finance.manage",
     "iam.manage",

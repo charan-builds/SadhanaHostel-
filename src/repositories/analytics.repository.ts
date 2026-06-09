@@ -25,6 +25,16 @@ export type OwnerAllocation = Pick<
   "room_id" | "resident_id" | "allocated_from" | "allocated_to" | "status"
 >
 
+export type OwnerSupportRequest = Pick<
+  Tables<"support_requests">,
+  "id" | "category" | "priority" | "status" | "created_at" | "resolved_at"
+>
+
+export type OwnerNoticeNotification = Pick<
+  Tables<"notifications">,
+  "id" | "notice_id" | "status" | "created_at" | "delivered_at" | "read_at"
+>
+
 export type OwnerResident = ResidentLifecycleRow & {
   id: string
   created_at: string
@@ -689,6 +699,62 @@ export class AnalyticsRepository {
     }
 
     return (data ?? []) as OwnerFeeRecord[]
+  }
+
+  async listOwnerSupportRequests(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("support_requests")
+      .select("id,category,priority,status,created_at,resolved_at")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner complaint analytics.")
+    }
+
+    return (data ?? []) as OwnerSupportRequest[]
+  }
+
+  async listOwnerNoticeNotifications(
+    organizationId: string,
+    fromDate: string,
+    toDate: string,
+    hostelId?: string
+  ) {
+    let query = this.db
+      .from("notifications")
+      .select("id,notice_id,status,created_at,delivered_at,read_at")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .gte("created_at", fromDate)
+      .lte("created_at", toDate)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load owner notice engagement.")
+    }
+
+    return (data ?? []).filter(
+      (notification) => notification.notice_id
+    ) as OwnerNoticeNotification[]
   }
 
   private analyticsDb() {

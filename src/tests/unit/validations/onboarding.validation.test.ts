@@ -82,6 +82,18 @@ describe("onboarding validation schemas", () => {
     ).resolves.toHaveProperty("ResidentOnboardingClient")
   })
 
+  it("renders the full resident onboarding flow on the protected onboarding route", async () => {
+    const [{ default: ResidentOnboardingPage }, { ResidentOnboardingClient }] =
+      await Promise.all([
+        import("@/app/(resident)/resident/onboarding/page"),
+        import("@/components/resident/onboarding/resident-onboarding-client"),
+      ])
+
+    expect(ResidentOnboardingPage()).toMatchObject({
+      type: ResidentOnboardingClient,
+    })
+  })
+
   it("requires residents to accept hostel rules before submitting onboarding", () => {
     expect(() =>
       onboardingSubmitSchema.parse({

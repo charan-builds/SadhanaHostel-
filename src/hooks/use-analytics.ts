@@ -35,6 +35,7 @@ export function useOwnerAnalytics(params: OwnerAnalyticsInput) {
     queryKey: queryKeys.analytics.owner(params, params),
     queryFn: () => analyticsSdk.owner(params),
     enabled: Boolean(params.organizationId),
+    placeholderData: (previousData) => previousData,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",

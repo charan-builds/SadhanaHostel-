@@ -89,11 +89,96 @@ describe("ResidentOnboardingService", () => {
     )
   })
 
-  it("marks self-completed onboarding as trigger-compatible verification metadata", async () => {
-    const now = "2026-06-04T00:00:00.000Z"
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(now))
+  it("activates a completed profile even when the resident row is already active", async () => {
+    const resident: ResidentWithOnboarding = {
+      ...residentFixture({
+        date_of_birth: "2000-01-01",
+        permanent_address: "Sadhana Boys Hostel, Pulivendula, Andhra Pradesh",
+        status: "active",
+      }),
+      onboarding_status: "profile_incomplete",
+    }
+    const completedResident: ResidentWithOnboarding = {
+      ...resident,
+      onboarding_status: "verified",
+    }
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(residentAuthContext()),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn().mockResolvedValue(resident),
+    }
+    const completeOnboarding = vi.fn().mockResolvedValue(completedResident)
+    const service = new ResidentOnboardingService({} as never)
+    const serviceHarness = service as unknown as {
+      authService: typeof authService
+      residentsRepository: Pick<ResidentsRepository, "getByUserId">
+      completeOnboardingWithoutAdminReview: typeof completeOnboarding
+    }
 
+    serviceHarness.authService = authService
+    serviceHarness.residentsRepository = residentsRepository as never
+    serviceHarness.completeOnboardingWithoutAdminReview = completeOnboarding
+
+    await expect(
+      service.submitForVerification({
+        organizationId: TEST_ORGANIZATION_ID,
+        rulesAccepted: true,
+      })
+    ).resolves.toMatchObject({
+      resident: completedResident,
+      requirements: {
+        canAccessResidentOperations: true,
+      },
+    })
+
+    expect(completeOnboarding).toHaveBeenCalledOnce()
+  })
+
+  it("does not let self-onboarding reactivate an inactive resident", async () => {
+    const resident: ResidentWithOnboarding = {
+      ...residentFixture({
+        date_of_birth: "2000-01-01",
+        permanent_address: "Sadhana Boys Hostel, Pulivendula, Andhra Pradesh",
+        status: "active",
+        is_active: false,
+      }),
+      onboarding_status: "profile_incomplete",
+    }
+    const authService = {
+      getCurrentContext: vi.fn().mockResolvedValue(residentAuthContext()),
+      requireOrganizationAccess: vi.fn(),
+    }
+    const residentsRepository = {
+      getByUserId: vi.fn().mockResolvedValue(resident),
+    }
+    const completeOnboarding = vi.fn()
+    const service = new ResidentOnboardingService({} as never)
+    const serviceHarness = service as unknown as {
+      authService: typeof authService
+      residentsRepository: Pick<ResidentsRepository, "getByUserId">
+      completeOnboardingWithoutAdminReview: typeof completeOnboarding
+    }
+
+    serviceHarness.authService = authService
+    serviceHarness.residentsRepository = residentsRepository as never
+    serviceHarness.completeOnboardingWithoutAdminReview = completeOnboarding
+
+    await expect(
+      service.submitForVerification({
+        organizationId: TEST_ORGANIZATION_ID,
+        rulesAccepted: true,
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message:
+        "This resident account cannot be activated from self-onboarding. Contact hostel administration.",
+    })
+    expect(completeOnboarding).not.toHaveBeenCalled()
+  })
+
+  it("completes self-onboarding through the guarded atomic repository transition", async () => {
     const resident: ResidentWithOnboarding = {
       ...residentFixture({
         date_of_birth: "2000-01-01",
@@ -107,16 +192,13 @@ describe("ResidentOnboardingService", () => {
         },
       },
     }
-    const updateExtended = vi
-      .spyOn(ResidentsRepository.prototype, "updateExtended")
+    const completeSelfOnboarding = vi
+      .spyOn(ResidentsRepository.prototype, "completeSelfOnboarding")
       .mockResolvedValue({
         ...resident,
         status: "active",
         onboarding_status: "verified",
       })
-    const getById = vi
-      .spyOn(ResidentsRepository.prototype, "getById")
-      .mockResolvedValue(null)
     const service = new ResidentOnboardingService({} as never)
     const serviceHarness = service as unknown as {
       completeOnboardingWithoutAdminReview(
@@ -132,26 +214,13 @@ describe("ResidentOnboardingService", () => {
       RESIDENT_USER_ID
     )
 
-    expect(updateExtended).toHaveBeenCalledWith(
-      resident.id,
-      TEST_ORGANIZATION_ID,
-      expect.objectContaining({
-        onboarding_metadata: expect.objectContaining({
-          activation: {
-            activated_at: "2026-06-03T00:00:00.000Z",
-          },
-          self_completion: true,
-          legacy_verification: true,
-          verificationMode: "resident_self_completion",
-          verifiedWithoutAdminReviewAt: now,
-        }),
-        onboarding_status: "verified",
-        status: "active",
-      })
-    )
+    expect(completeSelfOnboarding).toHaveBeenCalledWith({
+      residentId: resident.id,
+      organizationId: TEST_ORGANIZATION_ID,
+      actorUserId: RESIDENT_USER_ID,
+      rulesVersion: HOSTEL_RULES_VERSION,
+    })
 
-    updateExtended.mockRestore()
-    getById.mockRestore()
-    vi.useRealTimers()
+    completeSelfOnboarding.mockRestore()
   })
 })

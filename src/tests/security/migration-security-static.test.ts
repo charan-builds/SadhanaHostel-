@@ -79,6 +79,17 @@ describe("static migration security checks", () => {
     expect(collectionCenter).toMatch(/collection_followups_assigned_to_idx/i)
   })
 
+  it("keeps automation settings restricted to the dedicated admin capability", () => {
+    const automation = migration(
+      "20260609001000_automation_permission_hardening.sql"
+    )
+
+    expect(automation).toMatch(/'automation\.manage'/i)
+    expect(automation).toMatch(
+      /has_permission_in_organization\(\s*organization_id,\s*'automation\.manage',\s*hostel_id\s*\)/i
+    )
+  })
+
   it("keeps manual UPI duplicate protections at database level", () => {
     const manualUpi = migration("20260522001000_manual_upi_payment_operations.sql")
 
@@ -124,6 +135,32 @@ describe("static migration security checks", () => {
     )
     expect(activation).toMatch(
       /grant\s+execute\s+on\s+function\s+public\.activate_resident_invite_atomic\(uuid,\s*text,\s*uuid\)\s+to\s+service_role/i
+    )
+  })
+
+  it("keeps resident self-onboarding activation atomic and service-role only", () => {
+    const activation = migration(
+      "20260609002000_resident_self_onboarding_activation.sql"
+    )
+
+    expect(activation).toMatch(
+      /create\s+or\s+replace\s+function\s+public\.complete_resident_self_onboarding_atomic/i
+    )
+    expect(activation).toMatch(
+      /perform\s+public\.assert_service_role_rpc\('complete_resident_self_onboarding_atomic'\)/i
+    )
+    expect(activation).toMatch(/from\s+public\.residents[\s\S]*for\s+update/i)
+    expect(activation).toMatch(/v_resident\.user_id\s*<>\s*p_actor_user_id/i)
+    expect(activation).toMatch(/resident\.portal\.access/i)
+    expect(activation).toMatch(/v_resident\.is_active\s+is\s+not\s+true/i)
+    expect(activation).toMatch(/v_resident\.status\s+not\s+in\s+\('draft',\s*'active'\)/i)
+    expect(activation).toMatch(/onboarding_status\s*=\s*'verified'/i)
+    expect(activation).toMatch(/status\s*=\s*'active'/i)
+    expect(activation).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.complete_resident_self_onboarding_atomic\([\s\S]*from\s+public,\s*anon,\s*authenticated/i
+    )
+    expect(activation).toMatch(
+      /grant\s+execute\s+on\s+function\s+public\.complete_resident_self_onboarding_atomic\([\s\S]*to\s+service_role/i
     )
   })
 

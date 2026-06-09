@@ -106,10 +106,13 @@ describe("admin finance dashboard architecture", () => {
     expect(source).not.toContain("JSON.parse(values")
   })
 
-  it("returns plain invoice signed URLs from storage downloads", () => {
-    const source = readProjectFile("src/services/invoices/invoice-storage.service.ts")
+  it("opens invoice downloads through authenticated app endpoints", () => {
+    const sdkSource = readProjectFile("src/sdk/invoices.sdk.ts")
+    const routeSource = readProjectFile("src/app/api/v1/invoices/[id]/download/route.ts")
 
-    expect(source).toContain("return data.signedUrl")
+    expect(sdkSource).toContain("buildApiUrl(`/api/v1/invoices/${invoiceId}/download`, query)")
+    expect(routeSource).toContain("downloadInvoicePdf")
+    expect(routeSource).toContain("\"content-disposition\"")
   })
 })
 

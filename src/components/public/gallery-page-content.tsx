@@ -109,7 +109,7 @@ export function GalleryPageContent({
               Gallery
             </p>
             <h1 className="mt-4 max-w-4xl text-4xl font-semibold text-balance sm:text-6xl">
-              See the hostel spaces before residents arrive.
+              Hostel spaces and published media.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-8 text-slate-100 sm:text-lg">
               Browse exterior views, resident rooms, food, facilities, and common spaces from the

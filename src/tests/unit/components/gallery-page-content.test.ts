@@ -32,7 +32,7 @@ describe("GalleryPageContent", () => {
       React.createElement(GalleryPageContent, { galleryItems })
     )
 
-    expect(html).toContain("See the hostel spaces before residents arrive.")
+    expect(html).toContain("Hostel spaces and published media.")
     expect(html).toContain("All photos")
     expect(html).toContain("Student rooms")
     expect(html).toContain("Employee rooms")

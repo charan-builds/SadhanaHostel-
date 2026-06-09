@@ -39,7 +39,7 @@ export function RoomsPageContent({
           <div>
           <p className="text-sm font-medium text-blue-700">Rooms and pricing</p>
           <h1 className="mt-3 max-w-4xl text-4xl font-semibold text-slate-950 text-balance sm:text-5xl">
-            Boys hostel rooms in Pulivendula for students and employees.
+            Clear room plans for students and employees in Pulivendula.
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
             Choose a practical monthly stay at {hostelConfig.name} near{" "}

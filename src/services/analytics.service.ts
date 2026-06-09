@@ -176,9 +176,10 @@ export class AnalyticsService {
   async exportOwnerDashboard(input: unknown) {
     const values = ownerAnalyticsExportSchema.parse(input)
     const dashboard = await this.getOwnerDashboard(values)
-    const date = new Date().toISOString().slice(0, 10)
+    const fromDate = dashboard.range.fromDate.slice(0, 10)
+    const toDate = dashboard.range.toDate.slice(0, 10)
     const scope = values.hostelId ? `-${values.hostelId.slice(0, 8)}` : ""
-    const fileName = `owner-dashboard${scope}-${date}.${values.format}`
+    const fileName = `owner-dashboard${scope}-${fromDate}-to-${toDate}.${values.format}`
 
     if (values.format === "pdf") {
       return {
@@ -391,23 +392,53 @@ export class AnalyticsService {
     hostelId?: string
   ) {
     const months = buildMonthBuckets(fromDate, toDate)
-    const now = new Date()
+    const periodEnd = new Date(toDate)
     const [
       residents,
       reservations,
       payments,
       feeRecords,
+      rooms,
+      allocations,
+      supportRequests,
+      noticeNotifications,
     ] = await Promise.all([
       this.analyticsRepository.listOwnerResidents(organizationId, hostelId),
       this.analyticsRepository.listOwnerReservations(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listPaymentsInRange(organizationId, fromDate, toDate, hostelId),
       this.analyticsRepository.listOwnerFeeRecords(organizationId, fromDate, toDate, hostelId),
+      this.analyticsRepository.listOwnerRooms(organizationId, hostelId),
+      this.analyticsRepository.listRoomAllocationsInRange(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listOwnerSupportRequests(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
+      this.analyticsRepository.listOwnerNoticeNotifications(
+        organizationId,
+        fromDate,
+        toDate,
+        hostelId
+      ),
     ])
 
-    const operationalResidents = residents.filter(isResidentEligibleForAnalytics)
+    const operationalResidents = residents.filter((resident) =>
+      wasResidentOperationalAtPeriodEnd(resident, toDate)
+    )
+    const residentsInPeriod = residents.filter((resident) =>
+      isDateInRange(resident.joined_on ?? resident.created_at, fromDate, toDate)
+    )
     const billingEligibleResidentIds = new Set(
       residents
-        .filter(isResidentEligibleForBilling)
+        .filter((resident) =>
+          wasResidentBillableInPeriod(resident, fromDate, toDate)
+        )
         .map((resident) => resident.id)
         .filter((residentId): residentId is string => Boolean(residentId))
     )
@@ -430,16 +461,18 @@ export class AnalyticsService {
         .map((record) => record.resident_id)
     )
     const overdueRecords = pendingFeeRecords.filter(
-      (record) => record.due_date < now.toISOString().slice(0, 10)
+      (record) => record.due_date < toDate.slice(0, 10)
     )
-    const completedOnboarding = operationalResidents.length
+    const completedOnboarding = residentsInPeriod.filter(
+      (resident) => resident.onboarding_status === "verified"
+    ).length
     const checkedOutInRange = residents.filter((resident) =>
       isDateInRange(resident.checkout_on, fromDate, toDate)
     ).length
     const joinedResidents = operationalResidents.filter((resident) => resident.joined_on)
     const monthly = months.map((month) =>
       buildMonthlyOwnerBucket(month, {
-        residents: operationalResidents,
+        residents,
         reservations,
         payments,
         feeRecords: billingFeeRecords,
@@ -464,6 +497,12 @@ export class AnalyticsService {
     const pendingDues = hostelModules.startupFinanceZero
       ? 0
       : sum(pendingFeeRecords.map((record) => record.balance_amount))
+    const paidAmount = hostelModules.startupFinanceZero
+      ? 0
+      : sum(billingFeeRecords.map((record) => record.paid_amount))
+    const overdueAmount = hostelModules.startupFinanceZero
+      ? 0
+      : sum(overdueRecords.map((record) => record.balance_amount))
     const paymentConversion =
       hostelModules.startupFinanceZero || payments.length === 0
         ? 0
@@ -472,16 +511,33 @@ export class AnalyticsService {
       joinedResidents.map((resident) =>
         daysBetween(
           resident.joined_on,
-          resident.checkout_on ?? now.toISOString().slice(0, 10)
+          resident.checkout_on ?? toDate.slice(0, 10)
         )
       )
     )
     const revenueForecast = buildOwnerRevenueForecast(financeMonthly)
+    const occupancyRate = calculateAverageOccupancy(
+      rooms,
+      allocations,
+      fromDate,
+      toDate
+    )
+    const noticeReadCount = noticeNotifications.filter(
+      (notification) =>
+        Boolean(notification.read_at) &&
+        (notification.read_at ?? "") <= toDate
+    ).length
+    const noticeEngagement = percent(noticeReadCount, noticeNotifications.length)
+    const admissions = residentsInPeriod.length
+    const complaints = supportRequests.length
     const insights = buildOwnerInsights({
       pendingDues,
       overdueRecords: hostelModules.startupFinanceZero ? 0 : overdueRecords.length,
       unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
-      onboardingIncomplete: Math.max(0, residents.length - completedOnboarding),
+      onboardingIncomplete: Math.max(
+        0,
+        residentsInPeriod.length - completedOnboarding
+      ),
       paymentConversion,
     })
 
@@ -491,6 +547,12 @@ export class AnalyticsService {
         revenue,
         billed,
         pendingDues,
+        overdueAmount,
+        collectionRate: percent(paidAmount, billed),
+        occupancyRate,
+        admissions,
+        complaints,
+        noticeEngagement,
         unpaidResidents: hostelModules.startupFinanceZero ? 0 : unpaidResidentIds.size,
         totalResidents: residents.length,
         activeResidents: operationalResidents.length,
@@ -501,19 +563,29 @@ export class AnalyticsService {
         averageStayDurationDays,
       },
       onboarding: {
-        totalResidents: residents.length,
+        totalResidents: residentsInPeriod.length,
         completed: completedOnboarding,
-        completionRate: percent(completedOnboarding, residents.length),
-        pending: countBy(residents, (resident) =>
+        completionRate: percent(completedOnboarding, residentsInPeriod.length),
+        pending: countBy(residentsInPeriod, (resident) =>
           String(resident.onboarding_status ?? "unknown")
         ),
       },
-      duesAging: hostelModules.startupFinanceZero ? [] : buildDuesAging(pendingFeeRecords, now),
+      duesAging: hostelModules.startupFinanceZero
+        ? []
+        : buildDuesAging(pendingFeeRecords, periodEnd),
       trends: financeMonthly,
       forecasts: {
         revenue: revenueForecast,
       },
       insights,
+      hasData:
+        operationalResidents.length > 0 ||
+        admissions > 0 ||
+        reservations.length > 0 ||
+        payments.length > 0 ||
+        billingFeeRecords.length > 0 ||
+        supportRequests.length > 0 ||
+        noticeNotifications.length > 0,
       generatedAt: new Date().toISOString(),
     }
   }
@@ -749,6 +821,8 @@ function buildOwnerAnalyticsCsv(
 ) {
   const rows: string[][] = [
     ["Metric", "Value"],
+    ["Period From", dashboard.range.fromDate.slice(0, 10)],
+    ["Period To", dashboard.range.toDate.slice(0, 10)],
     ["Generated At", dashboard.generatedAt],
     ["Total Residents", String(dashboard.summary.totalResidents)],
     ["Active Residents", String(dashboard.summary.activeResidents)],
@@ -756,6 +830,12 @@ function buildOwnerAnalyticsCsv(
     ["Revenue", String(dashboard.summary.revenue)],
     ["Billed", String(dashboard.summary.billed)],
     ["Pending Dues", String(dashboard.summary.pendingDues)],
+    ["Overdue Amount", String(dashboard.summary.overdueAmount)],
+    ["Collection Rate", `${dashboard.summary.collectionRate}%`],
+    ["Average Occupancy", `${dashboard.summary.occupancyRate}%`],
+    ["Admissions", String(dashboard.summary.admissions)],
+    ["Complaints", String(dashboard.summary.complaints)],
+    ["Notice Engagement", `${dashboard.summary.noticeEngagement}%`],
     ["Unpaid Residents", String(dashboard.summary.unpaidResidents)],
     ["Payment Conversion", `${dashboard.summary.paymentConversion}%`],
     ["Resident Churn", `${dashboard.summary.residentChurn}%`],
@@ -800,6 +880,11 @@ async function buildOwnerAnalyticsPdf(
   })
   y -= 28
   page.drawText(`Generated ${dashboard.generatedAt}`, { x: 48, y, size: 9, font })
+  y -= 14
+  page.drawText(
+    `Period ${dashboard.range.fromDate.slice(0, 10)} to ${dashboard.range.toDate.slice(0, 10)}`,
+    { x: 48, y, size: 9, font }
+  )
   y -= 32
 
   const summary = [
@@ -809,6 +894,12 @@ async function buildOwnerAnalyticsPdf(
     ["Revenue", `INR ${dashboard.summary.revenue}`],
     ["Billed", `INR ${dashboard.summary.billed}`],
     ["Pending Dues", `INR ${dashboard.summary.pendingDues}`],
+    ["Overdue Amount", `INR ${dashboard.summary.overdueAmount}`],
+    ["Collection Rate", `${dashboard.summary.collectionRate}%`],
+    ["Average Occupancy", `${dashboard.summary.occupancyRate}%`],
+    ["Admissions", String(dashboard.summary.admissions)],
+    ["Complaints", String(dashboard.summary.complaints)],
+    ["Notice Engagement", `${dashboard.summary.noticeEngagement}%`],
     ["Unpaid Residents", String(dashboard.summary.unpaidResidents)],
     ["Payment Conversion", `${dashboard.summary.paymentConversion}%`],
   ]
@@ -904,6 +995,106 @@ function isDateInRange(value: string | null, fromDate: string, toDate: string) {
   }
 
   return value >= fromDate.slice(0, 10) && value <= toDate.slice(0, 10)
+}
+
+function wasResidentOperationalAtPeriodEnd(
+  resident: {
+    created_at: string
+    joined_on: string | null
+    checkout_on: string | null
+    onboarding_status: string | null
+    user_id: string | null
+  },
+  toDate: string
+) {
+  const periodEnd = toDate.slice(0, 10)
+  const enteredOn = (resident.joined_on ?? resident.created_at).slice(0, 10)
+
+  return (
+    enteredOn <= periodEnd &&
+    (!resident.checkout_on || resident.checkout_on > periodEnd) &&
+    resident.onboarding_status === "verified" &&
+    Boolean(resident.user_id)
+  )
+}
+
+function wasResidentBillableInPeriod(
+  resident: {
+    created_at: string
+    joined_on: string | null
+    checkout_on: string | null
+    onboarding_status: string | null
+    user_id: string | null
+  },
+  fromDate: string,
+  toDate: string
+) {
+  const periodStart = fromDate.slice(0, 10)
+  const periodEnd = toDate.slice(0, 10)
+  const enteredOn = (resident.joined_on ?? resident.created_at).slice(0, 10)
+
+  return (
+    enteredOn <= periodEnd &&
+    (!resident.checkout_on || resident.checkout_on >= periodStart) &&
+    resident.onboarding_status !== "rejected" &&
+    resident.onboarding_status !== "suspended" &&
+    Boolean(resident.user_id)
+  )
+}
+
+function calculateAverageOccupancy(
+  rooms: Array<{ capacity: number; status: string }>,
+  allocations: Array<{
+    allocated_from: string
+    allocated_to: string | null
+    status: string
+  }>,
+  fromDate: string,
+  toDate: string
+) {
+  const capacity = sum(
+    rooms
+      .filter((room) => room.status === "active")
+      .map((room) => room.capacity)
+  )
+
+  if (capacity <= 0) {
+    return 0
+  }
+
+  const rangeStart = utcDay(fromDate)
+  const rangeEnd = utcDay(toDate)
+  const rangeDays = inclusiveDays(rangeStart, rangeEnd)
+  const occupiedBedDays = allocations
+    .filter((allocation) => allocation.status !== "cancelled")
+    .reduce((total, allocation) => {
+      const allocationStart = Math.max(
+        rangeStart,
+        utcDay(allocation.allocated_from)
+      )
+      const allocationEnd = Math.min(
+        rangeEnd,
+        allocation.allocated_to ? utcDay(allocation.allocated_to) : rangeEnd
+      )
+
+      return total + inclusiveDays(allocationStart, allocationEnd)
+    }, 0)
+
+  return Math.min(100, percent(occupiedBedDays, capacity * rangeDays))
+}
+
+function utcDay(value: string) {
+  const date = new Date(value)
+
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+}
+
+function inclusiveDays(from: number, to: number) {
+  if (to < from) {
+    return 0
+  }
+
+  return Math.floor((to - from) / 86_400_000) + 1
 }
 
 function csvEscape(value: unknown) {

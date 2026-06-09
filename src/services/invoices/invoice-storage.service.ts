@@ -61,6 +61,32 @@ export class InvoiceStorageService {
     return data.signedUrl
   }
 
+  async downloadInvoicePdf(storagePath: string) {
+    const { data, error } = await this.db.storage
+      .from(INVOICE_BUCKET)
+      .download(storagePath)
+
+    if (error) {
+      throw new RepositoryError(error.message, "INVOICE_STORAGE_DOWNLOAD_FAILED", error)
+    }
+
+    if (!data) {
+      throw new RepositoryError(
+        "Invoice PDF could not be downloaded.",
+        "INVOICE_STORAGE_DOWNLOAD_FAILED",
+        data
+      )
+    }
+
+    const bytes = new Uint8Array(await data.arrayBuffer())
+
+    return {
+      bytes,
+      contentType: "application/pdf" as const,
+      fileSizeBytes: bytes.byteLength,
+    }
+  }
+
   get bucketName() {
     return INVOICE_BUCKET
   }

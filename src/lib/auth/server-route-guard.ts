@@ -91,10 +91,13 @@ export function getAdminRouteRequiredPermission(requestedPath: string): Permissi
 
   if (
     pathname.startsWith("/admin/settings") ||
-    pathname.startsWith("/admin/operations/automation") ||
     pathname.startsWith("/admin/launch-readiness")
   ) {
     return "settings.manage"
+  }
+
+  if (pathname.startsWith("/admin/operations/automation")) {
+    return "automation.manage"
   }
 
   if (

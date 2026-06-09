@@ -23,6 +23,7 @@ import { assertFound, AuthService } from "../auth.service"
 import {
   getResidentOnboardingRequirements,
   hasAcceptedCurrentHostelRules,
+  isResidentEligibleForSelfOnboarding,
   isResidentOperationallyVerified,
 } from "./resident-onboarding.policy"
 
@@ -152,6 +153,12 @@ export class ResidentOnboardingService {
     )
     const requirements = getResidentOnboardingRequirements(residentWithRulesAcceptance)
 
+    if (!isResidentEligibleForSelfOnboarding(residentWithRulesAcceptance)) {
+      throw conflict(
+        "This resident account cannot be activated from self-onboarding. Contact hostel administration."
+      )
+    }
+
     if (!requirements.canSubmitForVerification) {
       throw conflict("Complete all required profile and hostel rules items first.", {
         missing: requirements.missing,
@@ -192,37 +199,13 @@ export class ResidentOnboardingService {
   ) {
     const adminDb = createSupabaseAdminClient()
     const adminResidentsRepository = new ResidentsRepository(adminDb)
-    const now = new Date().toISOString()
-    const onboardingMetadata = jsonObjectOrEmpty(resident.onboarding_metadata)
-    let updated = await adminResidentsRepository.updateExtended(
-      resident.id,
+
+    return adminResidentsRepository.completeSelfOnboarding({
+      residentId: resident.id,
       organizationId,
-      {
-        metadata: resident.metadata as Json,
-        onboarding_metadata: {
-          ...onboardingMetadata,
-          self_completion: true,
-          legacy_verification: true,
-          verificationMode: "resident_self_completion",
-          verifiedWithoutAdminReviewAt: now,
-        },
-        onboarding_status: "verified",
-        onboarding_rejection_reason: null,
-        onboarding_completed_at: resident.onboarding_completed_at ?? now,
-        onboarding_verified_at: now,
-        onboarding_verified_by: actorUserId,
-        status: "active",
-        updated_by: actorUserId,
-      }
-    )
-
-    updated =
-      ((await adminResidentsRepository.getById(
-        resident.id,
-        organizationId
-      )) as ResidentWithOnboarding | null) ?? updated
-
-    return updated
+      actorUserId,
+      rulesVersion: HOSTEL_RULES_VERSION,
+    })
   }
 
   async listVerificationQueue(input: unknown) {

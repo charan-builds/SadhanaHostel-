@@ -41,4 +41,16 @@ describe("canonical role capability matrix", () => {
     expect(anyRoleHasPermission(["resident", "finance"], "payments.verify")).toBe(true)
     expect(anyRoleHasPermission(["resident", "staff"], "payments.verify")).toBe(false)
   })
+
+  it("limits automation management to tenant administrators", () => {
+    expect(rolesForPermission("automation.manage")).toEqual([
+      "super_admin",
+      "owner",
+      "admin",
+    ])
+    expect(roleHasPermission("owner", "automation.manage")).toBe(true)
+    expect(roleHasPermission("admin", "automation.manage")).toBe(true)
+    expect(roleHasPermission("finance", "automation.manage")).toBe(false)
+    expect(roleHasPermission("warden", "automation.manage")).toBe(false)
+  })
 })

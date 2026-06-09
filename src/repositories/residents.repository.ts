@@ -482,40 +482,21 @@ export class ResidentsRepository {
     return (data ?? []) as ResidentWithOnboarding[]
   }
 
-  async activateCompletedProfile(input: {
+  async completeSelfOnboarding(input: {
     residentId: string
     organizationId: string
     actorUserId: string
-    metadata?: Record<string, unknown>
-    onboardingMetadata?: Record<string, unknown>
+    rulesVersion: string
   }) {
-    const now = new Date().toISOString()
-    const { data, error } = await this.residentsDb()
-      .from("residents")
-      .update({
-        status: "active",
-        onboarding_status: "verified",
-        onboarding_rejection_reason: null,
-        onboarding_completed_at: now,
-        onboarding_verified_at: now,
-        onboarding_verified_by: input.actorUserId,
-        onboarding_metadata: {
-          ...input.onboardingMetadata,
-          legacy_verification: true,
-          completed_from_resident_profile: true,
-        },
-        metadata: {
-          ...input.metadata,
-          profile_completion_required: false,
-          resident_profile_completed_at: now,
-        },
-        updated_by: input.actorUserId,
-      })
-      .eq("id", input.residentId)
-      .eq("organization_id", input.organizationId)
-      .is("deleted_at", null)
-      .select("*")
-      .single()
+    const { data, error } = await this.residentsDb().rpc(
+      "complete_resident_self_onboarding_atomic",
+      {
+        p_resident_id: input.residentId,
+        p_organization_id: input.organizationId,
+        p_actor_user_id: input.actorUserId,
+        p_rules_version: input.rulesVersion,
+      }
+    )
 
     if (error) {
       throwRepositoryError(error, "Unable to activate completed resident profile.")

@@ -26,6 +26,7 @@ import { scanConsistency } from "./consistency.service"
 export class AutomationService {
   private readonly authService: AuthService
   private readonly repository: OperationsRepository
+  private readonly adminRepository: OperationsRepository
 
   constructor(
     private readonly db: AppSupabaseClient,
@@ -33,6 +34,7 @@ export class AutomationService {
   ) {
     this.authService = new AuthService(db)
     this.repository = new OperationsRepository(db)
+    this.adminRepository = new OperationsRepository(adminDb)
   }
 
   static async create() {
@@ -43,7 +45,7 @@ export class AutomationService {
 
   async getDashboard(input: unknown): Promise<AutomationDashboard> {
     const values = automationDashboardQuerySchema.parse(input)
-    const context = await this.authService.requirePermission("settings.manage")
+    const context = await this.authService.requirePermission("automation.manage")
     const organizationId = values.organizationId ?? context.organizationId
     const hostelId = values.hostelId ?? context.hostelIds[0] ?? null
 
@@ -74,13 +76,13 @@ export class AutomationService {
     this.authService.requireHostelAccess(context, organizationId, hostelId)
 
     const [recentRuns, consistency, settings] = await Promise.all([
-      this.repository.listRecentJobEvents(organizationId, 25),
-      scanConsistency(this.repository, {
+      this.adminRepository.listRecentJobEvents(organizationId, 25),
+      scanConsistency(this.adminRepository, {
         organizationId,
         hostelId,
         actorUserId: context.authUser.id,
       }),
-      this.repository.listAutomationSettings(organizationId, hostelId),
+      this.adminRepository.listAutomationSettings(organizationId, hostelId),
     ])
 
     return {
@@ -118,7 +120,7 @@ export class AutomationService {
       })
     }
 
-    const context = await this.authService.requirePermission("settings.manage")
+    const context = await this.authService.requirePermission("automation.manage")
 
     return this.runWithAuthorizedContext(values, context)
   }
@@ -211,7 +213,7 @@ export class AutomationService {
       })
     }
 
-    const context = await this.authService.requirePermission("settings.manage")
+    const context = await this.authService.requirePermission("automation.manage")
 
     this.authService.requireHostelAccess(context, values.organizationId, values.hostelId)
 

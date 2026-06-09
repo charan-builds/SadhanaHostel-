@@ -32,4 +32,10 @@ describe("admin server route permission mapping", () => {
       "residents.manage"
     )
   })
+
+  it("uses the dedicated owner and admin automation capability", () => {
+    expect(
+      getAdminRouteRequiredPermission("/admin/operations/automation")
+    ).toBe("automation.manage")
+  })
 })

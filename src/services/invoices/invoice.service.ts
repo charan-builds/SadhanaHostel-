@@ -66,6 +66,15 @@ export type MissingInvoicePdfRepairResult = {
   }>
 }
 
+export type DownloadableInvoicePdf = {
+  invoiceId: string
+  invoiceNumber: string
+  storagePath: string
+  fileName: string
+  contentType: "application/pdf"
+  bytes: Uint8Array
+}
+
 export class InvoiceFoundationService {
   prepareInvoiceDraft(input: PrepareInvoiceDraftInput): TablesInsert<"invoices"> {
     const invoiceNumber = createInvoiceNumber({
@@ -412,38 +421,29 @@ export class InvoicesService {
     }
   }
 
+  async downloadInvoicePdf(input: unknown): Promise<DownloadableInvoicePdf> {
+    const values = invoiceDownloadSchema.parse(input)
+    const context = await this.authService.getCurrentContext()
+    const invoice = await this.authorizeInvoiceDownload(values, context)
+    const pdf = await this.prepareInvoicePdfForDownload(invoice, context.authUser.id)
+
+    return {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoice_number,
+      storagePath: pdf.storagePath,
+      fileName: createInvoicePdfFileName(invoice.invoice_number),
+      contentType: pdf.contentType,
+      bytes: pdf.bytes,
+    }
+  }
+
   async createSignedDownloadUrl(input: unknown) {
     const values = invoiceDownloadSchema.parse(input)
     const context = await this.authService.getCurrentContext()
-
-    this.authService.requireOrganizationAccess(context, values.organizationId)
-
-    const invoice = assertFound(
-      await this.invoicesRepository.getById(values.invoiceId, values.organizationId),
-      "Invoice not found."
-    )
-
-    if (anyRoleHasPermission(context.roles, "finance.manage")) {
-      this.authService.requireHostelAccess(context, invoice.organization_id, invoice.hostel_id)
-    }
-
-    if (!anyRoleHasPermission(context.roles, "finance.manage")) {
-      const resident = await this.invoicesRepository.getResident(
-        invoice.resident_id,
-        values.organizationId
-      )
-
-      if (!resident || resident.user_id !== context.authUser.id) {
-        throw forbidden("Residents can only download their own invoices.")
-      }
-    }
-
-    if (!invoice.pdf_storage_path) {
-      throw conflict("Invoice PDF is not available yet.")
-    }
-
-    const signedUrl = await this.storageService.createSignedDownloadUrl(
-      invoice.pdf_storage_path,
+    const invoice = await this.authorizeInvoiceDownload(values, context)
+    const pdf = await this.prepareInvoicePdfForDownload(invoice, context.authUser.id)
+    const signedUrl = await this.adminStorageService.createSignedDownloadUrl(
+      pdf.storagePath,
       values.expiresInSeconds
     )
 
@@ -457,6 +457,102 @@ export class InvoicesService {
         residentId: invoice.resident_id,
         expiresInSeconds: values.expiresInSeconds,
       }),
+    }
+  }
+
+  private async authorizeInvoiceDownload(
+    values: ReturnType<typeof invoiceDownloadSchema.parse>,
+    context: Awaited<ReturnType<AuthService["getCurrentContext"]>>
+  ) {
+    this.authService.requireOrganizationAccess(context, values.organizationId)
+
+    const invoice = assertFound(
+      await this.invoicesRepository.getById(values.invoiceId, values.organizationId),
+      "Invoice not found."
+    )
+
+    if (anyRoleHasPermission(context.roles, "finance.manage")) {
+      this.authService.requireHostelAccess(context, invoice.organization_id, invoice.hostel_id)
+      return invoice
+    }
+
+    const resident = await this.invoicesRepository.getResident(
+      invoice.resident_id,
+      values.organizationId
+    )
+
+    if (!resident || resident.user_id !== context.authUser.id) {
+      throw forbidden("Residents can only download their own invoices.")
+    }
+
+    return invoice
+  }
+
+  private async prepareInvoicePdfForDownload(invoice: InvoiceRow, actorUserId: string) {
+    let readyInvoice = invoice
+    let storagePath = await this.resolveInvoicePdfStoragePath(readyInvoice)
+
+    if (!storagePath) {
+      readyInvoice = await this.ensureExistingInvoicePdf(readyInvoice, actorUserId)
+      storagePath = await this.resolveInvoicePdfStoragePath(readyInvoice)
+    }
+
+    if (storagePath) {
+      const existingPdf = await this.tryDownloadValidInvoicePdf(storagePath)
+
+      if (existingPdf) {
+        return {
+          ...existingPdf,
+          storagePath,
+        }
+      }
+    }
+
+    readyInvoice = await this.ensureExistingInvoicePdf(readyInvoice, actorUserId, {
+      force: true,
+    })
+    storagePath = await this.resolveInvoicePdfStoragePath(readyInvoice)
+
+    if (!storagePath) {
+      throw conflict("Invoice PDF is not available yet.")
+    }
+
+    const repairedPdf = await this.tryDownloadValidInvoicePdf(storagePath)
+
+    if (!repairedPdf) {
+      throw conflict("Invoice PDF could not be downloaded. Please retry.")
+    }
+
+    return {
+      ...repairedPdf,
+      storagePath,
+    }
+  }
+
+  private async resolveInvoicePdfStoragePath(invoice: InvoiceRow) {
+    if (invoice.pdf_storage_path) {
+      return invoice.pdf_storage_path
+    }
+
+    const document = await this.adminInvoicesRepository.findInvoicePdfDocument(
+      invoice.id,
+      invoice.organization_id
+    )
+
+    return document?.storage_path ?? null
+  }
+
+  private async tryDownloadValidInvoicePdf(storagePath: string) {
+    try {
+      const pdf = await this.adminStorageService.downloadInvoicePdf(storagePath)
+
+      if (!hasPdfSignature(pdf.bytes)) {
+        return null
+      }
+
+      return pdf
+    } catch {
+      return null
     }
   }
 
@@ -491,7 +587,8 @@ export class InvoicesService {
       resident: ResidentRow
       feeRecord: MonthlyFeeRecordRow
     },
-    actorUserId: string
+    actorUserId: string,
+    options: { force?: boolean } = {}
   ) {
     return this.ensureInvoicePdfFromTemplate(
       invoice,
@@ -499,11 +596,16 @@ export class InvoicesService {
         ...context,
         invoice,
       }),
-      actorUserId
+      actorUserId,
+      options
     )
   }
 
-  private async ensureExistingInvoicePdf(invoice: InvoiceRow, actorUserId: string) {
+  private async ensureExistingInvoicePdf(
+    invoice: InvoiceRow,
+    actorUserId: string,
+    options: { force?: boolean } = {}
+  ) {
     const [organization, hostel, resident] = await Promise.all([
       this.adminInvoicesRepository.getOrganization(invoice.organization_id),
       this.adminInvoicesRepository.getHostel(invoice.hostel_id, invoice.organization_id),
@@ -530,7 +632,8 @@ export class InvoicesService {
           resident: resolvedResident,
           feeRecord,
         },
-        actorUserId
+        actorUserId,
+        options
       )
     }
 
@@ -546,7 +649,8 @@ export class InvoicesService {
           invoice,
           payment,
         }),
-        actorUserId
+        actorUserId,
+        options
       )
     }
 
@@ -558,7 +662,8 @@ export class InvoicesService {
         resident: resolvedResident,
         invoice,
       }),
-      actorUserId
+      actorUserId,
+      options
     )
   }
 
@@ -582,16 +687,19 @@ export class InvoicesService {
   private async ensureInvoicePdfFromTemplate(
     invoice: InvoiceRow,
     templateData: InvoiceTemplateData,
-    actorUserId: string
+    actorUserId: string,
+    options: { force?: boolean } = {}
   ) {
-    if (invoice.pdf_document_id && invoice.pdf_storage_path) {
+    if (!options.force && invoice.pdf_document_id && invoice.pdf_storage_path) {
       return invoice
     }
 
-    const existingDocument = await this.adminInvoicesRepository.findInvoicePdfDocument(
-      invoice.id,
-      invoice.organization_id
-    )
+    const existingDocument = options.force
+      ? null
+      : await this.adminInvoicesRepository.findInvoicePdfDocument(
+          invoice.id,
+          invoice.organization_id
+        )
 
     if (existingDocument) {
       return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
@@ -657,4 +765,25 @@ function stringFromRecord(record: Record<string, unknown>, key: string) {
   const value = record[key]
 
   return typeof value === "string" && value.trim() ? value : null
+}
+
+function hasPdfSignature(bytes: Uint8Array) {
+  return (
+    bytes.byteLength >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d
+  )
+}
+
+function createInvoicePdfFileName(invoiceNumber: string) {
+  const baseName = invoiceNumber
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 120)
+
+  return `${baseName || "invoice"}.pdf`
 }

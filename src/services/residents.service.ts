@@ -16,7 +16,6 @@ import { PaymentsRepository, type PaymentRow } from "@/repositories/payments.rep
 import {
   ResidentsRepository,
   type ResidentRow,
-  type ResidentWithOnboarding,
 } from "@/repositories/residents.repository"
 import type { AppSupabaseClient } from "@/repositories/types"
 import { UploadsRepository } from "@/repositories/uploads.repository"
@@ -932,27 +931,6 @@ export class ResidentsService {
       updated_by: context.authUser.id,
     })
 
-    const completedProfile = hasCompletedResidentSelfProfile({
-      ...resident,
-      ...updated,
-    })
-
-    if (completedProfile && updated.status === "draft") {
-      const activated = await this.residentsRepository.activateCompletedProfile({
-        residentId: updated.id,
-        organizationId: values.organizationId,
-        actorUserId: context.authUser.id,
-        metadata: recordFromUnknown(updated.metadata),
-        onboardingMetadata: recordFromUnknown(
-          (updated as ResidentWithOnboarding).onboarding_metadata
-        ),
-      })
-
-      await this.publishResidentEvent("resident.updated", activated, context.authUser.id)
-
-      return activated
-    }
-
     await this.publishResidentEvent("resident.updated", updated, context.authUser.id)
 
     return updated
@@ -1217,20 +1195,6 @@ function admissionRequiresFinance(values: ReturnType<typeof createResidentSchema
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
-}
-
-function hasCompletedResidentSelfProfile(resident: {
-  phone?: string | null
-  parent_phone?: string | null
-  emergency_contact_phone?: string | null
-  permanent_address?: string | null
-}) {
-  return [
-    resident.phone,
-    resident.parent_phone,
-    resident.emergency_contact_phone,
-    resident.permanent_address,
-  ].every((value) => typeof value === "string" && value.trim().length > 0)
 }
 
 function resolveResidentMonthlyFee(residentType: string | undefined, monthlyFeeAmount: number | undefined) {

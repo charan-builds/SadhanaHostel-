@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api-client"
+import { apiClient, buildApiUrl } from "@/lib/api-client"
 import type { Tables } from "@/types/database"
 import type {
   generateInvoiceSchema,
@@ -11,9 +11,7 @@ export type InvoiceDownloadInput = z.infer<typeof invoiceDownloadSchema>
 
 export type InvoiceDownloadUrl = {
   invoiceId: string
-  invoiceNumber: string
-  signedUrl: string
-  downloadToken: string
+  downloadUrl: string
 }
 
 export const invoicesSdk = {
@@ -25,12 +23,13 @@ export const invoicesSdk = {
     )
   },
 
-  downloadUrl(input: InvoiceDownloadInput) {
+  async downloadUrl(input: InvoiceDownloadInput): Promise<InvoiceDownloadUrl> {
     const { invoiceId, ...query } = input
+    const downloadUrl = buildApiUrl(`/api/v1/invoices/${invoiceId}/download`, query)
 
-    return apiClient.get<InvoiceDownloadUrl>(
-      `/api/v1/invoices/${invoiceId}/download`,
-      query
-    )
+    return {
+      invoiceId,
+      downloadUrl,
+    }
   },
 }

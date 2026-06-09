@@ -1,14 +1,25 @@
+import { ApiError, withApiRoute } from "@/lib/api"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { AuthService } from "@/services/auth.service"
+
 export const dynamic = "force-dynamic"
 
-export async function POST() {
-  return Response.json(
+export async function POST(request: Request) {
+  return withApiRoute(
+    request,
     {
-      success: false,
-      error: {
-        code: "ROOM_TRANSFER_REMOVED",
-        message: "Room transfer has been permanently removed from this launch.",
-      },
+      route: "rooms.transfer.removed",
     },
-    { status: 410 }
+    async () => {
+      const authService = new AuthService(await createSupabaseServerClient())
+
+      await authService.requirePermission("rooms.manage")
+
+      throw new ApiError(
+        "ROOM_TRANSFER_REMOVED",
+        "Room transfer has been permanently removed from this launch.",
+        410
+      )
+    }
   )
 }

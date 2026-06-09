@@ -102,4 +102,51 @@ describe("AutomationService production safety", () => {
     expect(isFinanceSafeAutomationJobName("stale_upload_cleanup")).toBe(false)
     expect(isFinanceSafeAutomationJobName("consistency_scan")).toBe(false)
   })
+
+  it("runs owner and admin automation through automation.manage", async () => {
+    const service = new AutomationService({} as never)
+    const context = adminAuthContext()
+    const authService = {
+      requirePermission: vi.fn().mockResolvedValue(context),
+      requireHostelAccess: vi.fn(),
+    }
+    const repository = {
+      getAutomationSetting: vi.fn().mockResolvedValue(null),
+    }
+
+    Object.assign(service, { authService, repository })
+
+    await expect(
+      service.run({
+        organizationId: TEST_ORGANIZATION_ID,
+        hostelId: TEST_HOSTEL_ID,
+        name: "consistency_validation",
+        dryRun: true,
+        payload: {},
+      })
+    ).resolves.toMatchObject({
+      jobName: "consistency_validation",
+      dryRun: true,
+    })
+
+    expect(authService.requirePermission).toHaveBeenCalledWith("automation.manage")
+    expect(authService.requireHostelAccess).toHaveBeenCalledWith(
+      context,
+      TEST_ORGANIZATION_ID,
+      TEST_HOSTEL_ID
+    )
+  })
+
+  it("keeps the automation dashboard diagnostic repository service-scoped", () => {
+    const userDb = {} as never
+    const serviceDb = {} as never
+    const service = new AutomationService(userDb, serviceDb)
+    const internals = service as unknown as {
+      repository: { db: unknown }
+      adminRepository: { db: unknown }
+    }
+
+    expect(internals.repository.db).toBe(userDb)
+    expect(internals.adminRepository.db).toBe(serviceDb)
+  })
 })

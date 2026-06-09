@@ -75,6 +75,14 @@ export function isResidentOperationallyVerified(resident: ResidentWithOnboarding
 export function isResidentSelfOnboardingComplete(resident: ResidentWithOnboarding) {
   return (
     getResidentOnboardingRequirements(resident).missing.length === 0 &&
+    isResidentEligibleForSelfOnboarding(resident)
+  )
+}
+
+export function isResidentEligibleForSelfOnboarding(resident: ResidentWithOnboarding) {
+  return (
+    (resident.status === "draft" || resident.status === "active") &&
+    resident.onboarding_status !== "suspended" &&
     resident.is_active !== false &&
     Boolean(resident.user_id) &&
     !resident.checkout_on

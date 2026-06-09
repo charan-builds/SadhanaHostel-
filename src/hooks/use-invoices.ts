@@ -3,7 +3,11 @@
 import { useMutation } from "@tanstack/react-query"
 
 import { invoicesSdk } from "@/sdk"
-import type { GenerateInvoiceInput, InvoiceDownloadInput } from "@/sdk/invoices.sdk"
+import type {
+  GenerateInvoiceInput,
+  InvoiceDownloadInput,
+  InvoiceDownloadUrl,
+} from "@/sdk/invoices.sdk"
 
 export function useGenerateInvoice() {
   return useMutation({
@@ -12,7 +16,7 @@ export function useGenerateInvoice() {
 }
 
 export function useInvoiceDownloadUrl() {
-  return useMutation({
+  return useMutation<InvoiceDownloadUrl, Error, InvoiceDownloadInput>({
     mutationFn: (input: InvoiceDownloadInput) => invoicesSdk.downloadUrl(input),
   })
 }

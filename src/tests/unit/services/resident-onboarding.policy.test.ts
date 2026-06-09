@@ -5,6 +5,7 @@ import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 import {
   getResidentOnboardingRequirements,
   hasAcceptedCurrentHostelRules,
+  isResidentEligibleForSelfOnboarding,
   isResidentOperationallyVerified,
 } from "@/services/onboarding/resident-onboarding.policy"
 
@@ -32,6 +33,52 @@ const baseResident = {
 } as ResidentWithOnboarding
 
 describe("resident onboarding policy", () => {
+  it("keeps a new unlinked resident blocked from self-activation", () => {
+    const newResident: ResidentWithOnboarding = {
+      ...baseResident,
+      status: "draft",
+      user_id: null,
+      onboarding_status: "invited",
+    }
+
+    expect(isResidentEligibleForSelfOnboarding(newResident)).toBe(false)
+    expect(isResidentOperationallyVerified(newResident)).toBe(false)
+  })
+
+  it("allows an auth-linked draft resident to finish onboarding but not use leave yet", () => {
+    const draftResident: ResidentWithOnboarding = {
+      ...baseResident,
+      status: "draft",
+      onboarding_status: "profile_incomplete",
+    }
+
+    expect(isResidentEligibleForSelfOnboarding(draftResident)).toBe(true)
+    expect(isResidentOperationallyVerified(draftResident)).toBe(false)
+  })
+
+  it("does not treat a completed active profile as leave-eligible before activation", () => {
+    const completedProfile: ResidentWithOnboarding = {
+      ...baseResident,
+      onboarding_status: "profile_incomplete",
+      metadata: {
+        onboarding: {
+          hostelRulesAcceptance: {
+            accepted: true,
+            version: HOSTEL_RULES_VERSION,
+            acceptedAt: "2026-06-09T00:00:00.000Z",
+          },
+        },
+      },
+    }
+
+    const requirements = getResidentOnboardingRequirements(completedProfile)
+
+    expect(requirements.missing).toEqual([])
+    expect(requirements.canSubmitForVerification).toBe(true)
+    expect(isResidentEligibleForSelfOnboarding(completedProfile)).toBe(true)
+    expect(isResidentOperationallyVerified(completedProfile)).toBe(false)
+  })
+
   it("allows operations only when resident status and onboarding status are verified", () => {
     expect(isResidentOperationallyVerified(baseResident)).toBe(true)
     expect(
@@ -50,6 +97,23 @@ describe("resident onboarding policy", () => {
       isResidentOperationallyVerified({
         ...baseResident,
         user_id: null,
+      })
+    ).toBe(false)
+  })
+
+  it("keeps suspended and inactive residents blocked from self-reactivation", () => {
+    expect(
+      isResidentEligibleForSelfOnboarding({
+        ...baseResident,
+        status: "suspended",
+        onboarding_status: "suspended",
+      })
+    ).toBe(false)
+    expect(
+      isResidentEligibleForSelfOnboarding({
+        ...baseResident,
+        is_active: false,
+        onboarding_status: "profile_incomplete",
       })
     ).toBe(false)
   })

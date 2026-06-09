@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from "vitest"
 import { LeavesService } from "@/services/leaves.service"
 import {
   RESIDENT_ID,
+  residentFixture,
+  RESIDENT_USER_ID,
   TEST_HOSTEL_ID,
   TEST_ORGANIZATION_ID,
 } from "@/tests/fixtures"
-import { adminAuthContext } from "@/tests/helpers"
+import { adminAuthContext, residentAuthContext } from "@/tests/helpers"
 import type { Tables } from "@/types/database"
 
 const LEAVE_REQUEST_ID = "00000000-0000-4000-8000-000000000061"
@@ -47,16 +49,27 @@ function leaveRequestFixture(
 function createServiceHarness() {
   const service = new LeavesService({} as never)
   const authService = {
+    getCurrentContext: vi.fn().mockResolvedValue(
+      residentAuthContext({
+        authUser: {
+          ...residentAuthContext().authUser,
+          id: RESIDENT_USER_ID,
+        },
+      })
+    ),
     requireRole: vi.fn().mockResolvedValue(adminAuthContext()),
     requirePermission: vi.fn().mockResolvedValue(adminAuthContext()),
     requireOrganizationAccess: vi.fn(),
     requireHostelAccess: vi.fn(),
   }
   const leavesRepository = {
+    create: vi.fn(),
     getById: vi.fn(),
     update: vi.fn(),
   }
-  const residentsRepository = {}
+  const residentsRepository = {
+    getById: vi.fn(),
+  }
 
   Object.assign(service, {
     authService,
@@ -67,10 +80,98 @@ function createServiceHarness() {
   return {
     service,
     leavesRepository,
+    residentsRepository,
+  }
+}
+
+function leaveInput() {
+  return {
+    organizationId: TEST_ORGANIZATION_ID,
+    hostelId: TEST_HOSTEL_ID,
+    residentId: RESIDENT_ID,
+    fromDate: "2026-06-20",
+    toDate: "2026-06-21",
+    reason: "Family function",
   }
 }
 
 describe("LeavesService", () => {
+  it("blocks a new draft resident from leave access", async () => {
+    const harness = createServiceHarness()
+
+    harness.residentsRepository.getById.mockResolvedValue({
+      ...residentFixture({
+        status: "draft",
+        user_id: RESIDENT_USER_ID,
+        date_of_birth: null,
+        permanent_address: null,
+      }),
+      onboarding_status: "profile_incomplete",
+    })
+
+    await expect(harness.service.createLeave(leaveInput())).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Complete all required resident profile details before applying leave.",
+    })
+    expect(harness.leavesRepository.create).not.toHaveBeenCalled()
+  })
+
+  it("blocks a completed profile until the activation transition is committed", async () => {
+    const harness = createServiceHarness()
+
+    harness.residentsRepository.getById.mockResolvedValue({
+      ...residentFixture({
+        status: "active",
+        user_id: RESIDENT_USER_ID,
+        date_of_birth: "2000-01-01",
+        permanent_address: "Sadhana Boys Hostel, Pulivendula, Andhra Pradesh",
+        metadata: {
+          onboarding: {
+            hostelRulesAcceptance: {
+              accepted: true,
+              version: "2026-06-02",
+              acceptedAt: "2026-06-09T00:00:00.000Z",
+            },
+          },
+        },
+      }),
+      onboarding_status: "profile_incomplete",
+    })
+
+    await expect(harness.service.createLeave(leaveInput())).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "Complete resident profile activation before applying leave.",
+    })
+    expect(harness.leavesRepository.create).not.toHaveBeenCalled()
+  })
+
+  it("allows an active, verified resident to create their own leave request", async () => {
+    const harness = createServiceHarness()
+    const activeResident = {
+      ...residentFixture({
+        status: "active",
+        user_id: RESIDENT_USER_ID,
+        date_of_birth: "2000-01-01",
+        permanent_address: "Sadhana Boys Hostel, Pulivendula, Andhra Pradesh",
+      }),
+      onboarding_status: "verified",
+    }
+    const created = leaveRequestFixture()
+
+    harness.residentsRepository.getById.mockResolvedValue(activeResident)
+    harness.leavesRepository.create.mockResolvedValue(created)
+
+    await expect(harness.service.createLeave(leaveInput())).resolves.toEqual(created)
+    expect(harness.leavesRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organization_id: TEST_ORGANIZATION_ID,
+        hostel_id: TEST_HOSTEL_ID,
+        resident_id: RESIDENT_ID,
+        created_by: RESIDENT_USER_ID,
+      })
+    )
+  })
+
   it("requires rejection reason when rejecting leave", async () => {
     const harness = createServiceHarness()
 

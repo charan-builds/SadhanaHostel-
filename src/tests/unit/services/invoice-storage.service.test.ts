@@ -36,17 +36,74 @@ describe("InvoiceStorageService", () => {
       message: "Invoice PDF signed URL could not be generated.",
     })
   })
+
+  it("downloads PDF bytes from invoice storage", async () => {
+    const bytes = new TextEncoder().encode("%PDF-1.7\n%%EOF")
+    const storagePath = "receipts/INV-2026-00017.pdf"
+    const { db, download, from } = createStorageHarness(
+      {
+        data: null,
+        error: null,
+      },
+      {
+        data: new Blob([bytes], { type: "application/pdf" }),
+        error: null,
+      }
+    )
+    const service = new InvoiceStorageService(db)
+
+    await expect(service.downloadInvoicePdf(storagePath)).resolves.toMatchObject({
+      bytes,
+      contentType: "application/pdf",
+      fileSizeBytes: bytes.byteLength,
+    })
+
+    expect(from).toHaveBeenCalledWith("invoices")
+    expect(download).toHaveBeenCalledWith(storagePath)
+  })
+
+  it("fails clearly when invoice storage download fails", async () => {
+    const { db } = createStorageHarness(
+      {
+        data: null,
+        error: null,
+      },
+      {
+        data: null,
+        error: { message: "Object not found" },
+      }
+    )
+    const service = new InvoiceStorageService(db)
+
+    await expect(
+      service.downloadInvoicePdf("missing/INV-2026-00018.pdf")
+    ).rejects.toMatchObject({
+      code: "INVOICE_STORAGE_DOWNLOAD_FAILED",
+      message: "Object not found",
+    })
+  })
 })
 
-function createStorageHarness(response: {
-  data: Record<string, unknown> | null
-  error: { message: string } | null
-}) {
+function createStorageHarness(
+  response: {
+    data: Record<string, unknown> | null
+    error: { message: string } | null
+  },
+  downloadResponse: {
+    data: Blob | null
+    error: { message: string } | null
+  } = {
+    data: null,
+    error: null,
+  }
+) {
   const createSignedUrl = vi.fn().mockResolvedValue(response)
-  const from = vi.fn().mockReturnValue({ createSignedUrl })
+  const download = vi.fn().mockResolvedValue(downloadResponse)
+  const from = vi.fn().mockReturnValue({ createSignedUrl, download })
 
   return {
     createSignedUrl,
+    download,
     from,
     db: {
       storage: {
