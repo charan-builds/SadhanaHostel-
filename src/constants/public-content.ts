@@ -15,11 +15,10 @@ import type {
 export const publicNavItems: PublicNavItem[] = [
   { title: "Home", href: "/" },
   { title: "Rooms", href: "/rooms" },
-  { title: "Fees", href: "/fees" },
   { title: "Admissions", href: "/admissions" },
   { title: "Facilities", href: "/facilities" },
   { title: "Gallery", href: "/gallery" },
-  { title: "Contact", href: "/contact" },
+  { title: "Rules", href: "/terms" },
 ]
 
 export const localSeoLandingLinks = [

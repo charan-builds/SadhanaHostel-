@@ -44,7 +44,6 @@ const leaveSchema = z
     fromDate: z.string().min(1, "From date is required."),
     toDate: z.string().min(1, "Return date is required."),
     reason: z.string().trim().min(5, "Reason must be at least 5 characters."),
-    destination: z.string().trim().max(200).optional(),
     travelMode: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(1000).optional(),
   })
@@ -85,7 +84,6 @@ export function ResidentLeaveClient() {
       fromDate: "",
       toDate: "",
       reason: "",
-      destination: "",
       travelMode: "Bus",
       notes: "",
     },
@@ -161,7 +159,6 @@ export function ResidentLeaveClient() {
         fromDate: values.fromDate,
         toDate: values.toDate,
         reason: values.reason,
-        destination: values.destination || undefined,
         travelMode: values.travelMode || undefined,
         notes: values.notes || undefined,
       })
@@ -227,10 +224,6 @@ export function ResidentLeaveClient() {
                   <SelectItem value="Other">Other</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="destination">Destination</Label>
-              <Input id="destination" {...register("destination")} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reason">Reason</Label>
@@ -300,7 +293,6 @@ function getLeaveVerificationState(resident: LeaveResident) {
   const missing: string[] = []
 
   if (!resident.full_name) missing.push("Full name")
-  if (!resident.date_of_birth) missing.push("Date of birth")
   if (!resident.phone) missing.push("Phone number")
   if (!resident.parent_phone) missing.push("Father phone")
   if (!resident.emergency_contact_phone) missing.push("Mother phone")

@@ -259,7 +259,9 @@ export function buildResidentFinanceRow(
   const payments = ledger.payments
   const feeRecords = ledger.feeRecords
   const failedPayments = payments.filter((payment) => payment.status === "failed").length
-  const verifiedPayments = payments.filter((payment) => payment.status === "verified")
+  const verifiedPayments = payments.filter(
+    (payment) => payment.status === "verified" && !payment.is_advance
+  )
   const lastPayment = [...verifiedPayments].sort(comparePaymentDateDesc)[0] ?? null
   const delayStats = calculateDelayStats(verifiedPayments, feeRecords)
   const daysOverdue = getMaxDaysOverdue(feeRecords, today)

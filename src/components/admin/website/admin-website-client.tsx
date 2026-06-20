@@ -81,12 +81,29 @@ type FacilityFormInput = z.input<typeof facilityFormSchema>
 type FacilityFormValues = z.output<typeof facilityFormSchema>
 
 const galleryCategoryOptions = [
-  { value: "logo", label: "Logo" },
   { value: "student-room", label: "Student rooms" },
   { value: "employee-room", label: "Employee rooms" },
   { value: "open-space-terrace", label: "Open space / Terrace" },
   { value: "exterior-surroundings", label: "Exterior / Surroundings" },
 ] as const
+
+function isLogoGalleryItem(item: { category: string; title: string }) {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+  const category = normalize(item.category)
+  const title = normalize(item.title)
+
+  return (
+    category === "logo" ||
+    category === "brand" ||
+    title.includes("logo") ||
+    title.includes("brand-mark")
+  )
+}
 
 export function AdminWebsiteClient() {
   const { organizationId, session } = useAuth()
@@ -142,7 +159,9 @@ export function AdminWebsiteClient() {
 
   const settings = settingsQuery.data?.data ?? []
   const facilities = facilitiesQuery.data?.data ?? []
-  const galleryItems = galleryQuery.data?.data ?? []
+  const galleryItems = (galleryQuery.data?.data ?? []).filter(
+    (item) => !isLogoGalleryItem(item)
+  )
 
   async function uploadGalleryImages(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

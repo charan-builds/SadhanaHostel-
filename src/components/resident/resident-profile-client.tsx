@@ -33,9 +33,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth"
 import { FrontendApiError } from "@/lib/api-client"
-import { formatDate, humanizeEnum } from "@/lib/format"
+import { formatCurrency, formatDate, humanizeEnum } from "@/lib/format"
+import { useRealtimeResidentFinance } from "@/lib/realtime"
 import {
   useCurrentResident,
+  useAdvanceLedger,
+  useResidentPaymentLedger,
   useUpdateCurrentResident,
 } from "@/hooks"
 import { updateOwnResidentProfileSchema } from "@/validations/resident.validation"
@@ -68,6 +71,24 @@ export function ResidentProfileClient() {
   const updateProfile = useUpdateCurrentResident()
 
   const resident = residentQuery.data ?? null
+  const paymentLedger = useResidentPaymentLedger(
+    organizationId && resident?.id
+      ? { organizationId, residentId: resident.id }
+      : undefined
+  )
+  const advanceLedger = useAdvanceLedger(
+    organizationId && resident?.id
+      ? {
+          organizationId,
+          hostelId: resident.hostel_id,
+          residentId: resident.id,
+        }
+      : undefined
+  )
+  useRealtimeResidentFinance({
+    enabled: Boolean(organizationId && resident?.id),
+    residentId: resident?.id,
+  })
 
   const form = useForm<ProfileFormInput, unknown, ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -199,6 +220,66 @@ export function ResidentProfileClient() {
         />
       </motion.section>
 
+      <motion.section variants={reveal}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Fee details</CardTitle>
+            <CardDescription>
+              Current fee, advance availability, outstanding balance, and payment history.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <FeeMetric label="Current fee" value={formatCurrency(resident.monthly_fee_amount)} />
+              <FeeMetric
+                label="Current advance"
+                value={formatCurrency(advanceLedger.data?.balance.totalAdvanceReceived ?? 0)}
+              />
+              <FeeMetric
+                label="Available advance"
+                value={formatCurrency(advanceLedger.data?.balance.remainingAdvanceBalance ?? 0)}
+              />
+              <FeeMetric
+                label="Outstanding"
+                value={formatCurrency(paymentLedger.data?.totals.currentDue ?? 0)}
+              />
+              <FeeMetric
+                label="Next payment date"
+                value={
+                  paymentLedger.data?.billing.nextDueDate
+                    ? formatDate(paymentLedger.data.billing.nextDueDate)
+                    : "Not scheduled"
+                }
+              />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Payment history</h3>
+              <div className="mt-3 grid gap-2">
+                {(paymentLedger.data?.feeHistory ?? []).slice(0, 8).map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                  >
+                    <span>
+                      {formatFeeMonth(entry.periodMonth)} Fee{" "}
+                      {entry.status === "paid" ? "Cleared" : "Partially Cleared"} ·{" "}
+                      {entry.source === "advance"
+                        ? "Paid from Advance"
+                        : `Paid by ${entry.method === "bank_transfer" ? "Bank" : entry.method.toUpperCase()}`}{" "}
+                      · {formatDate(entry.paidAt)}
+                    </span>
+                    <span className="font-medium">{formatCurrency(entry.amount)}</span>
+                  </div>
+                ))}
+                {(paymentLedger.data?.feeHistory?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-muted-foreground">No payment history yet.</p>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.section>
+
       <div className="grid gap-6">
         <motion.div variants={reveal}>
           <Card className="overflow-hidden">
@@ -326,6 +407,23 @@ export function ResidentProfileClient() {
       </div>
     </motion.div>
   )
+}
+
+function FeeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border bg-muted/25 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
+  )
+}
+
+function formatFeeMonth(periodMonth: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${periodMonth.slice(0, 7)}-01T00:00:00.000Z`))
 }
 
 function ProfileHero({

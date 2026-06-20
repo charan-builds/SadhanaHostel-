@@ -8,14 +8,10 @@ import {
 } from "@/validations/onboarding.validation"
 import { TEST_ORGANIZATION_ID } from "@/tests/fixtures"
 
-const adultBirthDate = "2000-01-01"
-const underageBirthDate = "2020-01-01"
-
 function onboardingProfile(overrides: Record<string, unknown> = {}) {
   return {
     organizationId: TEST_ORGANIZATION_ID,
     fullName: "Resident User",
-    dateOfBirth: adultBirthDate,
     phone: "+919000000002",
     email: "resident.test@sadhanahostel.example",
     parentPhone: "+919000000003",
@@ -41,21 +37,16 @@ describe("onboarding validation schemas", () => {
     })
   })
 
-  it("keeps resident age rules on both API and client form schemas", () => {
-    expect(() =>
-      onboardingProfileSchema.parse(
-        onboardingProfile({ dateOfBirth: underageBirthDate })
-      )
-    ).toThrow(/at least 15 years old/)
+  it("does not accept date of birth or gender as onboarding profile fields", () => {
+    const parsed = onboardingProfileSchema.parse(
+      onboardingProfile({
+        dateOfBirth: "2000-01-01",
+        gender: "male",
+      })
+    )
 
-    expect(() =>
-      onboardingProfileFormSchema.parse(
-        onboardingProfile({
-          organizationId: undefined,
-          dateOfBirth: underageBirthDate,
-        })
-      )
-    ).toThrow(/at least 15 years old/)
+    expect(parsed).not.toHaveProperty("dateOfBirth")
+    expect(parsed).not.toHaveProperty("gender")
   })
 
   it("keeps resident email optional while requiring father and mother phone numbers", () => {

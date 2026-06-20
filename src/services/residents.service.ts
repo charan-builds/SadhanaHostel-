@@ -354,10 +354,10 @@ export class ResidentsService {
     const joinedOn = values.joinedOn ?? new Date().toISOString().slice(0, 10)
     const periodMonth = periodMonthForDate(joinedOn)
     const idempotencyKey = `resident-admission-first-month-${resident.id}-${periodMonth}`
-    const monthlyFee = resolveResidentMonthlyFee(
-      values.residentType,
-      values.monthlyFeeAmount
-    )
+    const monthlyFee =
+      values.firstMonthFeeStatus === "paid" && values.firstMonthFeeAmount
+        ? values.firstMonthFeeAmount
+        : resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount)
     const paidAmount = values.firstMonthFeeStatus === "paid"
       ? values.firstMonthFeeAmount ?? monthlyFee
       : 0
@@ -776,6 +776,11 @@ export class ResidentsService {
     status: "draft" | "pending_finance" = "draft"
   ) {
     try {
+      const residentSerial =
+        typeof this.residentsRepository.nextSerialNumber === "function"
+          ? await this.residentsRepository.nextSerialNumber(values.organizationId)
+          : 1
+
       return await this.residentsRepository.create({
         organization_id: values.organizationId,
         hostel_id: values.hostelId,
@@ -784,8 +789,6 @@ export class ResidentsService {
         full_name: values.fullName,
         preferred_name: values.preferredName,
         resident_type: values.residentType,
-        gender: values.gender,
-        date_of_birth: values.dateOfBirth,
         joined_on: values.joinedOn ?? new Date().toISOString().slice(0, 10),
         phone: values.phone,
         email: values.email,
@@ -795,12 +798,16 @@ export class ResidentsService {
         emergency_contact_name: values.emergencyContactPhone ? "Mother" : undefined,
         emergency_contact_phone: values.emergencyContactPhone,
         permanent_address: values.permanentAddress,
-        monthly_fee_amount: resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount),
+        monthly_fee_amount:
+          values.firstMonthFeeStatus === "paid" && values.firstMonthFeeAmount
+            ? values.firstMonthFeeAmount
+            : resolveResidentMonthlyFee(values.residentType, values.monthlyFeeAmount),
         security_deposit_amount: values.securityDepositAmount,
         notes: values.notes,
         status,
         metadata: {
           admission_flow: "quick_admin_create",
+          resident_serial: residentSerial,
           admission_finance_status: status === "pending_finance" ? "pending" : "not_required",
           profile_completion_required: true,
           whatsapp_onboarding_ready: true,
@@ -882,8 +889,6 @@ export class ResidentsService {
       full_name: values.fullName,
       preferred_name: values.preferredName,
       resident_type: values.residentType,
-      gender: values.gender,
-      date_of_birth: values.dateOfBirth,
       phone: values.phone,
       email: values.email,
       parent_name: values.parentPhone ? "Father" : undefined,
@@ -981,6 +986,47 @@ export class ResidentsService {
     await this.publishResidentEvent("resident.deactivated", resident, context.authUser.id)
 
     return resident
+  }
+
+  async deleteResidentPermanently(input: unknown) {
+    const values = residentIdMutationSchema.parse(input)
+    const context = await this.authService.requirePermission("residents.manage")
+    const existingResident = assertFound(
+      await this.residentsRepository.getById(values.residentId, values.organizationId),
+      "Resident not found."
+    )
+
+    this.authService.requireHostelAccess(
+      context,
+      existingResident.organization_id,
+      existingResident.hostel_id
+    )
+
+    const adminDb = createSupabaseAdminClient()
+    const { error } = await (
+      adminDb as unknown as {
+        rpc(
+          name: string,
+          args: Record<string, unknown>
+        ): Promise<{ error: { message: string } | null }>
+      }
+    ).rpc("delete_resident_operational_data_atomic", {
+      p_organization_id: values.organizationId,
+      p_resident_id: values.residentId,
+      p_actor_user_id: context.authUser.id,
+    })
+
+    if (error) {
+      throw conflict(error.message || "Unable to delete resident financial data.")
+    }
+
+    await this.realtimeService.dashboardRefresh({
+      organizationId: existingResident.organization_id,
+      hostelId: existingResident.hostel_id,
+      reason: "resident_deleted",
+    })
+
+    return existingResident
   }
 
   async checkoutResident(input: unknown) {

@@ -26,7 +26,8 @@ export default async function ResidentLoginPage() {
 
   return (
     <AuthShell
-      title="Resident portal"
+      title="Resident Portal"
+      portalLabel="Resident Portal"
       description="Use your phone number and temporary password, or an invite link, to access resident services."
       logoUrl={logoUrl}
     >

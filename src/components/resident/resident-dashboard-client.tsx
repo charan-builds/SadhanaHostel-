@@ -26,6 +26,7 @@ import {
 } from "@/hooks"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate } from "@/lib/format"
+import { useRealtimeResidentFinance } from "@/lib/realtime"
 
 export function ResidentDashboardClient() {
   const { organizationId, session } = useAuth()
@@ -47,6 +48,10 @@ export function ResidentDashboardClient() {
         }
       : undefined
   )
+  useRealtimeResidentFinance({
+    enabled: Boolean(organizationId && resident.data?.id),
+    residentId: resident.data?.id,
+  })
   const leaves = useLeaves({
     organizationId: organizationId ?? "",
     hostelId,
@@ -103,7 +108,7 @@ export function ResidentDashboardClient() {
           <Button asChild>
             <Link href={"/resident/payments" as Route}>
               <CreditCard className="size-4" aria-hidden="true" />
-              Pay Fees
+              View Fee Details
             </Link>
           </Button>
         }

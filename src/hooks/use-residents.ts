@@ -127,6 +127,34 @@ export function useDeactivateResident() {
   })
 }
 
+export function useDeleteResident() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { residentId: string; organizationId: string }) =>
+      residentsSdk.purge(input),
+    onSuccess: (resident) => {
+      invalidateResidentOperationalState(
+        queryClient,
+        resident.organization_id,
+        resident.hostel_id
+      )
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.payments.all({
+          organizationId: resident.organization_id,
+          hostelId: resident.hostel_id,
+        }),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.finance.all({
+          organizationId: resident.organization_id,
+          hostelId: resident.hostel_id,
+        }),
+      })
+    },
+  })
+}
+
 export function useCheckoutResident() {
   const queryClient = useQueryClient()
 

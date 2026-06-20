@@ -22,11 +22,6 @@ export async function publicRedirects(): Promise<PublicRedirect[]> {
       permanent: true,
     },
     {
-      source: "/pricing",
-      destination: "/fees",
-      permanent: true,
-    },
-    {
       source: "/join",
       destination: "/admissions",
       permanent: true,

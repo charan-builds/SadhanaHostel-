@@ -194,7 +194,8 @@ export function AdminSidebar({ logoUrl }: { logoUrl?: string | null }) {
             >
               <BrandMark
                 logoUrl={logoUrl}
-                className="size-11 rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-cyan-950/20"
+                variant="sidebar"
+                className="size-11"
               />
             </motion.span>
             <AnimatePresence initial={false}>

@@ -1,10 +1,9 @@
-type BrandIconImageProps = {
-  logoUrl?: string | null
-}
+import {
+  BRAND_COLORS,
+  BRAND_ICON_PATHS,
+} from "@/components/shared/brand-mark"
 
-export function BrandIconImage({ logoUrl }: BrandIconImageProps) {
-  const normalizedLogoUrl = logoUrl?.trim()
-
+export function BrandIconImage() {
   return (
     <div
       style={{
@@ -13,41 +12,25 @@ export function BrandIconImage({ logoUrl }: BrandIconImageProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        overflow: "hidden",
-        background: "#f8fbff",
       }}
     >
-      {normalizedLogoUrl ? (
-        // ImageResponse renders plain HTML; next/image is not usable in this metadata image.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={normalizedLogoUrl}
-          alt=""
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-          }}
+      <svg
+        viewBox={BRAND_ICON_PATHS.viewBox}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ width: "94%", height: "94%" }}
+      >
+        <path
+          d={BRAND_ICON_PATHS.navy}
+          fill={BRAND_COLORS.navy}
+          fillRule="evenodd"
         />
-      ) : (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "#0f766e",
-            color: "white",
-            fontFamily: "Arial, sans-serif",
-            fontSize: 92,
-            fontWeight: 900,
-            letterSpacing: 0,
-          }}
-        >
-          S
-        </div>
-      )}
+        <path
+          d={BRAND_ICON_PATHS.gold}
+          fill={BRAND_COLORS.gold}
+          fillRule="evenodd"
+        />
+      </svg>
     </div>
   )
 }

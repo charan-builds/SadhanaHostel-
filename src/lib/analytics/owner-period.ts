@@ -15,12 +15,12 @@ export const OWNER_PERIOD_PRESETS: Array<{
   value: OwnerPeriodPreset
   label: string
 }> = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "quarter", label: "Quarter" },
-  { value: "year", label: "Year" },
-  { value: "custom", label: "Custom Range" },
+  { value: "day", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "quarter", label: "This Quarter" },
+  { value: "year", label: "This Year" },
+  { value: "custom", label: "Custom Date Range" },
 ]
 
 export function getOwnerPeriodRange(

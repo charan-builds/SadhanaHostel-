@@ -8,7 +8,7 @@ export type AdvanceRefundStatus =
   | "rejected"
   | "paid"
   | "cancelled"
-export type AdvancePaymentMode = "upi" | "bank_transfer" | "cash"
+export type AdvancePaymentMode = "upi" | "bank_transfer" | "cash" | "adjustment"
 
 export type AdvancePaymentDepositRow = {
   id: string

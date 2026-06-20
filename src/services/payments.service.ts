@@ -10,7 +10,7 @@ import {
 } from "@/lib/operations/production-safety"
 import {
   buildResidentBillingContext,
-  resolveNextBillingDueDate,
+  resolveNextPaymentDate,
   todayDateOnly,
 } from "@/lib/finance/billing-date"
 import { createManualPaymentReceiptMarker } from "@/lib/payments/manual-receipt-marker"
@@ -107,6 +107,7 @@ export class PaymentsService {
 
       return this.paymentsRepository.list({
         ...values,
+        isAdvance: false,
         ...(hostelId ? { hostelId } : {}),
       })
     }
@@ -124,6 +125,7 @@ export class PaymentsService {
       return this.paymentsRepository.list({
         ...values,
         residentId: resident.id,
+        isAdvance: false,
       })
     }
   }
@@ -277,7 +279,9 @@ export class PaymentsService {
         is_advance: values.isAdvance,
         is_partial: values.isPartial,
         provider: "admin_manual_entry",
-        paid_at: new Date().toISOString(),
+        paid_at: values.paymentDate
+          ? `${values.paymentDate}T12:00:00.000Z`
+          : new Date().toISOString(),
         metadata: {
           idempotency_key: idempotencyKey,
           source: "admin_in_person",
@@ -315,6 +319,11 @@ export class PaymentsService {
       context.authUser.id,
       "payment.invoice_generation_after_manual_entry_failed"
     )
+    await this.syncResidentNextPaymentDate(
+      resident,
+      values.organizationId,
+      context.authUser.id
+    )
 
     logPaymentEvent({
       action: "verified",
@@ -338,6 +347,36 @@ export class PaymentsService {
     await this.publishPaymentVerificationEvents(verifiedPayment, context.authUser.id)
 
     return verifiedPayment
+  }
+
+  private async syncResidentNextPaymentDate(
+    resident: Tables<"residents">,
+    organizationId: string,
+    actorUserId: string
+  ) {
+    const feeRecords = await this.paymentsRepository.listFeeRecords({
+      organizationId,
+      hostelId: resident.hostel_id,
+      residentId: resident.id,
+      page: 1,
+      pageSize: 100,
+    })
+    if (!feeRecords?.data) {
+      return
+    }
+    const nextPaymentDate = resolveNextPaymentDate({
+      joinedOn: resident.joined_on,
+      feeRecords: feeRecords.data,
+    })
+
+    await this.residentsRepository.update(resident.id, organizationId, {
+      metadata: {
+        ...metadataRecord(resident.metadata),
+        next_payment_date: nextPaymentDate,
+        next_payment_date_updated_at: new Date().toISOString(),
+      },
+      updated_by: actorUserId,
+    })
   }
 
   async submitUpiPaymentWithProof(input: unknown, proofFile: File) {
@@ -913,11 +952,28 @@ export class PaymentsService {
       resident.id,
       { page: 1, pageSize: 100 }
     )
-    const invoices = await this.paymentsRepository.listResidentInvoices(
-      values.organizationId,
-      resident.id,
-      50
-    )
+    const advanceAllocationsPromise = isSupabaseQueryClient(this.db)
+      ? import("@/repositories/advance-ledger.repository").then(
+          ({ AdvanceLedgerRepository }) =>
+            new AdvanceLedgerRepository(this.db).listAllocations({
+              organizationId: values.organizationId,
+              hostelId: resident.hostel_id,
+              residentId: resident.id,
+            })
+        )
+      : Promise.resolve([])
+    const [invoices, advanceBalance, advanceAllocations] = await Promise.all([
+      this.paymentsRepository.listResidentInvoices(
+        values.organizationId,
+        resident.id,
+        50
+      ),
+      this.paymentsRepository.getResidentAdvanceBalance(
+        values.organizationId,
+        resident.id
+      ),
+      advanceAllocationsPromise,
+    ])
 
     const unpaidFeeRecords = feeRecords.data
       .filter((record) => ["pending", "partial", "overdue"].includes(record.status))
@@ -934,11 +990,47 @@ export class PaymentsService {
       .filter((payment) => payment.status === "pending" || payment.status === "initiated")
       .reduce((total, payment) => total + payment.amount, 0)
     const verifiedPaid = payments.data
-      .filter((payment) => payment.status === "verified")
+      .filter((payment) => payment.status === "verified" && !payment.is_advance)
       .reduce((total, payment) => total + payment.amount, 0)
-    const advanceBalance = payments.data
-      .filter((payment) => payment.status === "verified" && payment.is_advance)
-      .reduce((total, payment) => total + payment.amount, 0)
+    const feeRecordById = new Map(
+      feeRecords.data.map((record) => [record.id, record])
+    )
+    const feeHistory = [
+      ...payments.data
+        .filter(
+          (payment) =>
+            payment.status === "verified" &&
+            !payment.is_advance &&
+            payment.monthly_fee_record_id
+        )
+        .map((payment) => {
+          const feeRecord = feeRecordById.get(String(payment.monthly_fee_record_id))
+
+          return {
+            id: `payment-${payment.id}`,
+            periodMonth: feeRecord?.period_month ?? payment.created_at.slice(0, 7) + "-01",
+            amount: payment.amount,
+            source: "payment" as const,
+            method: payment.method as "cash" | "upi" | "bank_transfer",
+            paidAt: payment.paid_at ?? payment.verified_at ?? payment.created_at,
+            status: payment.is_partial ? "partial" as const : "paid" as const,
+          }
+        }),
+      ...advanceAllocations
+        .filter((allocation) => allocation.allocation_status === "applied")
+        .map((allocation) => ({
+          id: `advance-${allocation.id}`,
+          periodMonth: allocation.period_month,
+          amount: allocation.amount,
+          source: "advance" as const,
+          method: "advance" as const,
+          paidAt: allocation.allocated_at,
+          status:
+            (feeRecordById.get(allocation.monthly_fee_record_id)?.balance_amount ?? 0) === 0
+              ? "paid" as const
+              : "partial" as const,
+        })),
+    ].toSorted((left, right) => right.paidAt.localeCompare(left.paidAt))
 
     return {
       resident: {
@@ -959,10 +1051,14 @@ export class PaymentsService {
         joinedOn: resident.joined_on,
         currentPeriodMonth: billing.currentPeriodMonth,
         currentDueDate: billing.currentDueDate,
-        nextDueDate: resolveNextBillingDueDate({ billing }),
+        nextDueDate: resolveNextPaymentDate({
+          joinedOn: resident.joined_on,
+          feeRecords: feeRecords.data,
+        }),
         generatedCurrentDue: false,
       },
       primaryDueRecord: unpaidFeeRecords[0] ?? null,
+      feeHistory,
       feeRecords: feeRecords.data,
       payments: payments.data,
       invoices,
@@ -1189,7 +1285,7 @@ export class PaymentsService {
       updated_by: context.authUser.id,
     })
 
-    if (isSupabaseQueryClient(this.db)) {
+    if (isSupabaseQueryClient(this.db) && !values.skipAutomaticAdvanceAllocation) {
       try {
         const { AdvanceLedgerService } = await import("@/services/advance-ledger")
         await new AdvanceLedgerService(this.db).allocateForResidentSystem({
@@ -1924,4 +2020,10 @@ function compareFeeRecordsByDueDate(
 
 function isDateBefore(left: string, right: string) {
   return left < right
+}
+
+function metadataRecord(value: Json): Record<string, Json | undefined> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...value }
+    : {}
 }

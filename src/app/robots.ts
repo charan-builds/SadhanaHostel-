@@ -20,7 +20,6 @@ export default function robots(): MetadataRoute.Robots {
         "/",
         "/about",
         "/rooms",
-        "/fees",
         "/admissions",
         "/facilities",
         "/gallery",

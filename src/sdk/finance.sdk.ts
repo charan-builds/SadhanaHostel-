@@ -23,6 +23,10 @@ import type {
   FinanceDashboardInput,
 } from "@/validations/finance.validation"
 import type { AutomationRunResult } from "@/types/operations"
+import type {
+  FinancialCorrectionInput,
+  FinancialCorrectionResult,
+} from "@/validations/financial-correction.validation"
 
 export const financeSdk = {
   dashboard(params: FinanceDashboardInput) {
@@ -113,5 +117,12 @@ export const financeSdk = {
       nextDueDate: string | null
       refunds: AdvancePaymentRefundRow[]
     }>("/api/finance/advance-ledger/settlement", params)
+  },
+  applyCorrection(input: FinancialCorrectionInput) {
+    return apiClient.post<FinancialCorrectionResult, FinancialCorrectionInput>(
+      "/api/finance/corrections",
+      input,
+      { retry: 0 }
+    )
   },
 }

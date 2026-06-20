@@ -48,7 +48,6 @@ type FormValues = z.output<typeof formSchema>
 
 const missingLabels: Record<string, string> = {
   full_name: "Full name",
-  date_of_birth: "Date of birth",
   phone: "Phone",
   father_phone: "Father phone",
   mother_phone: "Mother phone",
@@ -70,8 +69,6 @@ export function ResidentOnboardingClient() {
     defaultValues: {
       fullName: "",
       preferredName: "",
-      gender: "",
-      dateOfBirth: "",
       phone: "",
       email: "",
       parentPhone: "",
@@ -97,8 +94,6 @@ export function ResidentOnboardingClient() {
     form.reset({
       fullName: resident.full_name ?? "",
       preferredName: resident.preferred_name ?? "",
-      gender: resident.gender ?? "",
-      dateOfBirth: resident.date_of_birth ?? "",
       phone: resident.phone ?? "",
       email: resident.email ?? "",
       parentPhone: resident.parent_phone ?? "",
@@ -263,8 +258,6 @@ export function ResidentOnboardingClient() {
               <div className="grid gap-4 md:grid-cols-2">
                 <Field form={form} name="fullName" label="Full name" />
                 <Field form={form} name="preferredName" label="Preferred name" />
-                <Field form={form} name="dateOfBirth" label="Date of birth" type="date" />
-                <Field form={form} name="gender" label="Gender" />
                 <Field form={form} name="phone" label="Phone" type="tel" />
                 <Field form={form} name="email" label="Email (optional)" type="email" />
                 <Field form={form} name="parentPhone" label="Father phone" type="tel" />

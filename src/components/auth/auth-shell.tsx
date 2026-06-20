@@ -11,11 +11,13 @@ export function AuthShell({
   description,
   children,
   logoUrl,
+  portalLabel,
 }: {
   title: string
   description: string
   children: ReactNode
   logoUrl?: string | null
+  portalLabel?: string
 }) {
   return (
     <main className="saas-grid-bg flex min-h-svh bg-background px-4 py-8 sm:px-6">
@@ -27,22 +29,19 @@ export function AuthShell({
                 href="/"
                 className="inline-flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-white/40"
               >
-                <BrandMark logoUrl={logoUrl} className="bg-sidebar-primary text-sidebar-primary-foreground shadow-lg" />
+                <BrandMark logoUrl={logoUrl} variant="dark" />
                 <span>
                   <span className="block text-sm font-semibold">{hostelConfig.name}</span>
                   <span className="block text-xs text-sidebar-foreground/65">{hostelConfig.location.city}</span>
                 </span>
               </Link>
 
-              <div className="mt-18 grid min-h-72 place-items-center">
-                <div className="relative">
-                  <div className="absolute inset-0 animate-pulse rounded-[2rem] bg-sidebar-primary/25 blur-2xl" />
-                  <div className="relative rounded-[2rem] border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl">
-                    <BrandMark logoUrl={logoUrl} className="size-24 rounded-3xl bg-sidebar-primary text-3xl text-sidebar-primary-foreground shadow-2xl" />
-                  </div>
-                  <div className="absolute -right-8 -top-8 size-16 rounded-full border border-white/15 bg-white/10" />
-                  <div className="absolute -bottom-6 -left-10 size-24 rounded-full border border-sidebar-primary/30 bg-sidebar-primary/10" />
-                </div>
+              <div className="mt-12 grid min-h-96 place-items-center">
+                <BrandMark
+                  logoUrl={logoUrl}
+                  variant="login"
+                  className="size-80 max-w-full"
+                />
               </div>
             </div>
 
@@ -62,14 +61,26 @@ export function AuthShell({
                   Public website
                 </Link>
                 <Link href="/" className="inline-flex items-center gap-2 font-semibold lg:hidden">
-                  <BrandMark logoUrl={logoUrl} className="size-9" />
+                  <BrandMark logoUrl={logoUrl} variant="light" className="size-9" />
                   {hostelConfig.shortName}
                 </Link>
               </div>
 
-              <div>
-                <h1 className="text-gradient text-3xl font-semibold tracking-tight">{title}</h1>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+              <div className={portalLabel ? "flex items-center gap-4" : undefined}>
+                {portalLabel ? (
+                  <BrandMark logoUrl={logoUrl} variant="light" className="size-14" />
+                ) : null}
+                <div>
+                  {portalLabel ? (
+                    <p className="text-sm font-semibold text-muted-foreground">
+                      {hostelConfig.shortName}
+                    </p>
+                  ) : null}
+                  <h1 className="text-gradient text-3xl font-semibold tracking-tight">
+                    {portalLabel ?? title}
+                  </h1>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+                </div>
               </div>
 
               <div className="mt-8">{children}</div>

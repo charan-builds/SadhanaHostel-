@@ -64,6 +64,64 @@ export function resolveNextBillingDueDate(input: {
   return input.billing.nextPeriodDueDate
 }
 
+export function resolveNextPaymentDate(input: {
+  joinedOn: string | null | undefined
+  feeRecords: Array<{
+    period_month: string
+    due_date: string
+    balance_amount: number
+    status: string
+  }>
+  today?: string
+}) {
+  const today = input.today ?? todayDateOnly()
+  const openRecord = input.feeRecords
+    .filter(
+      (record) =>
+        record.balance_amount > 0 &&
+        ["pending", "partial", "overdue"].includes(record.status)
+    )
+    .toSorted((left, right) => left.period_month.localeCompare(right.period_month))[0]
+
+  if (openRecord && openRecord.due_date >= today) {
+    return openRecord.due_date
+  }
+
+  const latestCleared = input.feeRecords
+    .filter((record) => record.balance_amount === 0 || record.status === "paid")
+    .toSorted((left, right) => right.period_month.localeCompare(left.period_month))[0]
+
+  if (latestCleared) {
+    const month = parseDateOnly(latestCleared.period_month)
+    let nextMonth = new Date(
+      Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)
+    )
+    let nextPaymentDate = buildBillingDateForMonth(
+      toPeriodMonth(nextMonth),
+      billingDayFromJoinedOn(input.joinedOn)
+    )
+
+    while (nextPaymentDate < today) {
+      nextMonth = new Date(
+        Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 1)
+      )
+      nextPaymentDate = buildBillingDateForMonth(
+        toPeriodMonth(nextMonth),
+        billingDayFromJoinedOn(input.joinedOn)
+      )
+    }
+
+    return nextPaymentDate
+  }
+
+  const billing = buildResidentBillingContext({
+    joinedOn: input.joinedOn,
+    today,
+  })
+
+  return resolveNextBillingDueDate({ billing, today })
+}
+
 export function toPeriodMonth(date: Date) {
   return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-01`
 }

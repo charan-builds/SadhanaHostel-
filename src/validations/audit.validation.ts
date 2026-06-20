@@ -14,6 +14,7 @@ export const auditListSchema = paginationSchema.extend({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
   actorUserId: uuidSchema.optional(),
+  recordId: uuidSchema.optional(),
   tableName: z.string().trim().max(120).optional(),
   action: z.string().trim().max(160).optional(),
   fromDate: isoDateSchema.optional(),

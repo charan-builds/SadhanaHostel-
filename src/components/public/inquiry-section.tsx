@@ -6,7 +6,6 @@ import { MapPin, MessageCircle, Phone, type LucideIcon } from "lucide-react"
 
 import { ContactInquiryForm } from "@/components/forms/contact-inquiry-form"
 import { callHref, hostelConfig, whatsappHref } from "@/constants/hostel"
-import { hostelImages } from "@/constants/hostel-images"
 import {
   trackContactAction,
   trackWhatsAppClick,
@@ -25,7 +24,7 @@ export function InquirySection() {
         >
           <div className="relative aspect-[4/3]">
             <Image
-              src={hostelImages.exterior}
+              src="/images/homewalp.jpeg"
               alt="Sadhana Boys Hostel view"
               fill
               className="object-cover"
@@ -53,7 +52,7 @@ export function InquirySection() {
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.55, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
         >
-          <ContactInquiryForm />
+          <ContactInquiryForm variant="homepage" />
         </motion.div>
       </div>
     </section>

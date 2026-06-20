@@ -121,7 +121,6 @@ describe("resident onboarding policy", () => {
   it("reports missing required profile fields without requiring document uploads", () => {
     const requirements = getResidentOnboardingRequirements({
       ...baseResident,
-      date_of_birth: null,
       parent_phone: null,
       emergency_contact_phone: null,
       aadhaar_document_id: null,
@@ -130,7 +129,6 @@ describe("resident onboarding policy", () => {
     })
 
     expect(requirements.canSubmitForVerification).toBe(false)
-    expect(requirements.missing).toContain("date_of_birth")
     expect(requirements.missing).toContain("father_phone")
     expect(requirements.missing).toContain("mother_phone")
     expect(requirements.missing as string[]).not.toContain("aadhaar_document")

@@ -7,7 +7,7 @@ import { Building2, ImageIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { fallbackGalleryItems } from "@/constants/public-content"
-import { formatGalleryCategory, hydrateGalleryItems } from "@/lib/public-gallery"
+import { formatGalleryCategory, hydratePublicGalleryItems } from "@/lib/public-gallery"
 import type { GalleryItem } from "@/types/frontend"
 
 export function GalleryPreview({
@@ -15,7 +15,7 @@ export function GalleryPreview({
 }: {
   galleryItems?: GalleryItem[]
 }) {
-  const previewItems = hydrateGalleryItems(galleryItems).slice(0, 6)
+  const previewItems = hydratePublicGalleryItems(galleryItems).slice(0, 6)
 
   return (
     <section className="bg-background py-14 sm:py-20">

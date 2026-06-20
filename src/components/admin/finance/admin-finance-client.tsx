@@ -76,16 +76,22 @@ import {
   type FinanceOwnerAnalytics,
   type ResidentFinanceSummary,
 } from "@/lib/finance/finance-dashboard"
+import type { Tables } from "@/types/database"
 import { useAuth } from "@/lib/auth"
 import { formatCurrency, formatDate, formatDateTime, humanizeEnum } from "@/lib/format"
 import { buildWhatsappUrl } from "@/lib/operations/whatsapp"
 import { cn } from "@/lib/utils"
 import {
+  useAdvanceLedger,
+  useAllocateAdvance,
+  useApplyFinancialCorrection,
+  useAuditLogs,
   useFinanceDashboard,
   useCollectionFollowups,
   useCompleteCollectionFollowup,
   useCreateCollectionFollowup,
   useRunFinanceAutomation,
+  useGenerateMonthlyFee,
   useRecordInPersonPayment,
   useResidentPaymentLedger,
 } from "@/hooks"
@@ -177,13 +183,18 @@ const EMPTY_ATTENTION: FinanceDashboard["attention"] = {
   low: [],
 }
 
-export function AdminFinanceClient() {
+export function AdminFinanceClient({
+  initialResidentId,
+}: {
+  initialResidentId?: string
+}) {
   const { organizationId, session } = useAuth()
   const hostelId = session?.hostelIds[0]
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<SmartFilter>("all")
-  const [selectedResident, setSelectedResident] =
-    useState<ResidentFinanceSummary | null>(null)
+  const [selectedResidentId, setSelectedResidentId] = useState<string | null>(
+    initialResidentId ?? null
+  )
   const [cashCollectionOpen, setCashCollectionOpen] = useState(false)
   const runAutomation = useRunFinanceAutomation()
   const today = todayDateOnly()
@@ -198,6 +209,8 @@ export function AdminFinanceClient() {
   )
   const finance = dashboard.data
   const financeRows = useMemo(() => finance?.residentFinance ?? [], [finance])
+  const selectedResident =
+    financeRows.find((row) => row.resident.id === selectedResidentId) ?? null
   const filteredRows = useMemo(
     () => filterFinanceRows(financeRows, search, filter, today),
     [filter, financeRows, search, today]
@@ -465,25 +478,25 @@ export function AdminFinanceClient() {
                   title="Critical"
                   description="Overdue more than 30 days"
                   rows={attention.critical}
-                  onOpen={setSelectedResident}
+                  onOpen={(row) => setSelectedResidentId(row.resident.id)}
                 />
                 <AttentionGroup
                   title="High"
                   description="Overdue 15-30 days"
                   rows={attention.high}
-                  onOpen={setSelectedResident}
+                  onOpen={(row) => setSelectedResidentId(row.resident.id)}
                 />
                 <AttentionGroup
                   title="Medium"
                   description="Overdue 7-15 days"
                   rows={attention.medium}
-                  onOpen={setSelectedResident}
+                  onOpen={(row) => setSelectedResidentId(row.resident.id)}
                 />
                 <AttentionGroup
                   title="Low"
                   description="Upcoming or newly due"
                   rows={attention.low}
-                  onOpen={setSelectedResident}
+                  onOpen={(row) => setSelectedResidentId(row.resident.id)}
                 />
               </div>
             </div>
@@ -571,7 +584,7 @@ export function AdminFinanceClient() {
                         <ResidentFinanceTableRow
                           key={row.resident.id}
                           row={row}
-                          onOpen={() => setSelectedResident(row)}
+                          onOpen={() => setSelectedResidentId(row.resident.id)}
                         />
                       ))}
                     </tbody>
@@ -583,7 +596,7 @@ export function AdminFinanceClient() {
                     <ResidentFinanceMobileCard
                       key={row.resident.id}
                       row={row}
-                      onOpen={() => setSelectedResident(row)}
+                      onOpen={() => setSelectedResidentId(row.resident.id)}
                     />
                   ))}
                 </div>
@@ -601,7 +614,7 @@ export function AdminFinanceClient() {
       <FinanceResidentDrawer
         row={selectedResident}
         open={Boolean(selectedResident)}
-        onOpenChange={(open) => !open && setSelectedResident(null)}
+        onOpenChange={(open) => !open && setSelectedResidentId(null)}
       />
       <CashCollectionDialog
         open={cashCollectionOpen}
@@ -1434,10 +1447,32 @@ function FinanceResidentDrawer({
         }
       : undefined
   )
+  const advanceLedger = useAdvanceLedger(
+    open && row
+      ? {
+          organizationId: row.resident.organization_id,
+          hostelId: row.resident.hostel_id ?? undefined,
+          residentId: row.resident.id,
+        }
+      : undefined
+  )
   const detailLedger = ledger.data
   const detailTimeline = detailLedger ? buildFinanceTimeline([detailLedger], 10) : []
   const [followupNote, setFollowupNote] = useState("")
   const [nextFollowupAt, setNextFollowupAt] = useState("")
+  const [correctionType, setCorrectionType] = useState<
+    "monthly_fee" | "advance_balance" | null
+  >(null)
+  const [correctionValue, setCorrectionValue] = useState("")
+  const [correctionReason, setCorrectionReason] = useState("")
+  const [feeAction, setFeeAction] = useState<"receive" | "advance" | null>(null)
+  const [feeAmount, setFeeAmount] = useState("")
+  const [feeMonth, setFeeMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [feePaymentDate, setFeePaymentDate] = useState(
+    () => new Date().toISOString().slice(0, 10)
+  )
+  const [feePaymentMode, setFeePaymentMode] = useState<"cash" | "upi" | "bank_transfer">("cash")
+  const [feeNotes, setFeeNotes] = useState("")
   const followups = useCollectionFollowups(
     open && row
       ? {
@@ -1448,10 +1483,188 @@ function FinanceResidentDrawer({
         }
       : undefined
   )
+  const correctionAudit = useAuditLogs(
+    "activity",
+    open && row
+      ? {
+          organizationId: row.resident.organization_id,
+          hostelId: row.resident.hostel_id ?? undefined,
+          recordId: row.resident.id,
+          tableName: "residents",
+          page: 1,
+          pageSize: 50,
+        }
+      : undefined
+  )
   const createFollowup = useCreateCollectionFollowup()
   const completeFollowup = useCompleteCollectionFollowup()
+  const applyCorrection = useApplyFinancialCorrection()
+  const generateMonthlyFee = useGenerateMonthlyFee()
+  const recordMonthlyFee = useRecordInPersonPayment()
+  const allocateAdvance = useAllocateAdvance()
   const openFollowup = followups.data?.find((followup) => followup.status === "open")
   const followupBusy = createFollowup.isPending || completeFollowup.isPending
+  const monthlyFee = row?.resident.monthly_fee_amount ?? row?.monthlyFee ?? 0
+  const currentAdvanceBalance =
+    advanceLedger.data?.balance.remainingAdvanceBalance ?? row?.advanceBalance ?? 0
+  const correctionLogs = (correctionAudit.data?.data ?? []).filter((log) =>
+    row ? isFinancialCorrectionForResident(log, row.resident.id) : false
+  )
+
+  function openCorrectionDialog(type: "monthly_fee" | "advance_balance") {
+    const currentValue = type === "monthly_fee" ? monthlyFee : currentAdvanceBalance
+
+    setCorrectionType(type)
+    setCorrectionValue(String(currentValue))
+    setCorrectionReason("")
+  }
+
+  function openFeeAction(type: "receive" | "advance") {
+    setFeeAction(type)
+    setFeeAmount(type === "advance" ? String(currentAdvanceBalance) : String(monthlyFee))
+    setFeeMonth(new Date().toISOString().slice(0, 7))
+    setFeePaymentDate(new Date().toISOString().slice(0, 10))
+    setFeePaymentMode("cash")
+    setFeeNotes("")
+  }
+
+  async function submitFeeAction() {
+    if (!row || !feeAction) {
+      return
+    }
+
+    const amount = Number(feeAmount)
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter an amount greater than zero.")
+      return
+    }
+
+    if (!/^\d{4}-\d{2}$/.test(feeMonth)) {
+      toast.error("Choose a valid fee month.")
+      return
+    }
+
+    if (feeAction === "advance" && amount > currentAdvanceBalance) {
+      toast.error("Adjustment amount exceeds available advance.")
+      return
+    }
+
+    const periodMonth = `${feeMonth}-01`
+
+    try {
+      const feeRecord = await generateMonthlyFee.mutateAsync({
+        organizationId: row.resident.organization_id,
+        hostelId: row.resident.hostel_id,
+        residentId: row.resident.id,
+        periodMonth,
+        dueDate: billingDateForMonth(feeMonth, row.resident.joined_on),
+        discountAmount: 0,
+        penaltyAmount: 0,
+        adjustmentAmount: 0,
+        advanceAdjustmentAmount: 0,
+        notes: feeNotes || undefined,
+        skipAutomaticAdvanceAllocation: true,
+      })
+
+      if (amount > feeRecord.balance_amount) {
+        toast.error(
+          `Amount exceeds the selected month outstanding of ${formatCurrency(feeRecord.balance_amount)}.`
+        )
+        return
+      }
+
+      if (feeAction === "receive") {
+        await recordMonthlyFee.mutateAsync({
+          organizationId: row.resident.organization_id,
+          hostelId: row.resident.hostel_id,
+          residentId: row.resident.id,
+          monthlyFeeRecordId: feeRecord.id,
+          amount,
+          paymentDate: feePaymentDate,
+          method: feePaymentMode,
+          notes: feeNotes || undefined,
+          isAdvance: false,
+          isPartial: amount < feeRecord.balance_amount,
+          idempotencyKey: `monthly-fee-${row.resident.id}-${periodMonth}-${Date.now()}`,
+        })
+        toast.success("Monthly fee received and financial dashboards updated.")
+      } else {
+        await allocateAdvance.mutateAsync({
+          organizationId: row.resident.organization_id,
+          hostelId: row.resident.hostel_id,
+          residentId: row.resident.id,
+          monthlyFeeRecordId: feeRecord.id,
+          amount,
+          notes: feeNotes || undefined,
+          limit: 1,
+        })
+        toast.success("Advance adjusted as fee without increasing revenue.")
+      }
+
+      await Promise.all([ledger.refetch(), advanceLedger.refetch()])
+      setFeeAction(null)
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to update the resident fee."
+      )
+    }
+  }
+
+  async function submitCorrection() {
+    if (!row || !correctionType) {
+      return
+    }
+
+    const nextValue = Number(correctionValue)
+    const reason = correctionReason.trim()
+
+    if (!Number.isFinite(nextValue) || nextValue < 0) {
+      toast.error("Enter a valid correction amount.")
+      return
+    }
+
+    if (correctionType === "monthly_fee" && nextValue <= 0) {
+      toast.error("Monthly fee must be greater than zero.")
+      return
+    }
+
+    const currentValue =
+      correctionType === "monthly_fee" ? monthlyFee : currentAdvanceBalance
+
+    if (Math.round(nextValue * 100) === Math.round(currentValue * 100)) {
+      toast.error("Enter a new value that differs from the current value.")
+      return
+    }
+
+    if (reason.length < 6) {
+      toast.error("Add a clear correction reason.")
+      return
+    }
+
+    try {
+      await applyCorrection.mutateAsync({
+        organizationId: row.resident.organization_id,
+        residentId: row.resident.id,
+        changeType: correctionType,
+        newValue: nextValue,
+        reason,
+      })
+      await Promise.all([
+        ledger.refetch(),
+        advanceLedger.refetch(),
+        correctionAudit.refetch(),
+      ])
+      toast.success("Financial correction applied and audit logged.")
+      setCorrectionType(null)
+      setCorrectionValue("")
+      setCorrectionReason("")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to apply financial correction."
+      )
+    }
+  }
 
   async function saveFollowup(status: "open" | "completed", scheduledAt?: string) {
     if (!row) {
@@ -1512,7 +1725,8 @@ function FinanceResidentDrawer({
                 <div className="min-w-0">
                   <SheetTitle className="truncate text-xl">{row.resident.full_name}</SheetTitle>
                   <SheetDescription className="mt-1">
-                    {row.resident.admission_number} · {row.resident.phone ?? "No phone"}
+                    {formatResidentSerial(row.resident)} · {row.resident.admission_number} ·{" "}
+                    {row.resident.phone ?? "No phone"}
                   </SheetDescription>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <StatusBadge status={row.resident.status} />
@@ -1523,12 +1737,81 @@ function FinanceResidentDrawer({
             </SheetHeader>
 
             <div className="grid gap-5 p-6">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <MiniMetric label="Monthly fee" value={formatCurrency(row.monthlyFee)} />
-                <MiniMetric label="Current due" value={formatCurrency(row.currentDue)} />
-                <MiniMetric label="Advance" value={formatCurrency(row.advanceBalance)} />
-                <MiniMetric label="Outstanding" value={formatCurrency(row.currentDue - row.advanceBalance)} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <MiniMetric label="Monthly fee" value={formatCurrency(monthlyFee)} large />
+                <MiniMetric label="Current due" value={formatCurrency(row.currentDue)} large />
+                <MiniMetric label="Advance" value={formatCurrency(currentAdvanceBalance)} large />
+                <MiniMetric
+                  label="Outstanding"
+                  value={formatCurrency(row.currentDue - currentAdvanceBalance)}
+                  large
+                />
+                <MiniMetric
+                  label="Next Payment Date"
+                  value={
+                    detailLedger?.billing.nextDueDate
+                      ? formatDate(detailLedger.billing.nextDueDate)
+                      : "Not scheduled"
+                  }
+                  large
+                  className="sm:col-span-2"
+                />
               </div>
+
+              <section className="rounded-xl border bg-card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold">Fee Collection</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Receive a monthly fee or consume available advance for a selected month.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => openFeeAction("receive")}>
+                      <Banknote className="size-4" aria-hidden="true" />
+                      Receive Monthly Fee
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={currentAdvanceBalance <= 0}
+                      onClick={() => openFeeAction("advance")}
+                    >
+                      <WalletCards className="size-4" aria-hidden="true" />
+                      Adjust Advance as Fee
+                    </Button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border bg-card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold">Controlled Financial Corrections</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Adjust current resident fee or advance balance with reasoned audit history.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => openCorrectionDialog("monthly_fee")}
+                    >
+                      <IndianRupee className="size-4" aria-hidden="true" />
+                      Edit Monthly Fee
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => openCorrectionDialog("advance_balance")}
+                    >
+                      <WalletCards className="size-4" aria-hidden="true" />
+                      Edit Advance
+                    </Button>
+                  </div>
+                </div>
+              </section>
 
               <section className="rounded-xl border bg-card p-4">
                 <h3 className="font-semibold">Payment Behaviour</h3>
@@ -1544,8 +1827,11 @@ function FinanceResidentDrawer({
                 <TabsList className="w-full overflow-x-auto">
                   <TabsTrigger value="timeline">Timeline</TabsTrigger>
                   <TabsTrigger value="payments">Payments</TabsTrigger>
+                  <TabsTrigger value="fee-history">Fee History</TabsTrigger>
+                  <TabsTrigger value="advance">Advance</TabsTrigger>
                   <TabsTrigger value="invoices">Invoices</TabsTrigger>
                   <TabsTrigger value="dues">Dues</TabsTrigger>
+                  <TabsTrigger value="corrections">Corrections</TabsTrigger>
                 </TabsList>
                 <TabsContent value="timeline">
                   <DrawerDetailState loading={ledger.isLoading} hasLedger={Boolean(detailLedger)}>
@@ -1565,6 +1851,47 @@ function FinanceResidentDrawer({
                         detail: `${humanizeEnum(payment.method)} · ${formatDateTime(financePaymentDate(payment))}`,
                         status: payment.status,
                       }))}
+                    />
+                  </DrawerDetailState>
+                </TabsContent>
+                <TabsContent value="fee-history">
+                  <DrawerDetailState loading={ledger.isLoading} hasLedger={Boolean(detailLedger)}>
+                    <DrawerList
+                      rows={(detailLedger?.feeHistory ?? []).slice(0, 12).map((entry) => ({
+                        id: entry.id,
+                        title: `${formatFeeMonth(entry.periodMonth)} Fee ${entry.status === "paid" ? "Cleared" : "Partially Cleared"}`,
+                        detail: `${entry.source === "advance" ? "Paid from Advance" : `Paid by ${humanizeEnum(entry.method)}`} · ${formatDate(entry.paidAt)}`,
+                        status: entry.status,
+                      }))}
+                    />
+                  </DrawerDetailState>
+                </TabsContent>
+                <TabsContent value="advance">
+                  <DrawerDetailState
+                    loading={advanceLedger.isLoading}
+                    hasLedger={Boolean(advanceLedger.data)}
+                  >
+                    <DrawerList
+                      rows={[
+                        ...(advanceLedger.data?.deposits ?? []).slice(0, 6).map((deposit) => ({
+                          id: `deposit-${deposit.id}`,
+                          title: `Deposit ${formatCurrency(deposit.amount)}`,
+                          detail: `${humanizeEnum(deposit.payment_mode)} · ${formatDate(deposit.received_date)}`,
+                          status: deposit.status,
+                        })),
+                        ...(advanceLedger.data?.allocations ?? []).slice(0, 6).map((allocation) => ({
+                          id: `allocation-${allocation.id}`,
+                          title: `Consumed ${formatCurrency(allocation.amount)}`,
+                          detail: `${formatDate(allocation.period_month)} monthly fee allocation`,
+                          status: allocation.allocation_status,
+                        })),
+                        ...(advanceLedger.data?.refunds ?? []).slice(0, 6).map((refund) => ({
+                          id: `refund-${refund.id}`,
+                          title: `Refund ${formatCurrency(refund.amount)}`,
+                          detail: `${formatDate(refund.created_at)} · ${refund.reason}`,
+                          status: refund.status,
+                        })),
+                      ].slice(0, 12)}
                     />
                   </DrawerDetailState>
                 </TabsContent>
@@ -1590,6 +1917,14 @@ function FinanceResidentDrawer({
                         status: fee.status,
                       }))}
                     />
+                  </DrawerDetailState>
+                </TabsContent>
+                <TabsContent value="corrections">
+                  <DrawerDetailState
+                    loading={correctionAudit.isLoading}
+                    hasLedger={Boolean(correctionAudit.data)}
+                  >
+                    <CorrectionAuditList rows={correctionLogs} />
                   </DrawerDetailState>
                 </TabsContent>
               </Tabs>
@@ -1698,6 +2033,167 @@ function FinanceResidentDrawer({
           </>
         ) : null}
       </SheetContent>
+      <Dialog open={Boolean(correctionType)} onOpenChange={(nextOpen) => !nextOpen && setCorrectionType(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {correctionType === "monthly_fee"
+                ? "Edit Monthly Fee"
+                : "Edit Advance Balance"}
+            </DialogTitle>
+            <DialogDescription>
+              This creates an audit record with old value, new value, admin, timestamp, and reason.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="rounded-lg border bg-muted/35 p-3 text-sm">
+              <span className="text-muted-foreground">Current value: </span>
+              <span className="font-semibold">
+                {formatCurrency(
+                  correctionType === "monthly_fee" ? monthlyFee : currentAdvanceBalance
+                )}
+              </span>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="financial-correction-value">New value</Label>
+              <Input
+                id="financial-correction-value"
+                type="number"
+                min={0}
+                step={1}
+                value={correctionValue}
+                onChange={(event) => setCorrectionValue(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="financial-correction-reason">Reason</Label>
+              <Textarea
+                id="financial-correction-reason"
+                rows={4}
+                value={correctionReason}
+                onChange={(event) => setCorrectionReason(event.target.value)}
+                placeholder="Example: Wrong fee entered during admission."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCorrectionType(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={applyCorrection.isPending}
+              onClick={() => void submitCorrection()}
+            >
+              {applyCorrection.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+              )}
+              Apply Correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(feeAction)} onOpenChange={(nextOpen) => !nextOpen && setFeeAction(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {feeAction === "receive" ? "Receive Monthly Fee" : "Adjust Advance as Fee"}
+            </DialogTitle>
+            <DialogDescription>
+              {feeAction === "receive"
+                ? "Record a verified collection for the selected resident and month."
+                : "Reduce available advance and apply it to the selected month. Revenue will not increase."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="fee-action-amount">Amount</Label>
+              <Input
+                id="fee-action-amount"
+                type="number"
+                min={1}
+                step="0.01"
+                value={feeAmount}
+                onChange={(event) => setFeeAmount(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="fee-action-month">Month</Label>
+              <Input
+                id="fee-action-month"
+                type="month"
+                value={feeMonth}
+                onChange={(event) => setFeeMonth(event.target.value)}
+              />
+            </div>
+            {feeAction === "receive" ? (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="fee-action-date">Payment date</Label>
+                  <Input
+                    id="fee-action-date"
+                    type="date"
+                    value={feePaymentDate}
+                    onChange={(event) => setFeePaymentDate(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="fee-action-mode">Payment mode</Label>
+                  <Select
+                    value={feePaymentMode}
+                    onValueChange={(value) =>
+                      setFeePaymentMode(value as "cash" | "upi" | "bank_transfer")
+                    }
+                  >
+                    <SelectTrigger id="fee-action-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="bank_transfer">Bank</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : null}
+            <div className="grid gap-2">
+              <Label htmlFor="fee-action-notes">Notes</Label>
+              <Textarea
+                id="fee-action-notes"
+                rows={3}
+                value={feeNotes}
+                onChange={(event) => setFeeNotes(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setFeeAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                generateMonthlyFee.isPending ||
+                recordMonthlyFee.isPending ||
+                allocateAdvance.isPending
+              }
+              onClick={() => void submitFeeAction()}
+            >
+              {generateMonthlyFee.isPending ||
+              recordMonthlyFee.isPending ||
+              allocateAdvance.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+              )}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   )
 }
@@ -1724,6 +2220,112 @@ function DrawerList({
       ))}
     </div>
   )
+}
+
+function CorrectionAuditList({ rows }: { rows: Tables<"audit_logs">[] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title="No corrections logged"
+        message="Monthly fee and advance balance corrections will appear here."
+      />
+    )
+  }
+
+  return (
+    <div className="grid gap-3">
+      {rows.map((row) => {
+        const oldValues = toPlainRecord(row.old_values)
+        const newValues = toPlainRecord(row.new_values)
+        const metadata = toPlainRecord(row.metadata)
+        const oldAmount = Number(
+          oldValues.monthly_fee_amount ?? oldValues.remaining_advance_balance ?? 0
+        )
+        const newAmount = Number(
+          newValues.monthly_fee_amount ?? newValues.remaining_advance_balance ?? 0
+        )
+        const reason =
+          typeof metadata.reason === "string" ? metadata.reason : "No reason saved"
+        const adminName =
+          typeof metadata.adminName === "string" ? metadata.adminName : "Hostel admin"
+
+        return (
+          <article key={row.id} className="rounded-xl border bg-card p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">
+                  {row.action === "finance_correction.monthly_fee_updated"
+                    ? "Monthly fee correction"
+                    : "Advance balance correction"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatCurrency(oldAmount)} to {formatCurrency(newAmount)}
+                </p>
+              </div>
+              <Badge variant="secondary">{formatDateTime(row.created_at)}</Badge>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">{reason}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Admin: {adminName}
+            </p>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function isFinancialCorrectionForResident(
+  log: Tables<"audit_logs">,
+  residentId: string
+) {
+  if (!log.action.startsWith("finance_correction.")) {
+    return false
+  }
+
+  if (log.record_id === residentId) {
+    return true
+  }
+
+  return toPlainRecord(log.metadata).residentId === residentId
+}
+
+function toPlainRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function formatFeeMonth(periodMonth: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${periodMonth.slice(0, 7)}-01T00:00:00.000Z`))
+}
+
+function billingDateForMonth(month: string, joinedOn: string | null) {
+  const requestedMonth = new Date(`${month}-01T00:00:00.000Z`)
+  const requestedDay = joinedOn ? Number(joinedOn.slice(8, 10)) : 10
+  const lastDay = new Date(
+    Date.UTC(
+      requestedMonth.getUTCFullYear(),
+      requestedMonth.getUTCMonth() + 1,
+      0
+    )
+  ).getUTCDate()
+  const day = Math.min(Math.max(1, requestedDay || 10), lastDay)
+
+  return `${month}-${String(day).padStart(2, "0")}`
+}
+
+function formatResidentSerial(resident: Tables<"residents">) {
+  const metadata = toPlainRecord(resident.metadata)
+  const serial = Number(metadata.resident_serial)
+
+  return Number.isInteger(serial) && serial > 0
+    ? `R${String(serial).padStart(4, "0")}`
+    : "--"
 }
 
 function DrawerDetailState({
@@ -1846,11 +2448,36 @@ function ScorePill({
   )
 }
 
-function MiniMetric({ label, value }: { label: string; value: string | number }) {
+function MiniMetric({
+  label,
+  value,
+  large = false,
+  className,
+}: {
+  label: string
+  value: string | number
+  large?: boolean
+  className?: string
+}) {
   return (
-    <div className="rounded-lg border bg-background/70 px-3 py-2">
+    <div
+      className={cn(
+        "rounded-lg border bg-background/70 px-3 py-2",
+        large && "flex min-h-32 min-w-0 flex-col justify-center px-5 py-6",
+        className
+      )}
+    >
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
+      <p
+        className={cn(
+          "mt-1 text-sm font-semibold",
+          large
+            ? "whitespace-normal [overflow-wrap:anywhere] text-2xl leading-snug"
+            : "truncate"
+        )}
+      >
+        {value}
+      </p>
     </div>
   )
 }

@@ -446,6 +446,64 @@ describe("ResidentsService", () => {
     expect(harness.residentInviteService.createResidentInvite).not.toHaveBeenCalled()
   })
 
+  it("uses the paid first-month amount as the admission financial truth", async () => {
+    const harness = createServiceHarness()
+    const draftResident = residentFixture({
+      status: "pending_finance",
+      monthly_fee_amount: 3500,
+    })
+    const feeRecord = monthlyFeeRecordFixture({
+      base_amount: 3500,
+      total_amount: 3500,
+      balance_amount: 3500,
+    })
+    const pendingPayment = paymentFixture({
+      monthly_fee_record_id: feeRecord.id,
+      amount: 3500,
+      status: "pending",
+      invoice_id: null,
+    })
+    const verifiedPayment = paymentFixture({
+      ...pendingPayment,
+      status: "verified",
+      invoice_id: "invoice-fee-1",
+    })
+
+    harness.residentsRepository.create.mockResolvedValue(draftResident)
+    harness.residentsRepository.getById.mockResolvedValue(draftResident)
+    harness.paymentsRepository.createFeeRecord.mockResolvedValue(feeRecord)
+    harness.paymentsRepository.create.mockResolvedValue(pendingPayment)
+    harness.paymentsRepository.verify.mockResolvedValue(verifiedPayment)
+    harness.paymentsRepository.getById.mockResolvedValue(verifiedPayment)
+
+    await harness.service.createResident({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      fullName: "Consistent Fee Resident",
+      phone: "+91 90000 01018",
+      residentType: "student",
+      monthlyFeeAmount: HOSTEL_FEES.student,
+      firstMonthFeeStatus: "paid",
+      firstMonthFeeAmount: 3500,
+    })
+
+    expect(harness.residentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ monthly_fee_amount: 3500 })
+    )
+    expect(harness.paymentsRepository.createFeeRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        base_amount: 3500,
+        total_amount: 3500,
+      })
+    )
+    expect(harness.paymentsRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 3500,
+        is_advance: false,
+      })
+    )
+  })
+
   it("marks admission pending_finance when receipt storage fails", async () => {
     const harness = createServiceHarness()
     const draftResident = residentFixture({ status: "pending_finance" })

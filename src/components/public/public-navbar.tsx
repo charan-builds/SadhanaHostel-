@@ -33,7 +33,7 @@ export function PublicNavbar({ logoUrl }: { logoUrl?: string | null }) {
           className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           aria-label={`${hostelConfig.name} home`}
         >
-          <BrandMark logoUrl={logoUrl} />
+          <BrandMark logoUrl={logoUrl} variant="light" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold leading-5 text-foreground sm:text-base">
               {hostelConfig.name}

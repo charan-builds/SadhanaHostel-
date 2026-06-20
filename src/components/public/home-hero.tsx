@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
+import { ClipboardCheck, MapPin, MessageCircle, Navigation, Phone } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { callHref, hostelConfig, mapSearchHref, whatsappHref } from "@/constants/hostel"
@@ -67,6 +67,12 @@ export function HomeHero({
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button asChild size="lg" className="h-11 px-4">
+              <a href="#inquiry" aria-label="Check room availability">
+                <ClipboardCheck className="size-4" aria-hidden="true" />
+                Check Availability
+              </a>
+            </Button>
             <Button asChild size="lg" className="h-11 px-4">
               <a href={callHref} aria-label={`Call ${hostelConfig.name}`}>
                 <Phone className="size-4" aria-hidden="true" />

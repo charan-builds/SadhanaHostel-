@@ -42,6 +42,7 @@ export type ListResidentsFilters = PaginationParams & {
   organizationId: string
   hostelId?: string
   status?: ResidentStatus
+  onboardingStatus?: ResidentOnboardingStatus
   residentType?: ResidentType
   search?: string
 }
@@ -53,7 +54,7 @@ export class ResidentsRepository {
     const { page, pageSize, from, to } = normalizePagination(filters)
     const search = sanitizeSearchTerm(filters.search)
 
-    let query = this.db
+    let query = this.residentsDb()
       .from("residents")
       .select("*", { count: "exact" })
       .eq("organization_id", filters.organizationId)
@@ -66,6 +67,10 @@ export class ResidentsRepository {
 
     if (filters.status) {
       query = query.eq("status", filters.status)
+    }
+
+    if (filters.onboardingStatus) {
+      query = query.eq("onboarding_status", filters.onboardingStatus)
     }
 
     if (filters.residentType) {
@@ -85,9 +90,42 @@ export class ResidentsRepository {
     }
 
     return {
-      data: data ?? [],
+      data: (data ?? []) as ResidentRow[],
       meta: createPaginationMeta(count ?? 0, page, pageSize),
     }
+  }
+
+  async nextSerialNumber(organizationId: string) {
+    const { data, error } = await this.db
+      .from("residents")
+      .select("metadata")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .range(0, 50_000)
+
+    if (error) {
+      throwRepositoryError(error, "Unable to allocate resident serial number.")
+    }
+
+    const residents = data ?? []
+
+    if (residents.length === 0) {
+      return 1
+    }
+
+    const highestSerial = residents.reduce((highest, resident) => {
+      const metadata =
+        resident.metadata &&
+        typeof resident.metadata === "object" &&
+        !Array.isArray(resident.metadata)
+          ? resident.metadata
+          : {}
+      const serial = Number(metadata.resident_serial)
+
+      return Number.isInteger(serial) && serial > highest ? serial : highest
+    }, 0)
+
+    return highestSerial > 0 ? highestSerial + 1 : residents.length + 1
   }
 
   async getById(residentId: string, organizationId?: string) {

@@ -86,7 +86,22 @@ export const advanceAllocationRunSchema = z.object({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
   residentId: uuidSchema.optional(),
+  monthlyFeeRecordId: uuidSchema.optional(),
+  amount: moneySchema
+    .refine((value) => value > 0, "Adjustment amount must be greater than 0.")
+    .optional(),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+}).superRefine((value, context) => {
+  const targeted = Boolean(value.monthlyFeeRecordId || value.amount)
+
+  if (targeted && (!value.residentId || !value.monthlyFeeRecordId || !value.amount)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["monthlyFeeRecordId"],
+      message: "Resident, monthly fee record, and amount are required for an adjustment.",
+    })
+  }
 })
 
 export const advanceRefundCreateSchema = z.object({

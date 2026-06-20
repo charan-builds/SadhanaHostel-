@@ -72,7 +72,8 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
         }
       />
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-5">
+        <DetailCard label="Resident Serial" value={formatResidentSerial(resident.data.metadata)} />
         <DetailCard label="Admission" value={resident.data.admission_number} />
         <DetailCard label="Phone" value={resident.data.phone ?? "-"} />
         <DetailCard label="Joined" value={formatDate(resident.data.joined_on)} />
@@ -131,6 +132,18 @@ export function ResidentDetailClient({ residentId }: { residentId: string }) {
       </DataTableShell>
     </ResponsiveContainer>
   )
+}
+
+function formatResidentSerial(metadata: unknown) {
+  const record =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata as Record<string, unknown>
+      : {}
+  const value = Number(record.resident_serial)
+
+  return Number.isInteger(value) && value > 0
+    ? `R${String(value).padStart(4, "0")}`
+    : "-"
 }
 
 function DetailCard({ label, value }: { label: string; value: string | number }) {

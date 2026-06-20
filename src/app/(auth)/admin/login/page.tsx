@@ -22,7 +22,8 @@ export default async function AdminLoginPage() {
 
   return (
     <AuthShell
-      title="Admin portal sign in"
+      title="Admin Portal"
+      portalLabel="Admin Portal"
       description="Secure access for hostel owners, admins, and authorized staff."
       logoUrl={logoUrl}
     >

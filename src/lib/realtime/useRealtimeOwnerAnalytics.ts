@@ -16,6 +16,7 @@ const OWNER_ANALYTICS_REALTIME_EVENTS = [
   "reservation.expired",
   "reservation.converted",
   "payment.status_changed",
+  "resident.financial_corrected",
   "room.allocation_changed",
 ] as const
 

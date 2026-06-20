@@ -18,6 +18,7 @@ import type {
   FinanceAutomationRunInput,
   FinanceDashboardInput,
 } from "@/validations/finance.validation"
+import type { FinancialCorrectionInput } from "@/validations/financial-correction.validation"
 
 export function useFinanceDashboard(params: FinanceDashboardInput | undefined) {
   return useQuery({
@@ -158,6 +159,26 @@ export function useRecordAdvanceDeposit() {
           hostelId: input.hostelId,
         }),
       })
+    },
+  })
+}
+
+export function useApplyFinancialCorrection() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: FinancialCorrectionInput) => financeSdk.applyCorrection(input),
+    onSuccess: (result) => {
+      const scope = {
+        organizationId: result.organizationId,
+        hostelId: result.hostelId,
+      }
+
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.residents.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(scope) })
+      void queryClient.invalidateQueries({ queryKey: ["audit"] })
     },
   })
 }

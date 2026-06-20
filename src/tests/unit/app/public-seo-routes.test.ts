@@ -78,7 +78,6 @@ describe("public SEO metadata routes", () => {
         expect(urls).toContain("https://sadhanaboyshostel.in/student-hostel-pulivendula")
         expect(urls).toContain("https://sadhanaboyshostel.in/employee-hostel-pulivendula")
         expect(urls).toContain("https://sadhanaboyshostel.in/rooms")
-        expect(urls).toContain("https://sadhanaboyshostel.in/fees")
         expect(urls).toContain("https://sadhanaboyshostel.in/admissions")
         expect(urls).toContain("https://sadhanaboyshostel.in/privacy")
         expect(urls).not.toContain("https://sadhanaboyshostel.in/hostel-in-pulivendula")
@@ -141,7 +140,6 @@ describe("public SEO metadata routes", () => {
             "/student-hostel-pulivendula",
             "/employee-hostel-pulivendula",
             "/rooms",
-            "/fees",
             "/admissions",
             "/privacy",
           ])
@@ -194,7 +192,7 @@ describe("public SEO metadata routes", () => {
         NEXT_PUBLIC_LAUNCH_MODE: "production",
       },
       () => {
-        expect(absoluteUrl("/fees")).toBe("https://sadhanaboyshostel.in/fees")
+        expect(absoluteUrl("/admissions")).toBe("https://sadhanaboyshostel.in/admissions")
         expect(sitemap().every((entry) => entry.url.startsWith("https://"))).toBe(true)
       }
     )

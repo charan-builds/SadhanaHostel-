@@ -75,6 +75,13 @@ export const residentsSdk = {
     })
   },
 
+  purge(input: ResidentIdMutationInput) {
+    return apiClient.delete<Tables<"residents">>(
+      `/api/residents/${input.residentId}/purge`,
+      { organizationId: input.organizationId }
+    )
+  },
+
   checkout(input: CheckoutResidentInput) {
     const { residentId, ...body } = input
 

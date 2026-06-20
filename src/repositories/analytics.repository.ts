@@ -7,7 +7,7 @@ import { throwRepositoryError, type AppSupabaseClient } from "./types"
 
 export type RecentPayment = Pick<
   Tables<"payments">,
-  "id" | "resident_id" | "amount" | "method" | "status" | "created_at" | "verified_at"
+  "id" | "resident_id" | "amount" | "method" | "status" | "created_at" | "verified_at" | "is_advance"
 >
 
 export type RecentLeave = Pick<
@@ -306,6 +306,7 @@ export class AnalyticsRepository {
       .select("id", { count: "exact" })
       .eq("organization_id", organizationId)
       .in("status", ["initiated", "pending"])
+      .eq("is_advance", false)
       .is("deleted_at", null)
 
     if (hostelId) {
@@ -401,7 +402,7 @@ export class AnalyticsRepository {
   async listRecentPayments(organizationId: string, hostelId?: string, limit = 5) {
     let query = this.db
       .from("payments")
-      .select("id,resident_id,amount,method,status,created_at,verified_at")
+      .select("id,resident_id,amount,method,status,created_at,verified_at,is_advance")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
@@ -450,7 +451,7 @@ export class AnalyticsRepository {
   ) {
     let query = this.db
       .from("payments")
-      .select("amount,status,method,created_at,verified_at")
+      .select("amount,status,method,created_at,verified_at,is_advance")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .or(
@@ -481,7 +482,7 @@ export class AnalyticsRepository {
   ) {
     let query = this.db
       .from("payments")
-      .select("amount,status,method,created_at,verified_at")
+      .select("amount,status,method,created_at,verified_at,is_advance")
       .eq("organization_id", organizationId)
       .eq("status", "verified")
       .gte("verified_at", fromDate)

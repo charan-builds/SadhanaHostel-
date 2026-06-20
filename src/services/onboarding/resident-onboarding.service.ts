@@ -112,8 +112,6 @@ export class ResidentOnboardingService {
       {
         full_name: values.fullName,
         preferred_name: values.preferredName ?? null,
-        gender: values.gender ?? null,
-        date_of_birth: values.dateOfBirth,
         phone: values.phone,
         email: values.email ?? null,
         parent_name: "Father",

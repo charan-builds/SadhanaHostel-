@@ -140,7 +140,6 @@ export function AdminOnboardingVerificationClient() {
                   {residents.map((resident) => {
                     const profileComplete = Boolean(
                       resident.full_name &&
-                        resident.date_of_birth &&
                         resident.phone &&
                         resident.parent_phone &&
                         resident.emergency_contact_phone &&

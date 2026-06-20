@@ -490,6 +490,14 @@ export class InvoicesService {
 
   private async prepareInvoicePdfForDownload(invoice: InvoiceRow, actorUserId: string) {
     let readyInvoice = invoice
+    const invoiceMetadata = recordFromUnknown(invoice.metadata)
+
+    if (invoiceMetadata.pdf_regeneration_required === true) {
+      readyInvoice = await this.ensureExistingInvoicePdf(readyInvoice, actorUserId, {
+        force: true,
+      })
+    }
+
     let storagePath = await this.resolveInvoicePdfStoragePath(readyInvoice)
 
     if (!storagePath) {
@@ -694,14 +702,13 @@ export class InvoicesService {
       return invoice
     }
 
-    const existingDocument = options.force
-      ? null
-      : await this.adminInvoicesRepository.findInvoicePdfDocument(
-          invoice.id,
-          invoice.organization_id
-        )
+    const existingDocument =
+      await this.adminInvoicesRepository.findInvoicePdfDocument(
+        invoice.id,
+        invoice.organization_id
+      )
 
-    if (existingDocument) {
+    if (existingDocument && !options.force) {
       return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
         pdf_document_id: existingDocument.id,
         pdf_storage_path: existingDocument.storage_path,
@@ -720,6 +727,18 @@ export class InvoicesService {
     const pdf = await this.pdfService.render(templateData)
 
     await this.adminStorageService.uploadInvoicePdf(storagePath, pdf, { upsert: true })
+
+    if (existingDocument) {
+      return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
+        pdf_document_id: existingDocument.id,
+        pdf_storage_path: storagePath,
+        metadata: {
+          ...recordFromUnknown(invoice.metadata),
+          pdf_regeneration_required: false,
+        },
+        updated_by: actorUserId,
+      })
+    }
 
     const document = await this.adminInvoicesRepository.createDocument({
       organization_id: invoice.organization_id,
@@ -748,6 +767,10 @@ export class InvoicesService {
     return this.adminInvoicesRepository.update(invoice.id, invoice.organization_id, {
       pdf_document_id: document.id,
       pdf_storage_path: storagePath,
+      metadata: {
+        ...recordFromUnknown(invoice.metadata),
+        pdf_regeneration_required: false,
+      },
       updated_by: actorUserId,
     })
   }

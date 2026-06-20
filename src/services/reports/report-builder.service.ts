@@ -148,7 +148,9 @@ export class ReportBuilderService {
         .order(dateColumn, { ascending: false })
 
       if (values.dateBasis === "revenue") {
-        query = query.eq("status", "verified").not("verified_at", "is", null)
+        query = query
+          .eq("status", "verified")
+          .not("verified_at", "is", null)
       }
       if (values.hostelId) query = query.eq("hostel_id", values.hostelId)
       if (range.fromDate) query = query.gte(dateColumn, range.fromDate)
@@ -235,6 +237,7 @@ export class ReportBuilderService {
         .from("invoices")
         .select("issue_date,due_date,invoice_number,resident_id,monthly_fee_record_id,subtotal_amount,discount_amount,tax_amount,total_amount,paid_amount,balance_amount,status,pdf_document_id")
         .eq("organization_id", values.organizationId)
+        .not("monthly_fee_record_id", "is", null)
         .is("deleted_at", null)
         .order("issue_date", { ascending: false })
 

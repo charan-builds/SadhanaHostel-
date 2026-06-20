@@ -24,6 +24,7 @@ const ADMISSIONS_REALTIME_EVENTS = [
   "room.transfer_completed",
   "resident.created",
   "resident.updated",
+  "resident.financial_corrected",
   "resident.deactivated",
   "resident.checked_out",
   "resident.invite_created",
@@ -97,6 +98,7 @@ function getAdmissionsInvalidationKeys(input: {
       ]
     case "resident.created":
     case "resident.updated":
+    case "resident.financial_corrected":
     case "resident.deactivated":
     case "resident.checked_out":
       return [

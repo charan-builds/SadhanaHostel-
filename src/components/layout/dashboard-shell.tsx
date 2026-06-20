@@ -43,7 +43,7 @@ export function DashboardShell({
       <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl lg:block">
         <div className="flex h-full flex-col gap-6 p-5">
           <Link href="/" className="flex items-center gap-3 font-semibold">
-            <BrandMark logoUrl={logoUrl} className="size-9 bg-sidebar-primary text-sidebar-primary-foreground shadow-lg" />
+            <BrandMark logoUrl={logoUrl} variant="sidebar" className="size-9" />
             <span>{hostelConfig.shortName}</span>
           </Link>
 
@@ -85,7 +85,7 @@ export function DashboardShell({
         <header className="border-b border-white/70 bg-white/78 shadow-sm shadow-slate-950/5 backdrop-blur-2xl lg:hidden">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <BrandMark logoUrl={logoUrl} className="size-8 text-xs" />
+              <BrandMark logoUrl={logoUrl} variant="light" className="size-8" />
               {hostelConfig.shortName}
             </Link>
             <div className="flex items-center gap-2">

@@ -16,6 +16,18 @@ export const residentListSchema = paginationSchema.extend({
   organizationId: uuidSchema,
   hostelId: uuidSchema.optional(),
   status: z.enum(Constants.public.Enums.resident_status_enum).optional(),
+  onboardingStatus: z
+    .enum([
+      "invited",
+      "activated",
+      "profile_incomplete",
+      "documents_pending",
+      "verification_pending",
+      "verified",
+      "rejected",
+      "suspended",
+    ])
+    .optional(),
   residentType: z.enum(Constants.public.Enums.resident_type_enum).optional(),
   search: z.string().trim().max(120).optional(),
 })
@@ -27,8 +39,6 @@ const createResidentBaseSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   preferredName: z.string().trim().max(80).optional(),
   residentType: z.enum(Constants.public.Enums.resident_type_enum).default("student"),
-  gender: z.string().trim().max(40).optional(),
-  dateOfBirth: z.string().optional(),
   joinedOn: dateOnlySchema.optional(),
   phone: phoneSchema,
   email: optionalEmailSchema,

@@ -111,6 +111,7 @@ export const recordInPersonPaymentSchema = z
     residentId: uuidSchema,
     monthlyFeeRecordId: uuidSchema.optional(),
     amount: moneySchema,
+    paymentDate: isoDateSchema.optional(),
     method: z.enum(["cash", "upi", "bank_transfer"]).default("cash"),
     idempotencyKey: z.string().trim().min(8).max(256).optional(),
     manualReference: z.string().trim().max(120).optional().or(z.literal("")),
@@ -238,6 +239,7 @@ export const generateMonthlyFeeSchema = z.object({
   advanceAdjustmentAmount: moneySchema.default(0),
   adjustmentReason: z.string().trim().max(500).optional(),
   notes: z.string().trim().max(1000).optional(),
+  skipAutomaticAdvanceAllocation: z.boolean().default(false),
 }).superRefine((value, context) => {
   const hasAdjustment =
     value.discountAmount > 0 ||

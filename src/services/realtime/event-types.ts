@@ -22,6 +22,7 @@ export type RealtimeEventType =
   | "resident.invite_used"
   | "resident.created"
   | "resident.updated"
+  | "resident.financial_corrected"
   | "resident.deactivated"
   | "resident.checked_out"
   | "staff.created"

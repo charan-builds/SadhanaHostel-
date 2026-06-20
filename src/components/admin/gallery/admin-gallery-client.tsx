@@ -5,7 +5,6 @@ import { useState, type FormEvent } from "react"
 import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/shared/status-badge"
-import { BrandMark } from "@/components/shared/brand-mark"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { APIErrorState } from "@/components/system/api-error-state"
 import { EmptyState } from "@/components/system/empty-state"
@@ -70,16 +69,6 @@ type GalleryDeleteTarget = {
 
 const gallerySlots: GallerySlot[] = [
   {
-    id: "logo",
-    title: "Hostel logo",
-    category: "logo",
-    aliases: ["logo", "brand"],
-    defaultTitle: "Sadhana Boys Hostel logo",
-    defaultAlt: "Sadhana Boys Hostel Pulivendula logo",
-    description: "Shown in the public website header, footer, mobile menu, and login pages.",
-    visibleIn: ["Public header", "Public footer", "Login pages", "Mobile menu"],
-  },
-  {
     id: "exterior-surroundings",
     title: "Exterior / Surroundings",
     category: "exterior-surroundings",
@@ -126,7 +115,6 @@ const gallerySlots: GallerySlot[] = [
 ]
 
 const galleryCategoryOptions = [
-  { value: "logo", label: "Logo" },
   { value: "student-room", label: "Student rooms" },
   { value: "employee-room", label: "Employee rooms" },
   { value: "open-space-terrace", label: "Open space / Terrace" },
@@ -171,6 +159,18 @@ function normalizeGallerySlotKey(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
+}
+
+function isLogoGalleryItem(item: Pick<SlotGalleryItem, "category" | "title">) {
+  const category = normalizeGallerySlotKey(item.category)
+  const title = normalizeGallerySlotKey(item.title)
+
+  return (
+    category === "logo" ||
+    category === "brand" ||
+    title.includes("logo") ||
+    title.includes("brand-mark")
+  )
 }
 
 function buildGalleryUploadTitle(
@@ -242,7 +242,9 @@ export function AdminGalleryClient() {
     )
   }
 
-  const items = galleryQuery.data?.data ?? []
+  const items = (galleryQuery.data?.data ?? []).filter(
+    (item) => !isLogoGalleryItem(item)
+  )
 
   function openSlotUpload(slot: GallerySlot) {
     setSelectedSlot(slot)
@@ -381,7 +383,7 @@ export function AdminGalleryClient() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {gallerySlots.map((slot) => {
               const slotItems = findGallerySlotItems(items, slot)
               const primarySlotItem = pickPreferredSlotItem(slotItems)
@@ -394,14 +396,7 @@ export function AdminGalleryClient() {
                   className="grid overflow-hidden rounded-xl border bg-background shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div className="relative aspect-video bg-muted">
-                    {slot.id === "logo" ? (
-                      <div className="grid size-full place-items-center bg-gradient-to-br from-primary/10 via-muted to-muted">
-                        <BrandMark
-                          logoUrl={primarySlotItem?.imageUrl}
-                          className="size-20 rounded-2xl text-2xl"
-                        />
-                      </div>
-                    ) : previewItems.length > 0 ? (
+                    {previewItems.length > 0 ? (
                       <div
                         className={`grid size-full gap-1 bg-muted p-1 ${
                           previewItems.length === 1 ? "grid-cols-1" : "grid-cols-2"
@@ -528,15 +523,15 @@ export function AdminGalleryClient() {
         <CardHeader>
           <CardTitle>Public Website Photo Source</CardTitle>
           <CardDescription>
-            Published uploads here feed the public logo, Student rooms, Employee rooms, Open space
-            / Terrace, and Exterior / Surroundings gallery groups. Each category can contain many
-            photos. If no gallery records exist, the site uses the local fallback photos below.
+            Published uploads here feed the Student rooms, Employee rooms, Open space / Terrace,
+            and Exterior / Surroundings gallery groups. Each category can contain many photos. If
+            no gallery records exist, the site uses the local fallback photos below.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {items.length > 0 ? (
             <div className="rounded-xl border bg-success-surface p-4 text-sm text-success-foreground">
-              Public pages are currently using {items.filter((item) => item.status === "published").length} published admin-uploaded photo(s) across the five approved gallery categories.
+              Public pages are currently using {items.filter((item) => item.status === "published").length} published admin-uploaded photo(s) across the approved gallery categories.
             </div>
           ) : (
             <div className="grid gap-4">

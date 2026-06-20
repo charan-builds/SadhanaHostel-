@@ -61,6 +61,10 @@ export class AuditRepository {
       query = query.eq("actor_user_id", filters.actorUserId)
     }
 
+    if (filters.recordId) {
+      query = query.eq("record_id", filters.recordId)
+    }
+
     if (filters.tableName) {
       query = query.eq("table_name", filters.tableName)
     } else if (categoryFilter.tables?.length) {

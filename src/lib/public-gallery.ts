@@ -61,12 +61,20 @@ export function hydrateGalleryItems(galleryItems?: GalleryItem[]) {
   }))
 }
 
+export function hydratePublicGalleryItems(galleryItems?: GalleryItem[]) {
+  const publicItems = hydrateGalleryItems(galleryItems).filter(isPublicGalleryPhoto)
+
+  return publicItems.length > 0
+    ? publicItems
+    : hydrateGalleryItems(fallbackGalleryItems).filter(isPublicGalleryPhoto)
+}
+
 export function pickGalleryImage(
   galleryItems: GalleryItem[] | undefined,
   preferredCategories: string[],
   fallbackIndex = 0
 ) {
-  const hydratedItems = hydrateGalleryItems(galleryItems)
+  const hydratedItems = hydratePublicGalleryItems(galleryItems)
   const normalizedCategories = preferredCategories
     .map(normalizeGalleryMatchKey)
     .filter(Boolean)
@@ -91,6 +99,16 @@ export function pickRoomGalleryImage(
 
 export function pickBrandLogo(galleryItems?: GalleryItem[]) {
   return findPreferredGalleryItem(hydrateGalleryItems(galleryItems), ["logo", "brand"])?.imageUrl
+}
+
+function isPublicGalleryPhoto(item: GalleryItem) {
+  const category = normalizeGalleryMatchKey(item.category)
+  const title = normalizeGalleryMatchKey(item.title)
+
+  return category !== "logo" &&
+    category !== "brand" &&
+    !title.includes("logo") &&
+    !title.includes("brand-mark")
 }
 
 export function formatGalleryCategory(category: string) {

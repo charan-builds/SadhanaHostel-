@@ -44,7 +44,7 @@ export function AdminMobileSidebar({ logoUrl }: { logoUrl?: string | null }) {
       <SheetContent side="left" className="w-[88vw] max-w-sm overflow-y-auto p-0">
         <SheetHeader className="border-b px-5 py-5 text-left">
           <SheetTitle className="flex items-center gap-3">
-            <BrandMark logoUrl={logoUrl} />
+            <BrandMark logoUrl={logoUrl} variant="light" />
             <span>{hostelConfig.shortName}</span>
           </SheetTitle>
           <SheetDescription>Admin dashboard navigation</SheetDescription>

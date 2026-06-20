@@ -69,13 +69,6 @@ const publicRoutes: Array<{
     images: [hostelImages.uploadedRooms, hostelImages.exterior],
   },
   {
-    path: "/fees",
-    changeFrequency: "weekly",
-    priority: 0.91,
-    lastModified: publicSiteContentLastModified,
-    images: [hostelImages.exterior],
-  },
-  {
     path: "/admissions",
     changeFrequency: "weekly",
     priority: 0.91,

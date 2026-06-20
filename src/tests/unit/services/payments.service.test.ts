@@ -48,6 +48,7 @@ function createServiceHarness() {
     listFeeRecords: vi.fn(),
     listResidentPayments: vi.fn(),
     listResidentInvoices: vi.fn(),
+    getResidentAdvanceBalance: vi.fn().mockResolvedValue(0),
   }
   const systemPaymentsRepository = {
     findFeeRecordByResidentPeriod: vi.fn(),
@@ -775,6 +776,7 @@ describe("PaymentsService", () => {
       meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
     })
     harness.paymentsRepository.listResidentInvoices.mockResolvedValue([])
+    harness.paymentsRepository.getResidentAdvanceBalance.mockResolvedValue(0)
 
     const ledger = await harness.service.getResidentLedger({
       organizationId: TEST_ORGANIZATION_ID,
@@ -830,6 +832,7 @@ describe("PaymentsService", () => {
       meta: { page: 1, pageSize: 100, total: 0, totalPages: 1 },
     })
     harness.paymentsRepository.listResidentInvoices.mockResolvedValue([])
+    harness.paymentsRepository.getResidentAdvanceBalance.mockResolvedValue(0)
 
     const ledger = await harness.service.getResidentLedger({
       organizationId: TEST_ORGANIZATION_ID,
@@ -846,6 +849,37 @@ describe("PaymentsService", () => {
     expect(ledger.billing.generatedCurrentDue).toBe(false)
     expect(ledger.billing.nextDueDate).toBe("2026-07-01")
     expect(ledger.totals.currentDue).toBe(0)
+  })
+
+  it("keeps advance out of fee payment totals and uses the advance ledger balance", async () => {
+    const harness = createServiceHarness()
+    const resident = residentFixture({ monthly_fee_amount: 4000 })
+    const feePayment = paymentFixture({
+      amount: 4000,
+      status: "verified",
+      is_advance: false,
+    })
+
+    harness.residentsRepository.getById.mockResolvedValue(resident)
+    harness.paymentsRepository.listFeeRecords.mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+    })
+    harness.paymentsRepository.listResidentPayments.mockResolvedValue({
+      data: [feePayment],
+      meta: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+    })
+    harness.paymentsRepository.listResidentInvoices.mockResolvedValue([])
+    harness.paymentsRepository.getResidentAdvanceBalance.mockResolvedValue(5000)
+
+    const ledger = await harness.service.getResidentLedger({
+      organizationId: TEST_ORGANIZATION_ID,
+      residentId: resident.id,
+    })
+
+    expect(ledger.payments).toEqual([feePayment])
+    expect(ledger.totals.verifiedPaid).toBe(4000)
+    expect(ledger.totals.advanceBalance).toBe(5000)
   })
 
   it("allows residents to submit payment proof before profile completion", async () => {

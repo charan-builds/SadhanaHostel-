@@ -3,7 +3,6 @@ import { HOSTEL_RULES_VERSION } from "@/constants/hostel"
 
 export type OnboardingRequirementKey =
   | "full_name"
-  | "date_of_birth"
   | "phone"
   | "father_phone"
   | "mother_phone"
@@ -26,7 +25,6 @@ export function getResidentOnboardingRequirements(
   const missing: OnboardingRequirementKey[] = []
 
   if (!resident.full_name) missing.push("full_name")
-  if (!resident.date_of_birth) missing.push("date_of_birth")
   if (!resident.phone) missing.push("phone")
   if (!resident.parent_phone) missing.push("father_phone")
   if (!resident.emergency_contact_phone) missing.push("mother_phone")
@@ -36,7 +34,7 @@ export function getResidentOnboardingRequirements(
     missing.push("rules_acceptance")
   }
 
-  const totalRequirements = 8
+  const totalRequirements = 7
   const completionPercent = Math.round(
     ((totalRequirements - missing.length) / totalRequirements) * 100
   )

@@ -3,6 +3,10 @@ import "server-only"
 import { anyRoleHasPermission } from "@/constants/auth"
 import { conflict, forbidden } from "@/lib/api/api-error"
 import {
+  buildBillingDateForMonth,
+  billingDayFromJoinedOn,
+} from "@/lib/finance/billing-date"
+import {
   buildAdvanceAllocationPlan,
   buildAdvanceCoverageTimeline,
   buildAdvanceOwnerDashboard,
@@ -150,6 +154,102 @@ export class AdvanceLedgerService {
       values.organizationId,
       values.hostelId
     )
+
+    if (values.residentId && values.monthlyFeeRecordId && values.amount) {
+      const resident = assertFound(
+        await this.residentsRepository.getById(values.residentId, values.organizationId),
+        "Resident not found."
+      )
+
+      this.authService.requireHostelAccess(
+        context,
+        resident.organization_id,
+        resident.hostel_id
+      )
+
+      const balance = await this.getResidentBalance({
+        organizationId: values.organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+      })
+
+      if (values.amount > balance.remainingAdvanceBalance) {
+        throw conflict("Adjustment amount exceeds available advance.")
+      }
+
+      const feeRecords = await this.adminRepository.listOpenFeeRecords({
+        organizationId: values.organizationId,
+        hostelId: resident.hostel_id,
+        residentId: resident.id,
+      })
+      const feeRecord = assertFound(
+        feeRecords.find((record) => record.id === values.monthlyFeeRecordId) ?? null,
+        "Monthly fee record is not available for advance adjustment."
+      )
+
+      if (values.amount > feeRecord.balance_amount) {
+        throw conflict("Adjustment amount exceeds the selected month outstanding.")
+      }
+
+      await this.adminRepository.createAllocation({
+        organization_id: values.organizationId,
+        hostel_id: resident.hostel_id,
+        resident_id: resident.id,
+        monthly_fee_record_id: feeRecord.id,
+        period_month: feeRecord.period_month,
+        amount: values.amount,
+        allocated_by: context.authUser.id,
+        metadata: {
+          source: "manual_advance_fee_adjustment",
+          notes: values.notes || null,
+          before_balance: feeRecord.balance_amount,
+          after_balance: feeRecord.balance_amount - values.amount,
+        },
+        created_by: context.authUser.id,
+        updated_by: context.authUser.id,
+      })
+      await this.adminRepository.updateFeeRecordForAdvanceAllocation({
+        organizationId: values.organizationId,
+        feeRecord,
+        allocationAmount: values.amount,
+        actorUserId: context.authUser.id,
+      })
+      await this.adminRepository.updateInvoicesForAdvanceAllocation({
+        organizationId: values.organizationId,
+        monthlyFeeRecordId: feeRecord.id,
+        allocationAmount: values.amount,
+        actorUserId: context.authUser.id,
+      })
+      const nextPaymentDate =
+        values.amount >= feeRecord.balance_amount
+          ? nextBillingDateAfterMonth(
+              feeRecord.period_month,
+              resident.joined_on
+            )
+          : feeRecord.due_date
+      await this.residentsRepository.update(
+        resident.id,
+        values.organizationId,
+        {
+          metadata: {
+            ...metadataRecord(resident.metadata),
+            next_payment_date: nextPaymentDate,
+            next_payment_date_updated_at: new Date().toISOString(),
+          },
+          updated_by: context.authUser.id,
+        }
+      )
+
+      return {
+        processed: 1,
+        results: [{
+          residentId: resident.id,
+          consumedAmount: values.amount,
+          allocationCount: 1,
+          endingBalance: balance.remainingAdvanceBalance - values.amount,
+        }],
+      }
+    }
 
     return this.allocateForResidentWithActor({
       organizationId: values.organizationId,
@@ -638,4 +738,28 @@ export class AdvanceLedgerService {
       updated_by: payment.updated_by,
     })
   }
+}
+
+function nextBillingDateAfterMonth(
+  periodMonth: string,
+  joinedOn: string | null
+) {
+  const period = new Date(`${periodMonth.slice(0, 7)}-01T00:00:00.000Z`)
+  const nextMonth = new Date(
+    Date.UTC(period.getUTCFullYear(), period.getUTCMonth() + 1, 1)
+  )
+  const nextPeriodMonth = `${nextMonth.getUTCFullYear()}-${String(
+    nextMonth.getUTCMonth() + 1
+  ).padStart(2, "0")}-01`
+
+  return buildBillingDateForMonth(
+    nextPeriodMonth,
+    billingDayFromJoinedOn(joinedOn)
+  )
+}
+
+function metadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {}
 }

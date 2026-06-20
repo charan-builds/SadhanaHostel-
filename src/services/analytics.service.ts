@@ -738,7 +738,13 @@ function buildMonthlyOwnerBucket(
   data: {
     residents: Array<{ created_at: string; joined_on: string | null; checkout_on: string | null }>
     reservations: Array<{ created_at: string; status: string; advance_amount: number }>
-    payments: Array<{ amount: number; status: string; created_at: string; verified_at: string | null }>
+    payments: Array<{
+      amount: number
+      status: string
+      created_at: string
+      verified_at: string | null
+      is_advance: boolean
+    }>
     feeRecords: Array<{
       period_month: string
       total_amount: number

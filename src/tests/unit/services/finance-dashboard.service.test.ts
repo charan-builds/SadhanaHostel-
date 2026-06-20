@@ -76,7 +76,7 @@ describe("FinanceDashboardService aggregation", () => {
         residentsDueToday: 0,
       },
       queryPlan: {
-        bulkQueries: 6,
+        bulkQueries: 7,
         residentRows: 1,
         beforeResidentLedgerRequests: 1,
         afterResidentLedgerRequests: 0,
@@ -166,6 +166,45 @@ describe("FinanceDashboardService aggregation", () => {
     expect(dashboard.queryPlan.beforeResidentLedgerRequests).toBe(3)
     expect(dashboard.queryPlan.afterResidentLedgerRequests).toBe(0)
     expect(dashboard.queryPlan.residentLedgerRequests).toBe(0)
+  })
+
+  it("includes verified advance collections in revenue totals", () => {
+    const dashboard = buildFinanceDashboardSnapshot({
+      organizationId: TEST_ORGANIZATION_ID,
+      hostelId: TEST_HOSTEL_ID,
+      today: "2026-06-05",
+      residents: [residentFixture({ id: OTHER_RESIDENT_ID })],
+      feeRecords: [],
+      payments: [
+        paymentFixture({
+          resident_id: OTHER_RESIDENT_ID,
+          amount: 3500,
+          status: "verified",
+          is_advance: false,
+          verified_at: "2026-06-05T09:00:00.000Z",
+        }),
+        paymentFixture({
+          id: "00000000-0000-4000-8000-000000000299",
+          resident_id: OTHER_RESIDENT_ID,
+          amount: 10000,
+          status: "verified",
+          is_advance: true,
+          verified_at: "2026-06-05T10:00:00.000Z",
+        }),
+      ],
+      advanceBalances: [
+        {
+          resident_id: OTHER_RESIDENT_ID,
+          remaining_advance_balance: 10000,
+        },
+      ],
+      invoices: [],
+    })
+
+    expect(dashboard.owner.summary.revenue).toBe(13500)
+    expect(dashboard.owner.summary.todayRevenue).toBe(13500)
+    expect(dashboard.owner.collectionToday.total).toBe(13500)
+    expect(dashboard.residentFinance[0].advanceBalance).toBe(10000)
   })
 
   it("uses database aggregate KPI and aging metadata when supplied", () => {

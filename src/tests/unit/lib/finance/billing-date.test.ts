@@ -5,6 +5,7 @@ import {
   buildBillingDateForMonth,
   buildResidentBillingContext,
   resolveNextBillingDueDate,
+  resolveNextPaymentDate,
 } from "@/lib/finance/billing-date"
 
 describe("finance billing date utility", () => {
@@ -40,5 +41,30 @@ describe("finance billing date utility", () => {
     })
 
     expect(resolveNextBillingDueDate({ billing, today: "2026-03-01" })).toBe("2026-03-31")
+  })
+})
+
+describe("resolveNextPaymentDate", () => {
+  it("moves to the month after the latest cleared fee using the joining day", () => {
+    expect(
+      resolveNextPaymentDate({
+        joinedOn: "2026-05-10",
+        today: "2026-06-20",
+        feeRecords: [
+          {
+            period_month: "2026-06-01",
+            due_date: "2026-06-10",
+            balance_amount: 0,
+            status: "paid",
+          },
+          {
+            period_month: "2026-07-01",
+            due_date: "2026-07-10",
+            balance_amount: 0,
+            status: "paid",
+          },
+        ],
+      })
+    ).toBe("2026-08-10")
   })
 })

@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { hostelConfig } from "@/constants/hostel"
 import {
+  useAdvanceLedger,
   useCurrentResident,
   useInvoiceDownloadUrl,
   usePaymentSettings,
@@ -56,7 +57,10 @@ import {
   buildHostelPaymentReference,
   buildUpiPaymentLink,
 } from "@/lib/payments/upi-links"
-import { useRealtimePayments } from "@/lib/realtime"
+import {
+  useRealtimePayments,
+  useRealtimeResidentFinance,
+} from "@/lib/realtime"
 import type { UploadProgress } from "@/sdk"
 import type { Tables } from "@/types/database"
 
@@ -114,6 +118,15 @@ export function ResidentPaymentsClient() {
   const ledger = useResidentPaymentLedger(
     organizationId ? { organizationId } : undefined
   )
+  const advanceLedger = useAdvanceLedger(
+    organizationId && resident.data?.id
+      ? {
+          organizationId,
+          hostelId,
+          residentId: resident.data.id,
+        }
+      : undefined
+  )
   const payments = usePayments({
     organizationId: organizationId ?? "",
     hostelId,
@@ -130,6 +143,10 @@ export function ResidentPaymentsClient() {
   const submitUpiPayment = useSubmitUpiPaymentWithProof({ onProgress: setUploadProgress })
 
   useRealtimePayments({
+    enabled: Boolean(organizationId && resident.data?.id),
+    residentId: resident.data?.id,
+  })
+  useRealtimeResidentFinance({
     enabled: Boolean(organizationId && resident.data?.id),
     residentId: resident.data?.id,
   })
@@ -262,7 +279,7 @@ export function ResidentPaymentsClient() {
   const currentDue = currentDueTotal
   const pendingVerification = pendingVerificationTotal
   const verifiedPaid = ledger.data?.totals.verifiedPaid ?? 0
-  const advancePaid = ledger.data?.totals.advanceBalance ?? 0
+  const advancePaid = advanceLedger.data?.balance.remainingAdvanceBalance ?? 0
   const monthlyFee = resident.data.monthly_fee_amount
   const advanceLeft = Math.max(monthlyFee - advancePaid, 0)
   const dueProgress =
@@ -525,6 +542,45 @@ export function ResidentPaymentsClient() {
           setValue("isAdvance", false, { shouldDirty: true, shouldValidate: true })
         }}
       />
+
+      <motion.section variants={reveal} className="saas-surface overflow-hidden rounded-xl">
+        <div className="border-b bg-white/45 p-5">
+          <h2 className="text-base font-semibold">Month Status</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Cleared fee months with payment method and date.
+          </p>
+        </div>
+        <div className="grid gap-3 p-5">
+          {(ledger.data?.feeHistory ?? []).map((entry) => (
+            <div
+              key={entry.id}
+              className="flex flex-col gap-2 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <p className="font-medium">
+                  {formatFeeMonth(entry.periodMonth)} Fee{" "}
+                  {entry.status === "paid" ? "Cleared" : "Partially Cleared"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {entry.source === "advance"
+                    ? "Paid from Advance"
+                    : `Paid by ${entry.method === "bank_transfer" ? "Bank" : entry.method.toUpperCase()}`}
+                </p>
+              </div>
+              <div className="text-sm sm:text-right">
+                <p className="font-medium">{formatCurrency(entry.amount)}</p>
+                <p className="text-muted-foreground">{formatDate(entry.paidAt)}</p>
+              </div>
+            </div>
+          ))}
+          {(ledger.data?.feeHistory?.length ?? 0) === 0 ? (
+            <EmptyState
+              title="No cleared months yet"
+              message="Monthly payments and advance adjustments will appear here."
+            />
+          ) : null}
+        </div>
+      </motion.section>
 
       <motion.section variants={reveal} className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <form onSubmit={handleSubmit(submitPayment)} className="saas-surface rounded-xl p-5">
@@ -1324,4 +1380,12 @@ function isPaymentAmountValue(value: unknown): value is string | number {
   }
 
   return false
+}
+
+function formatFeeMonth(periodMonth: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${periodMonth.slice(0, 7)}-01T00:00:00.000Z`))
 }

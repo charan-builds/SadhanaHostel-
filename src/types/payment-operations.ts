@@ -83,6 +83,15 @@ export type ResidentPaymentLedger = {
     generatedCurrentDue: boolean
   }
   primaryDueRecord: Tables<"monthly_fee_records"> | null
+  feeHistory?: Array<{
+    id: string
+    periodMonth: string
+    amount: number
+    source: "advance" | "payment"
+    method: "advance" | "cash" | "upi" | "bank_transfer"
+    paidAt: string
+    status: "paid" | "partial"
+  }>
   feeRecords: Tables<"monthly_fee_records">[]
   payments: Tables<"payments">[]
   invoices: Tables<"invoices">[]

@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { fallbackGalleryItems } from "@/constants/public-content"
-import { formatGalleryCategory, hydrateGalleryItems } from "@/lib/public-gallery"
+import { formatGalleryCategory, hydratePublicGalleryItems } from "@/lib/public-gallery"
 import { cn } from "@/lib/utils"
 import type { GalleryItem } from "@/types/frontend"
 
@@ -35,7 +35,7 @@ export function GalleryPageContent({
   galleryItems?: GalleryItem[]
 }) {
   const hydratedItems = useMemo(
-    () => hydrateGalleryItems(galleryItems),
+    () => hydratePublicGalleryItems(galleryItems),
     [galleryItems]
   )
   const filters = useMemo(

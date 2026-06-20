@@ -33,12 +33,32 @@ import { financeDashboardSchema } from "@/validations/finance.validation"
 
 import { AuthService } from "./auth.service"
 
-const DASHBOARD_BULK_QUERY_COUNT = 6
+const DASHBOARD_BULK_QUERY_COUNT = 7
 
 type ResidentRow = Tables<"residents">
 type FeeRecordRow = Tables<"monthly_fee_records">
 type PaymentRow = Tables<"payments">
 type InvoiceRow = Tables<"invoices">
+type AdvanceBalanceRow = {
+  resident_id: string
+  remaining_advance_balance: number
+}
+type AdvanceBalanceQuery = {
+  select(columns: string): AdvanceBalanceQuery
+  eq(column: string, value: unknown): AdvanceBalanceQuery
+  then<TResult1 = {
+    data: AdvanceBalanceRow[] | null
+    error: Parameters<typeof throwRepositoryError>[0]
+  }>(
+    onfulfilled?: ((value: {
+      data: AdvanceBalanceRow[] | null
+      error: Parameters<typeof throwRepositoryError>[0]
+    }) => TResult1 | PromiseLike<TResult1>) | null
+  ): Promise<TResult1>
+}
+type AdvanceBalanceDb = {
+  from(table: "advance_balance_view"): AdvanceBalanceQuery
+}
 type FinanceDashboardRpcClient = {
   rpc(
     name: "finance_dashboard_aggregates",
@@ -75,12 +95,21 @@ export class FinanceDashboardService {
     )
 
     const today = todayDateOnly()
-    const [databaseAggregates, residents, feeRecords, payments, invoices, followups] = await Promise.all([
+    const [
+      databaseAggregates,
+      residents,
+      feeRecords,
+      payments,
+      invoices,
+      advanceBalances,
+      followups,
+    ] = await Promise.all([
       this.loadDatabaseAggregates(values.organizationId, hostelId ?? null, today),
       this.listResidents(values.organizationId, hostelId ?? undefined),
       this.listFeeRecords(values.organizationId, hostelId ?? undefined),
       this.listPayments(values.organizationId, hostelId ?? undefined),
       this.listInvoices(values.organizationId, hostelId ?? undefined),
+      this.listAdvanceBalances(values.organizationId, hostelId ?? undefined),
       this.followupsRepository.list({
         organizationId: values.organizationId,
         hostelId,
@@ -95,6 +124,7 @@ export class FinanceDashboardService {
       feeRecords,
       payments,
       invoices,
+      advanceBalances,
       followups,
       databaseAggregates,
       today,
@@ -190,6 +220,7 @@ export class FinanceDashboardService {
       .from("invoices")
       .select("*")
       .eq("organization_id", organizationId)
+      .not("monthly_fee_record_id", "is", null)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
 
@@ -205,6 +236,25 @@ export class FinanceDashboardService {
 
     return data ?? []
   }
+
+  private async listAdvanceBalances(organizationId: string, hostelId?: string) {
+    let query = (this.db as unknown as AdvanceBalanceDb)
+      .from("advance_balance_view")
+      .select("resident_id,remaining_advance_balance")
+      .eq("organization_id", organizationId)
+
+    if (hostelId) {
+      query = query.eq("hostel_id", hostelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load finance advance balances.")
+    }
+
+    return data ?? []
+  }
 }
 
 export function buildFinanceDashboardSnapshot(input: {
@@ -214,6 +264,7 @@ export function buildFinanceDashboardSnapshot(input: {
   feeRecords: FeeRecordRow[]
   payments: PaymentRow[]
   invoices: InvoiceRow[]
+  advanceBalances?: AdvanceBalanceRow[]
   followups?: CollectionFollowupRow[]
   databaseAggregates?: FinanceDashboardDatabaseAggregates
   today?: string
@@ -226,6 +277,7 @@ export function buildFinanceDashboardSnapshot(input: {
     feeRecords: input.feeRecords,
     payments: input.payments,
     invoices: input.invoices,
+    advanceBalances: input.advanceBalances ?? [],
     today,
   })
   const financeRows = input.residents.map((resident, index) =>
@@ -358,11 +410,18 @@ function buildBulkLedgers(input: {
   feeRecords: FeeRecordRow[]
   payments: PaymentRow[]
   invoices: InvoiceRow[]
+  advanceBalances: AdvanceBalanceRow[]
   today: string
 }) {
   const feeRecordsByResident = groupByResident(input.feeRecords)
   const paymentsByResident = groupByResident(input.payments)
   const invoicesByResident = groupByResident(input.invoices)
+  const advanceBalancesByResident = new Map(
+    input.advanceBalances.map((row) => [
+      row.resident_id,
+      Number(row.remaining_advance_balance),
+    ])
+  )
 
   return input.residents.map((resident) => {
     const feeRecords = feeRecordsByResident.get(resident.id) ?? []
@@ -401,11 +460,7 @@ function buildBulkLedgers(input: {
             .filter((payment) => payment.status === "verified")
             .map((payment) => payment.amount)
         ),
-        advanceBalance: sum(
-          payments
-            .filter((payment) => payment.status === "verified" && payment.is_advance)
-            .map((payment) => payment.amount)
-        ),
+        advanceBalance: advanceBalancesByResident.get(resident.id) ?? 0,
       },
       billing: {
         joinedOn: resident.joined_on,

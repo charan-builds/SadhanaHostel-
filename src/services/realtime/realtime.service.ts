@@ -124,4 +124,33 @@ export class RealtimeService {
       payload: input satisfies Json,
     })
   }
+
+  residentFinancialCorrected(input: {
+    organizationId: string
+    hostelId: string
+    residentId: string
+    actorUserId: string
+    changeType: "monthly_fee" | "advance_balance"
+    auditLogId: string
+  }) {
+    const payload = input satisfies Json
+
+    return Promise.all([
+      this.publisher.publish({
+        type: "resident.financial_corrected",
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        actorUserId: input.actorUserId,
+        payload,
+      }),
+      this.publisher.publish({
+        type: "resident.financial_corrected",
+        organizationId: input.organizationId,
+        hostelId: input.hostelId,
+        residentId: input.residentId,
+        actorUserId: input.actorUserId,
+        payload,
+      }),
+    ])
+  }
 }

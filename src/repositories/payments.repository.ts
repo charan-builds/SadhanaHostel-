@@ -20,12 +20,26 @@ export type FeeRecordStatus = Database["public"]["Enums"]["fee_record_status_enu
 export type InvoiceFinalizationStatus =
   Database["public"]["Enums"]["invoice_finalization_status_enum"]
 
+type AdvanceBalanceQuery = {
+  select(columns: string): AdvanceBalanceQuery
+  eq(column: string, value: unknown): AdvanceBalanceQuery
+  maybeSingle(): Promise<{
+    data: { remaining_advance_balance: number } | null
+    error: PostgrestError | null
+  }>
+}
+
+type AdvanceBalanceDb = {
+  from(table: "advance_balance_view"): AdvanceBalanceQuery
+}
+
 export type ListPaymentsFilters = PaginationParams & {
   organizationId: string
   hostelId?: string
   residentId?: string
   status?: PaymentStatus
   method?: PaymentMethod
+  isAdvance?: boolean
   fromDate?: string
   toDate?: string
   dateBasis?: "activity" | "revenue"
@@ -70,8 +84,15 @@ export class PaymentsRepository {
       query = query.eq("method", filters.method)
     }
 
+    if (filters.isAdvance !== undefined) {
+      query = query.eq("is_advance", filters.isAdvance)
+    }
+
     if (filters.dateBasis === "revenue") {
-      query = query.eq("status", "verified").not("verified_at", "is", null)
+      query = query
+        .eq("status", "verified")
+        .eq("is_advance", false)
+        .not("verified_at", "is", null)
     }
 
     if (range.fromDate) {
@@ -559,7 +580,23 @@ export class PaymentsRepository {
       ...params,
       organizationId,
       residentId,
+      isAdvance: false,
     })
+  }
+
+  async getResidentAdvanceBalance(organizationId: string, residentId: string) {
+    const { data, error } = await (this.db as unknown as AdvanceBalanceDb)
+      .from("advance_balance_view")
+      .select("remaining_advance_balance")
+      .eq("organization_id", organizationId)
+      .eq("resident_id", residentId)
+      .maybeSingle()
+
+    if (error) {
+      throwRepositoryError(error, "Unable to load resident advance balance.")
+    }
+
+    return Number(data?.remaining_advance_balance ?? 0)
   }
 
   async listResidentInvoices(
@@ -572,6 +609,7 @@ export class PaymentsRepository {
       .select("*")
       .eq("organization_id", organizationId)
       .eq("resident_id", residentId)
+      .not("monthly_fee_record_id", "is", null)
       .is("deleted_at", null)
       .order("issue_date", { ascending: false })
       .limit(limit)

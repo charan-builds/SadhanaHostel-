@@ -85,7 +85,7 @@ import { useRealtimeAdmissions } from "@/lib/realtime"
 import {
   useCheckoutResident,
   useDashboardAnalytics,
-  useDeactivateResident,
+  useDeleteResident,
   useRepairResidentLifecycle,
   useResidents,
 } from "@/hooks"
@@ -99,7 +99,16 @@ type ResidentStatusFilter =
   | "suspended"
   | "checked_out"
   | "archived"
+type ResidentStatusTab = "active" | "draft" | "verified" | "checked_out" | "all"
 type ResidentTypeFilter = "all" | "student" | "employee" | "other"
+
+const residentStatusTabs: Array<{ value: ResidentStatusTab; label: string }> = [
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "verified", label: "Verified" },
+  { value: "checked_out", label: "Left" },
+  { value: "all", label: "All" },
+]
 
 const stagger: Variants = {
   hidden: { opacity: 0 },
@@ -121,6 +130,7 @@ export function AdminResidentsClient() {
   const hostelId = session?.hostelIds[0]
   useRealtimeAdmissions({ enabled: Boolean(organizationId) })
   const [search, setSearch] = useState("")
+  const [statusTab, setStatusTab] = useState<ResidentStatusTab>("all")
   const [status, setStatus] = useState<ResidentStatusFilter>("all")
   const [residentType, setResidentType] = useState<ResidentTypeFilter>("all")
   const [page, setPage] = useState(1)
@@ -130,20 +140,27 @@ export function AdminResidentsClient() {
   const [inviteTarget, setInviteTarget] = useState<Tables<"residents"> | null>(null)
   const [repairTarget, setRepairTarget] = useState<Tables<"residents"> | null>(null)
   const [profileTarget, setProfileTarget] = useState<Tables<"residents"> | null>(null)
-  const deactivateResident = useDeactivateResident()
+  const deleteResident = useDeleteResident()
   const checkoutResident = useCheckoutResident()
   const repairResidentLifecycle = useRepairResidentLifecycle()
   const analytics = useDashboardAnalytics({
     organizationId: organizationId ?? "",
     hostelId,
   })
+  const tabStatus =
+    statusTab === "active" || statusTab === "draft" || statusTab === "checked_out"
+      ? statusTab
+      : undefined
+  const tabOnboardingStatus = statusTab === "verified" ? "verified" : undefined
+  const resolvedStatus = status === "all" ? tabStatus : status
   const query = useResidents({
     organizationId: organizationId ?? "",
     hostelId,
     page,
     pageSize: 20,
     search: search || undefined,
-    status: status === "all" ? undefined : status,
+    status: resolvedStatus,
+    onboardingStatus: tabOnboardingStatus,
     residentType: residentType === "all" ? undefined : residentType,
   })
   const residentRows = useMemo(() => query.data?.data ?? [], [query.data?.data])
@@ -179,11 +196,11 @@ export function AdminResidentsClient() {
       return
     }
 
-    await deactivateResident.mutateAsync({
+    await deleteResident.mutateAsync({
       residentId: deactivateTarget.id,
       organizationId,
     })
-    toast.success("Resident deactivated.")
+    toast.success("Resident and linked financial records deleted.")
     setDeactivateTarget(null)
   }
 
@@ -280,18 +297,32 @@ export function AdminResidentsClient() {
         empty={
           residentRows.length === 0 ? (
             <EmptyState
-              title={search || status !== "all" || residentType !== "all" ? "No residents match these filters" : "No residents yet"}
+              title={
+                search ||
+                statusTab !== "all" ||
+                status !== "all" ||
+                residentType !== "all"
+                  ? "No residents match these filters"
+                  : "No residents yet"
+              }
               message={
-                search || status !== "all" || residentType !== "all"
+                search ||
+                statusTab !== "all" ||
+                status !== "all" ||
+                residentType !== "all"
                   ? "Clear filters to return to the full resident list."
                   : "Create your first resident after admission approval, then send an activation invite."
               }
               action={
-                search || status !== "all" || residentType !== "all" ? (
+                search ||
+                statusTab !== "all" ||
+                status !== "all" ||
+                residentType !== "all" ? (
                   <Button
                     variant="outline"
                     onClick={() => {
                       setSearch("")
+                      setStatusTab("all")
                       setStatus("all")
                       setResidentType("all")
                     }}
@@ -308,47 +339,95 @@ export function AdminResidentsClient() {
           ) : undefined
         }
       >
-        <motion.div layout className="grid gap-3 border-b bg-white/45 p-4 lg:grid-cols-[1fr_auto_auto] lg:items-center">
-          <label className="relative">
-            <span className="sr-only">Search residents</span>
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={search}
-              onChange={(event) => {
+        <div className="border-b bg-white/45 p-4">
+          <div
+            className="flex min-w-0 gap-2 overflow-x-auto pb-3"
+            aria-label="Resident lifecycle tabs"
+          >
+            {residentStatusTabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                aria-pressed={statusTab === tab.value}
+                onClick={() => {
+                  setPage(1)
+                  setStatus("all")
+                  setStatusTab(tab.value)
+                }}
+                className={
+                  statusTab === tab.value
+                    ? "whitespace-nowrap rounded-lg border border-primary bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm"
+                    : "whitespace-nowrap rounded-lg border bg-background px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary/30 hover:text-foreground"
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <motion.div
+            layout
+            className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center"
+          >
+            <label className="relative">
+              <span className="sr-only">Search residents</span>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setPage(1)
+                  setSearch(event.target.value)
+                }}
+                className="pl-8"
+                placeholder="Search name, phone, email, admission"
+              />
+            </label>
+            <Select
+              value={residentType}
+              onValueChange={(value) => {
                 setPage(1)
-                setSearch(event.target.value)
+                setResidentType(value as ResidentTypeFilter)
               }}
-              className="pl-8"
-              placeholder="Search name, phone, email, admission"
-            />
-          </label>
-          <Select value={residentType} onValueChange={(value) => setResidentType(value as ResidentTypeFilter)}>
-            <SelectTrigger className="h-9 min-w-40" aria-label="Filter resident type">
-              <SelectValue placeholder="Resident type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="student">Student</SelectItem>
-              <SelectItem value="employee">Employee</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={status} onValueChange={(value) => setStatus(value as ResidentStatusFilter)}>
-            <SelectTrigger className="h-9 min-w-40" aria-label="Filter resident status">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="pending_finance">Pending finance</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="checked_out">Left hostel</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
-        </motion.div>
+            >
+              <SelectTrigger
+                className="h-9 min-w-40"
+                aria-label="Filter resident type"
+              >
+                <SelectValue placeholder="Resident type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="student">Student</SelectItem>
+                <SelectItem value="employee">Employee</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setPage(1)
+                setStatusTab("all")
+                setStatus(value as ResidentStatusFilter)
+              }}
+            >
+              <SelectTrigger
+                className="h-9 min-w-40"
+                aria-label="Filter resident status"
+              >
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="pending_finance">Pending finance</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="checked_out">Left hostel</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+          </motion.div>
+        </div>
 
         {query.isLoading ? (
           <LoadingState variant="table" />
@@ -360,10 +439,11 @@ export function AdminResidentsClient() {
               animate="show"
               className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             >
-              {residentRows.slice(0, 6).map((resident) => (
+              {residentRows.slice(0, 6).map((resident, index) => (
                 <ResidentProfileTile
                   key={resident.id}
                   resident={resident}
+                  serialNumber={residentSerial(resident, (page - 1) * 20 + index + 1)}
                   onPreview={() => setProfileTarget(resident)}
                   onEdit={() => setEditingResident(resident)}
                   onInvite={() => setInviteTarget(resident)}
@@ -380,6 +460,7 @@ export function AdminResidentsClient() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Resident</TableHead>
+                    <TableHead>Serial</TableHead>
                     <TableHead>Admission</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Contact</TableHead>
@@ -390,7 +471,7 @@ export function AdminResidentsClient() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {residentRows.map((resident) => (
+                  {residentRows.map((resident, index) => (
                     <TableRow key={resident.id}>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
@@ -402,6 +483,11 @@ export function AdminResidentsClient() {
                             </p>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {formatResidentSerial(
+                          residentSerial(resident, (page - 1) * 20 + index + 1)
+                        )}
                       </TableCell>
                       <TableCell>{resident.admission_number}</TableCell>
                       <TableCell className="capitalize">{resident.resident_type}</TableCell>
@@ -465,6 +551,16 @@ export function AdminResidentsClient() {
 
       <ResidentProfileSheet
         resident={profileTarget}
+        serialNumber={
+          profileTarget
+            ? residentSerial(
+                profileTarget,
+                (page - 1) * 20 +
+                  Math.max(0, residentRows.findIndex((row) => row.id === profileTarget.id)) +
+                  1
+              )
+            : null
+        }
         open={Boolean(profileTarget)}
         onOpenChange={(open) => !open && setProfileTarget(null)}
         onEdit={() => {
@@ -512,9 +608,9 @@ export function AdminResidentsClient() {
       <ConfirmDialog
         open={Boolean(deactivateTarget)}
         onOpenChange={(open) => !open && setDeactivateTarget(null)}
-        title={`Deactivate ${deactivateTarget?.full_name ?? "resident"}?`}
-        description="The resident will be archived through the production API. Financial records remain immutable."
-        confirmLabel={deactivateResident.isPending ? "Deactivating..." : "Deactivate"}
+        title={`Delete ${deactivateTarget?.full_name ?? "resident"}?`}
+        description="This deletes the resident from operations together with payments, invoices, fee records, advance ledger, and linked financial records. Revenue and reports will recalculate automatically."
+        confirmLabel={deleteResident.isPending ? "Deleting..." : "Delete Resident"}
         variant="danger"
         onConfirm={confirmDeactivate}
       />
@@ -569,6 +665,7 @@ function ResidentAvatar({ resident, className }: { resident: Tables<"residents">
 
 function ResidentProfileTile({
   resident,
+  serialNumber,
   onPreview,
   onEdit,
   onInvite,
@@ -578,6 +675,7 @@ function ResidentProfileTile({
   repairDisabled,
 }: {
   resident: Tables<"residents">
+  serialNumber: number
   onPreview: () => void
   onEdit: () => void
   onInvite: () => void
@@ -601,7 +699,7 @@ function ResidentProfileTile({
                 {resident.full_name}
               </span>
               <span className="mt-1 block truncate text-xs text-muted-foreground">
-                {resident.admission_number}
+                {formatResidentSerial(serialNumber)} · {resident.admission_number}
               </span>
             </span>
           </button>
@@ -707,7 +805,7 @@ function ResidentActionMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDeactivate}>
           <UserX className="size-4" aria-hidden="true" />
-          Deactivate
+          Delete Resident
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -716,12 +814,14 @@ function ResidentActionMenu({
 
 function ResidentProfileSheet({
   resident,
+  serialNumber,
   open,
   onOpenChange,
   onEdit,
   onInvite,
 }: {
   resident: Tables<"residents"> | null
+  serialNumber: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: () => void
@@ -752,6 +852,10 @@ function ResidentProfileSheet({
 
             <div className="grid gap-5 p-6">
               <div className="grid gap-3 sm:grid-cols-2">
+                <ProfileMetric
+                  label="Resident Serial"
+                  value={formatResidentSerial(serialNumber ?? 0)}
+                />
                 <ProfileMetric label="Joined" value={formatDate(resident.joined_on ?? resident.created_at)} />
                 <ProfileMetric label="Identity mode" value={formatResidentIdentityMode(getResidentIdentityMode(resident))} />
                 <ProfileMetric label="Resident type" value={resident.resident_type} />
@@ -827,6 +931,20 @@ function TimelineRow({ label, value }: { label: string; value: string }) {
       <span className="font-medium text-foreground">{value}</span>
     </div>
   )
+}
+
+function residentSerial(resident: Tables<"residents">, fallback: number) {
+  const metadata =
+    resident.metadata && typeof resident.metadata === "object" && !Array.isArray(resident.metadata)
+      ? resident.metadata as Record<string, unknown>
+      : {}
+  const value = Number(metadata.resident_serial)
+
+  return Number.isInteger(value) && value > 0 ? value : fallback
+}
+
+function formatResidentSerial(value: number) {
+  return `R${String(Math.max(0, value)).padStart(4, "0")}`
 }
 
 function SummaryCard({
